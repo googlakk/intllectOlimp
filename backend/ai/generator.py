@@ -121,6 +121,12 @@ async def generate_lesson(
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY не настроен")
+    workspace_id = os.getenv("ANTHROPIC_WORKSPACE_ID")
+    if not workspace_id:
+        raise RuntimeError(
+            "ANTHROPIC_WORKSPACE_ID не настроен. "
+            "Для этого ключа Anthropic требуется ID workspace."
+        )
 
     subject_type = "math" if "математика" in subject_name.casefold() else "literature"
     user_prompt = f"""
@@ -135,7 +141,10 @@ async def generate_lesson(
 Ответь только JSON-массивом блоков.
 """.strip()
 
-    client = AsyncAnthropic(api_key=api_key)
+    client = AsyncAnthropic(
+        api_key=api_key,
+        default_headers={"anthropic-workspace-id": workspace_id},
+    )
     last_error: Exception | None = None
     retry_prompt = user_prompt
     for attempt in range(2):
