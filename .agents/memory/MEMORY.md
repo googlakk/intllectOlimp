@@ -1,0 +1,1 @@
+- [Anthropic workspace headers](anthropic-workspace-headers.md) — unscoped Anthropic API keys require a workspace ID header on Messages API requests.

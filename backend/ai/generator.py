@@ -5,7 +5,7 @@ from typing import Any
 
 from anthropic import AsyncAnthropic
 
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "claude-sonnet-4-6"
 
 SYSTEM_PROMPT = """
 Ты создаёшь готовые интерактивные уроки для русскоязычной образовательной платформы.
@@ -150,7 +150,7 @@ async def generate_lesson(
     for attempt in range(2):
         response = await client.messages.create(
             model=MODEL,
-            max_tokens=4096,
+            max_tokens=8192,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": retry_prompt}],
         )

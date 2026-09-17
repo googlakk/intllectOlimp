@@ -44,3 +44,8 @@ timeoutMs = 20000
 [nix]
 channel = "stable-25_05"
 packages = ["libxcrypt", "postgresql"]
+
+[userenv]
+
+[userenv.shared]
+ANTHROPIC_WORKSPACE_ID = "wrkspc_019BrXkU6oiACeMqipzh9Xyg"
