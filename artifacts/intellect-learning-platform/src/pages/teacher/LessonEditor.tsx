@@ -37,6 +37,20 @@ export default function LessonEditor() {
     }
     return String(item);
   };
+  const groupedMessages = (items: unknown[]) => {
+    const groups = new Map<string, { message: string; count: number }>();
+    items.forEach((item) => {
+      const message = qualityMessage(item);
+      const code = item && typeof item === 'object'
+        ? String((item as Record<string, unknown>).code || message)
+        : message;
+      const current = groups.get(code);
+      groups.set(code, { message, count: (current?.count || 0) + 1 });
+    });
+    return Array.from(groups.values()).map(({ message, count }) => (
+      count > 1 ? `${message} (${count} блоков)` : message
+    ));
+  };
   const coverage = useMemo(() => objectives.map((objective) => {
     const related = blocks.filter((block) => objectiveIdsForBlock(block).includes(objective.id));
     const report = qualityReport?.objectives?.[objective.id];
@@ -49,12 +63,12 @@ export default function LessonEditor() {
   }), [objectives, blocks, qualityReport]);
   const blockingIssues = [
     ...(qualityReport?.publishable === false ? ['Автоматическая проверка считает урок непригодным к публикации'] : []),
-    ...(qualityReport?.errors || []).map(qualityMessage),
+    ...groupedMessages(qualityReport?.errors || []),
     ...(qualityReport?.gaps || []).map((gap) => typeof gap === 'string' ? `Не покрыта цель: ${gap}` : `Не покрыта цель: ${gap.objective || gap.objective_id || 'неизвестная цель'} (${(gap.missing || []).join(', ')})`),
     ...(!hasObjectiveContract && blocks.length > 0 ? ['Старый урок нужно проверить или перегенерировать перед публикацией'] : []),
     ...(hasObjectiveContract && !qualityReport ? ['Для нового урока отсутствует отчёт проверки качества'] : []),
   ];
-  const warningMessages = (qualityReport?.warnings || []).map(qualityMessage);
+  const warningMessages = groupedMessages(qualityReport?.warnings || []);
   const canPublish = blockingIssues.length === 0 && (warningMessages.length === 0 || warningsAcknowledged);
 
   const handleGenerate = () => {

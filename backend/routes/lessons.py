@@ -85,7 +85,7 @@ async def generate(payload: GenerateInput, db: AsyncSession = Depends(get_db)):
         lesson = GeneratedLesson(topic_id=topic.id)
         db.add(lesson)
     quality = quality_report(blocks, topic.learning_objectives)
-    lesson.blocks = blocks
+    lesson.blocks = quality["normalized_blocks"]
     profile = classify_subject(subject.name)
     archetype = select_archetype(
         str(profile["family"]),
@@ -136,11 +136,12 @@ async def by_topic(
     if topic is not None:
         metadata = dict(lesson.lesson_metadata or {})
         report = quality_report(lesson.blocks or [], topic.learning_objectives)
-        metadata.setdefault("objectives", report["objectives"])
-        metadata.setdefault("quality_report", report["quality_report"])
+        metadata["objectives"] = report["objectives"]
+        metadata["quality_report"] = report["quality_report"]
         # Legacy lessons remain drafts/review-required, but consumers receive
         # the same canonical contract without rewriting historical rows.
         lesson.lesson_metadata = metadata
+        lesson.blocks = report["normalized_blocks"]
     return serialize_lesson(lesson)
 
 
@@ -155,7 +156,7 @@ async def update_blocks(
     if topic is None:
         raise HTTPException(status_code=404, detail="Тема урока не найдена")
     quality = quality_report(payload.blocks, topic.learning_objectives)
-    lesson.blocks = payload.blocks
+    lesson.blocks = quality["normalized_blocks"]
     metadata = dict(lesson.lesson_metadata or {})
     metadata["objectives"] = quality["objectives"]
     metadata["quality_report"] = quality["quality_report"]
@@ -217,6 +218,7 @@ async def publish(
             item.get("code") for item in warnings if isinstance(item, dict)
         ],
     }
+    lesson.blocks = quality["normalized_blocks"]
     lesson.lesson_metadata = metadata
     lesson.status = "published"
     lesson.published_at = datetime.now(timezone.utc)

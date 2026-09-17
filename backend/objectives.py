@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import copy
 import hashlib
 import operator
 import re
@@ -51,7 +52,11 @@ def _normalise(value: str) -> str:
     return re.sub(r"\s+", " ", value.casefold().replace("ё", "е")).strip(" \t\r\n-–—•.;:")
 
 
-def decompose_objectives(raw: str | None) -> list[dict[str, Any]]:
+def _decompose_objectives(
+    raw: str | None,
+    *,
+    conservative_commas: bool,
+) -> list[dict[str, Any]]:
     """Turn a KTP string into stable, deliberately conservative objective records."""
     if not raw or not raw.strip():
         return []
@@ -63,7 +68,25 @@ def decompose_objectives(raw: str | None) -> list[dict[str, Any]]:
     expanded: list[str] = []
     action = re.compile(r"\b[а-яё-]{4,}(?:ть|ти|чь)\b", re.IGNORECASE)
     for part in parts:
-        clauses = re.split(r"\s*,\s*|\s*;\s*", part)
+        comma_segments = re.split(r"\s*,\s*", part)
+        if conservative_commas:
+            clauses: list[str] = []
+            current = comma_segments[0]
+            for segment in comma_segments[1:]:
+                measurable_segment = re.sub(
+                    r"^(?:а\s+также|также)\s+",
+                    "",
+                    segment,
+                    flags=re.IGNORECASE,
+                )
+                if action.search(measurable_segment):
+                    clauses.append(current)
+                    current = measurable_segment
+                else:
+                    current = f"{current}, {segment}"
+            clauses.append(current)
+        else:
+            clauses = comma_segments
         for clause in clauses:
             words = re.split(r"\s+и\s+", clause, flags=re.IGNORECASE)
             if len(words) > 1 and all(action.search(word.strip()) for word in words):
@@ -98,6 +121,97 @@ def decompose_objectives(raw: str | None) -> list[dict[str, Any]]:
             }
         )
     return result
+
+
+def decompose_objectives(raw: str | None) -> list[dict[str, Any]]:
+    """Turn a KTP string into stable, deliberately conservative objective records."""
+    return _decompose_objectives(raw, conservative_commas=True)
+
+
+def default_evidence_stage(component: str) -> str | None:
+    if component == "Reflection":
+        return None
+    if component == "RetrievalCheck":
+        return "diagnostic"
+    if component == "MasteryCheck":
+        return "assessment"
+    if component in PRACTICE_COMPONENTS:
+        return "practice"
+    if component in EXPLANATION_COMPONENTS:
+        return "explanation"
+    return None
+
+
+def normalize_lesson_blocks(
+    blocks: list[dict[str, Any]],
+    objectives: list[dict[str, Any]],
+    objective_aliases: dict[str, str] | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Restore only unambiguous service metadata without changing visible content."""
+    normalized = copy.deepcopy(blocks)
+    restored_stages = 0
+    restored_block_links = 0
+    restored_question_links = 0
+    single_objective_id = objectives[0]["id"] if len(objectives) == 1 else None
+    aliases = objective_aliases or {}
+
+    for block in normalized:
+        if not isinstance(block, dict):
+            continue
+        component = block.get("component")
+        content = block.get("content")
+        if not isinstance(component, str) or not isinstance(content, dict):
+            continue
+        if component == "Reflection":
+            continue
+
+        if content.get("evidence_stage") not in STAGE_COMPONENTS:
+            inferred = default_evidence_stage(component)
+            if inferred is not None:
+                content["evidence_stage"] = inferred
+                restored_stages += 1
+
+        block_ids = objective_ids_from_content(content)
+        canonical_block_ids = list(dict.fromkeys(aliases.get(item, item) for item in block_ids))
+        if canonical_block_ids != block_ids:
+            content["objective_ids"] = canonical_block_ids
+            content.pop("objective_id", None)
+            restored_block_links += 1
+        elif single_objective_id and not block_ids:
+            content["objective_ids"] = [single_objective_id]
+            restored_block_links += 1
+
+        if component == "MasteryCheck" and single_objective_id:
+            for question in content.get("questions", []):
+                if not isinstance(question, dict):
+                    continue
+                question_ids = objective_ids_from_content(question)
+                canonical_question_ids = list(dict.fromkeys(
+                    aliases.get(item, item) for item in question_ids
+                ))
+                if canonical_question_ids != question_ids:
+                    question["objective_ids"] = canonical_question_ids
+                    question.pop("objective_id", None)
+                    restored_question_links += 1
+                elif not question_ids:
+                    question["objective_ids"] = [single_objective_id]
+                    restored_question_links += 1
+
+    restored_total = restored_stages + restored_block_links + restored_question_links
+    warnings = []
+    if restored_total:
+        warnings.append({
+            "code": "legacy_metadata_restored",
+            "message": (
+                "Служебная разметка восстановлена автоматически без изменения содержания: "
+                f"этапы — {restored_stages}, связи блоков с целью — {restored_block_links}, "
+                f"связи итоговых вопросов — {restored_question_links}."
+            ),
+            "restored_stages": restored_stages,
+            "restored_block_links": restored_block_links,
+            "restored_question_links": restored_question_links,
+        })
+    return normalized, warnings
 
 
 def objective_ids_from_content(content: dict[str, Any]) -> list[str]:
@@ -209,7 +323,12 @@ def validate_block_answers(block: dict[str, Any], index: int) -> list[dict[str, 
     return errors
 
 
-def build_coverage(blocks: list[dict[str, Any]], objectives: list[dict[str, Any]]) -> dict[str, Any]:
+def build_coverage(
+    blocks: list[dict[str, Any]],
+    objectives: list[dict[str, Any]],
+    *,
+    allow_legacy_diagnostic_order: bool = False,
+) -> dict[str, Any]:
     ids = {item["id"] for item in objectives}
     coverage = {
         item["id"]: {
@@ -301,8 +420,17 @@ def build_coverage(blocks: list[dict[str, Any]], objectives: list[dict[str, Any]
     for objective_id, item in coverage.items():
         missing = [stage for stage in ("diagnostic", "explanation", "practice", "assessment") if not item[stage]]
         teaching = item["explanation"] + item["practice"]
-        if item["diagnostic"] and teaching and min(item["diagnostic"]) > min(teaching):
-            errors.append({"code": "diagnostic_after_teaching", "objective_id": objective_id, "message": "Диагностика должна идти до объяснения или практики"})
+        if (
+            item["diagnostic"]
+            and teaching
+            and min(item["diagnostic"]) > min(teaching)
+            and not allow_legacy_diagnostic_order
+        ):
+            errors.append({
+                "code": "diagnostic_after_teaching",
+                "objective_id": objective_id,
+                "message": "Диагностика должна идти до объяснения или практики",
+            })
         if missing:
             gaps.append({"objective_id": objective_id, "objective": item["objective"], "missing": missing})
     if objectives and aligned_count == 0:
@@ -319,8 +447,31 @@ def build_coverage(blocks: list[dict[str, Any]], objectives: list[dict[str, Any]
 
 def quality_report(blocks: list[dict[str, Any]], raw_objectives: str | None) -> dict[str, Any]:
     objectives = decompose_objectives(raw_objectives)
-    coverage = build_coverage(blocks, objectives)
-    return {"objectives": objectives, "quality_report": coverage}
+    legacy_objectives = _decompose_objectives(raw_objectives, conservative_commas=False)
+    objective_aliases = {}
+    if len(objectives) == 1:
+        canonical_id = objectives[0]["id"]
+        objective_aliases = {
+            item["id"]: canonical_id
+            for item in legacy_objectives
+            if item["id"] != canonical_id
+        }
+    normalized_blocks, normalization_warnings = normalize_lesson_blocks(
+        blocks,
+        objectives,
+        objective_aliases,
+    )
+    coverage = build_coverage(
+        normalized_blocks,
+        objectives,
+        allow_legacy_diagnostic_order=bool(normalization_warnings),
+    )
+    coverage["warnings"] = normalization_warnings + coverage["warnings"]
+    return {
+        "objectives": objectives,
+        "normalized_blocks": normalized_blocks,
+        "quality_report": coverage,
+    }
 
 
 def calculate_objective_mastery(
@@ -331,6 +482,7 @@ def calculate_objective_mastery(
     lesson_completed: bool = False,
 ) -> tuple[dict[str, Any], dict[str, list[dict[str, Any]]], str]:
     """Derive objective evidence from lesson mappings instead of trusting client results."""
+    blocks, _warnings = normalize_lesson_blocks(blocks, objectives)
     mastery: dict[str, Any] = {}
     evidence: dict[str, list[dict[str, Any]]] = {}
 

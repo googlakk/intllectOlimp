@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from models import GeneratedLesson, Progress, Student, Topic
-from objectives import calculate_objective_mastery, decompose_objectives
+from objectives import calculate_objective_mastery, quality_report
 
 router = APIRouter(prefix="/api/progress", tags=["progress"])
 
@@ -28,6 +28,34 @@ class ProgressInput(BaseModel):
     objective_evidence: dict | None = None
     objective_mastery: dict | None = None
     mastery_status: str | None = Field(default=None, pattern="^(not_assessed|in_progress|mastered|needs_practice)$")
+
+
+def derive_canonical_mastery(
+    blocks: list[dict],
+    raw_objectives: str | None,
+    answers: dict,
+    attempts_by_step: dict,
+    *,
+    lesson_completed: bool,
+):
+    canonical = quality_report(blocks, raw_objectives)
+    objectives = canonical["objectives"]
+    normalized_blocks = canonical["normalized_blocks"]
+    has_objective_mappings = any(
+        isinstance(block.get("content"), dict)
+        and bool(block["content"].get("objective_ids"))
+        for block in normalized_blocks
+        if isinstance(block, dict)
+    )
+    if not objectives or not has_objective_mappings:
+        return None
+    return calculate_objective_mastery(
+        normalized_blocks,
+        objectives,
+        answers,
+        attempts_by_step,
+        lesson_completed=lesson_completed,
+    )
 
 
 def serialize_progress(row: Progress) -> dict:
@@ -52,21 +80,15 @@ async def save_progress(payload: ProgressInput, db: AsyncSession = Depends(get_d
         select(GeneratedLesson).where(GeneratedLesson.topic_id == payload.topic_id)
     )
     if lesson is not None:
-        objectives = (lesson.lesson_metadata or {}).get("objectives")
-        if not isinstance(objectives, list):
-            objectives = decompose_objectives(topic.learning_objectives)
-        if objectives and any(
-            isinstance(block.get("content"), dict)
-            and block["content"].get("objective_ids")
-            for block in (lesson.blocks or [])
-        ):
-            objective_mastery, objective_evidence, mastery_status = calculate_objective_mastery(
-                lesson.blocks or [],
-                objectives,
-                payload.answers,
-                payload.attempts_by_step,
-                lesson_completed=payload.status == "completed",
-            )
+        derived = derive_canonical_mastery(
+            lesson.blocks or [],
+            topic.learning_objectives,
+            payload.answers,
+            payload.attempts_by_step,
+            lesson_completed=payload.status == "completed",
+        )
+        if derived is not None:
+            objective_mastery, objective_evidence, mastery_status = derived
     if objective_mastery:
         statuses = [
             item.get("status")
