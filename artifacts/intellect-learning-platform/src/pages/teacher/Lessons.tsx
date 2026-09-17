@@ -1,32 +1,59 @@
 import { useState, useRef } from 'react';
-import { useSubjects, useSections, useTopics, useUploadKtp } from '@/lib/api';
+import { useSubjects, useSections, useTopics, useUploadKtp, useLessonStatus } from '@/lib/api';
 import { Link } from 'wouter';
 import { FileUp, BookOpen, Edit3, Loader2 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function Lessons() {
   const { data: subjects, isLoading: loadingSubs } = useSubjects();
   const [selectedSubject, setSelectedSubject] = useState<number | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadMutation = useUploadKtp();
+  const queryClient = useQueryClient();
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    setUploadError(null);
     setIsUploading(true);
-    setTimeout(() => {
-       uploadMutation.mutate({}, {
-         onSuccess: () => {
-           setIsUploading(false);
-           alert('КТП успешно загружен и обработан!');
-         },
-         onError: () => {
-           setIsUploading(false);
-           alert('КТП успешно загружен!');
-         }
-       });
-    }, 1500);
+    
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        const json = JSON.parse(text);
+        
+        uploadMutation.mutate(json, {
+          onSuccess: () => {
+            setIsUploading(false);
+            alert('КТП успешно загружен и обработан!');
+            queryClient.invalidateQueries({ queryKey: ['subjects'] });
+            queryClient.invalidateQueries({ queryKey: ['sections'] });
+            queryClient.invalidateQueries({ queryKey: ['topics'] });
+            if (fileInputRef.current) fileInputRef.current.value = '';
+          },
+          onError: (err: any) => {
+            setIsUploading(false);
+            setUploadError(err.message || 'Ошибка загрузки КТП');
+            if (fileInputRef.current) fileInputRef.current.value = '';
+          }
+        });
+      } catch (err) {
+        setIsUploading(false);
+        setUploadError('Файл должен быть валидным JSON');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+    reader.onerror = () => {
+      setIsUploading(false);
+      setUploadError('Ошибка чтения файла');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+    reader.readAsText(file);
   };
 
   return (
@@ -35,15 +62,16 @@ export default function Lessons() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Управление уроками</h1>
           <p className="text-muted-foreground mt-2 font-medium">Редактируйте материалы и структуру курсов</p>
+          {uploadError && <p className="text-destructive text-sm mt-2 font-bold">{uploadError}</p>}
         </div>
-        <input type="file" ref={fileInputRef} className="hidden" accept=".csv,.xlsx,.json" onChange={handleUpload} />
+        <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleUpload} />
         <button 
           onClick={() => fileInputRef.current?.click()}
           disabled={isUploading}
           className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground font-bold rounded-xl shadow-md shadow-primary/20 hover:bg-primary/90 transition-all disabled:opacity-70"
         >
           {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileUp className="w-5 h-5" />}
-          {isUploading ? 'Загрузка...' : 'Загрузить КТП'}
+          {isUploading ? 'Загрузка...' : 'Загрузить КТП (JSON)'}
         </button>
       </div>
 
@@ -107,28 +135,55 @@ function TopicsList({ sectionId }: { sectionId: number }) {
   return (
     <div className="divide-y divide-border/50">
       {topics?.map(topic => (
-        <div key={topic.id} className="p-6 md:px-8 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-muted/10 transition-colors">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              {topic.ktp_number && <span className="text-xs font-mono font-bold bg-muted px-2 py-1 rounded text-muted-foreground">{topic.ktp_number}</span>}
-              <span className="font-bold text-foreground text-lg">{topic.name}</span>
-            </div>
-            <div className="text-sm font-semibold text-muted-foreground flex items-center gap-4">
-              <span className="bg-card border border-border px-2 py-0.5 rounded">{topic.hours} ч.</span>
-              <span className="text-primary">{topic.lesson_type}</span>
-            </div>
-          </div>
-          <Link href={`/dashboard/lessons/${topic.id}`}>
-            <button className="flex items-center justify-center gap-2 px-5 py-2.5 bg-primary/10 text-primary font-bold rounded-xl hover:bg-primary hover:text-primary-foreground transition-all text-sm w-full md:w-auto">
-              <Edit3 className="w-4 h-4" />
-              Редактировать
-            </button>
-          </Link>
-        </div>
+        <TopicRow key={topic.id} topic={topic} />
       ))}
       {topics?.length === 0 && (
          <div className="p-8 text-center text-sm font-medium text-muted-foreground">Нет тем в этом разделе</div>
       )}
+    </div>
+  );
+}
+
+function TopicRow({ topic }: { topic: any }) {
+  const { data: statusData, isLoading } = useLessonStatus(topic.id);
+  
+  let badgeClasses = "bg-muted text-muted-foreground";
+  let badgeText = "Нет урока";
+  
+  if (!isLoading && statusData) {
+    if (statusData.status === 'published') {
+      badgeClasses = "bg-green-500/10 text-green-600";
+      badgeText = "Опубликован";
+    } else {
+      badgeClasses = "bg-yellow-500/10 text-yellow-600";
+      badgeText = "Черновик";
+    }
+  }
+
+  return (
+    <div className="p-6 md:px-8 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-muted/10 transition-colors">
+      <div>
+        <div className="flex items-center gap-3 mb-2">
+          {topic.ktp_number && <span className="text-xs font-mono font-bold bg-muted px-2 py-1 rounded text-muted-foreground">{topic.ktp_number}</span>}
+          <span className="font-bold text-foreground text-lg">{topic.name}</span>
+          {!isLoading && (
+            <span className={`text-xs font-bold px-2 py-1 rounded ${badgeClasses}`}>
+              {badgeText}
+            </span>
+          )}
+          {isLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+        </div>
+        <div className="text-sm font-semibold text-muted-foreground flex items-center gap-4">
+          <span className="bg-card border border-border px-2 py-0.5 rounded">{topic.hours} ч.</span>
+          <span className="text-primary">{topic.lesson_type}</span>
+        </div>
+      </div>
+      <Link href={`/dashboard/lessons/${topic.id}`}>
+        <button className="flex items-center justify-center gap-2 px-5 py-2.5 bg-primary/10 text-primary font-bold rounded-xl hover:bg-primary hover:text-primary-foreground transition-all text-sm w-full md:w-auto">
+          <Edit3 className="w-4 h-4" />
+          Редактировать
+        </button>
+      </Link>
     </div>
   );
 }

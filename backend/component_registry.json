@@ -1,17 +1,371 @@
 [
-  {"id":"short-explanation","code":"C01","category":"explain","subjects":["math","literature"],"purpose":"Краткое объяснение нового понятия","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Краткий текст с главной мыслью."},
-  {"id":"key-concept","code":"C02","category":"explain","subjects":["math","literature"],"purpose":"Фиксация ключевого понятия","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Термин и определение."},
-  {"id":"worked-example","code":"C03","category":"model","subjects":["math"],"purpose":"Пошаговый разбор решения","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Нумерованные шаги."},
-  {"id":"guided-practice","code":"C04","category":"practice","subjects":["math"],"purpose":"Решение с подсказками","is_assessment":true,"content_schema":{"type":"object"},"rendering_notes":"Последовательные подсказки."},
-  {"id":"independent-problem","code":"C05","category":"practice","subjects":["math","literature"],"purpose":"Самостоятельное применение знаний","is_assessment":true,"content_schema":{"type":"object"},"rendering_notes":"Поле ответа."},
-  {"id":"retrieval-check","code":"C07","category":"assess","subjects":["math","literature"],"purpose":"Быстрая проверка воспроизведения","is_assessment":true,"content_schema":{"type":"object"},"rendering_notes":"Мгновенная обратная связь."},
-  {"id":"mind-map","code":"C09","category":"represent","subjects":["math","literature"],"purpose":"Визуализация связей","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Карта узлов."},
-  {"id":"timeline","code":"C11","category":"represent","subjects":["literature"],"purpose":"Хронология событий","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Адаптивная временная шкала."},
-  {"id":"text-evidence-picker","code":"C12","category":"interact","subjects":["literature"],"purpose":"Выбор доказательств из текста","is_assessment":true,"content_schema":{"type":"object"},"rendering_notes":"Выделение фрагментов."},
-  {"id":"argument-builder","code":"C13","category":"communicate","subjects":["literature"],"purpose":"Построение аргументации","is_assessment":true,"content_schema":{"type":"object"},"rendering_notes":"Конструктор аргумента."},
-  {"id":"interactive-graph","code":"C16","category":"represent","subjects":["math"],"purpose":"Исследование функций","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Интерактивный график."},
-  {"id":"presentation","code":"C21","category":"media","subjects":["math","literature"],"purpose":"Визуальная подача материала","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Листаемые слайды."},
-  {"id":"illustration","code":"C22","category":"represent","subjects":["math","literature"],"purpose":"Схематическое пояснение","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Изображение с подписью."},
-  {"id":"reflection","code":"C23","category":"reflect","subjects":["math","literature"],"purpose":"Осмысление изученного","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Свободный ответ."},
-  {"id":"mastery-check","code":"C24","category":"assess","subjects":["math","literature"],"purpose":"Итоговая проверка","is_assessment":true,"content_schema":{"type":"object"},"rendering_notes":"Результат и уровень освоения."}
+  {
+    "id": "short-explanation",
+    "code": "C01",
+    "category": "explain",
+    "subjects": ["math", "literature"],
+    "purpose": "Краткое объяснение нового понятия",
+    "is_assessment": false,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "text", "key_concepts"],
+      "properties": {
+        "title": {"type": "string"},
+        "text": {"type": "string"},
+        "key_concepts": {"type": "array", "items": {"type": "string"}},
+        "callout": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Текст поддерживает KaTeX."
+  },
+  {
+    "id": "key-concept",
+    "code": "C02",
+    "category": "explain",
+    "subjects": ["math", "literature"],
+    "purpose": "Фиксация ключевого понятия",
+    "is_assessment": false,
+    "content_schema": {
+      "type": "object",
+      "required": ["term", "definition", "example", "non_example"],
+      "properties": {
+        "term": {"type": "string"},
+        "definition": {"type": "string"},
+        "example": {"type": "string"},
+        "non_example": {"type": "string"},
+        "visual_hint": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Термин, определение, пример и контрпример."
+  },
+  {
+    "id": "worked-example",
+    "code": "C03",
+    "category": "model",
+    "subjects": ["math"],
+    "purpose": "Пошаговый разбор решения",
+    "is_assessment": false,
+    "content_schema": {
+      "type": "object",
+      "required": ["problem", "steps", "final_answer"],
+      "properties": {
+        "problem": {"type": "string"},
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["description"],
+            "properties": {
+              "description": {"type": "string"},
+              "math": {"type": "string"},
+              "hint": {"type": "string"}
+            }
+          }
+        },
+        "final_answer": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Нумерованные шаги."
+  },
+  {
+    "id": "guided-practice",
+    "code": "C04",
+    "category": "practice",
+    "subjects": ["math"],
+    "purpose": "Решение с подсказками",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["question", "hints", "input_type", "correct_answer", "explanation"],
+      "properties": {
+        "question": {"type": "string"},
+        "hints": {"type": "array", "items": {"type": "string"}},
+        "input_type": {"type": "string", "enum": ["numeric", "expression", "text"]},
+        "correct_answer": {"type": "string"},
+        "explanation": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Последовательные подсказки."
+  },
+  {
+    "id": "independent-problem",
+    "code": "C05",
+    "category": "practice",
+    "subjects": ["math", "literature"],
+    "purpose": "Самостоятельное применение знаний",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["question", "type", "correct_answer", "explanation", "difficulty"],
+      "properties": {
+        "question": {"type": "string"},
+        "type": {"type": "string", "enum": ["multiple_choice", "numeric", "expression"]},
+        "options": {"type": "array", "items": {"type": "string"}},
+        "correct_answer": {"type": "string"},
+        "explanation": {"type": "string"},
+        "difficulty": {"type": "string", "enum": ["basic", "advanced"]}
+      }
+    },
+    "rendering_notes": "Выбор или ввод ответа."
+  },
+  {
+    "id": "retrieval-check",
+    "code": "C07",
+    "category": "assess",
+    "subjects": ["math", "literature"],
+    "purpose": "Быстрая проверка воспроизведения",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["question", "options", "correct_answer", "explanation"],
+      "properties": {
+        "question": {"type": "string"},
+        "options": {"type": "array", "items": {"type": "string"}, "minItems": 4, "maxItems": 4},
+        "correct_answer": {"type": "string"},
+        "explanation": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Мгновенная обратная связь."
+  },
+  {
+    "id": "mind-map",
+    "code": "C09",
+    "category": "represent",
+    "subjects": ["math", "literature"],
+    "purpose": "Визуализация связей",
+    "is_assessment": false,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "central_concept", "branches"],
+      "properties": {
+        "title": {"type": "string"},
+        "central_concept": {"type": "string"},
+        "branches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["label", "children"],
+            "properties": {
+              "label": {"type": "string"},
+              "children": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        }
+      }
+    },
+    "rendering_notes": "Карта узлов."
+  },
+  {
+    "id": "timeline",
+    "code": "C11",
+    "category": "represent",
+    "subjects": ["literature"],
+    "purpose": "Хронология событий",
+    "is_assessment": false,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "events"],
+      "properties": {
+        "title": {"type": "string"},
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["date", "label"],
+            "properties": {
+              "date": {"type": "string"},
+              "label": {"type": "string"},
+              "description": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "rendering_notes": "Адаптивная временная шкала."
+  },
+  {
+    "id": "text-evidence-picker",
+    "code": "C12",
+    "category": "interact",
+    "subjects": ["literature"],
+    "purpose": "Выбор доказательств из текста",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["passage", "claim", "correct_segments", "explanation"],
+      "properties": {
+        "passage": {"type": "string"},
+        "claim": {"type": "string"},
+        "correct_segments": {"type": "array", "items": {"type": "string"}},
+        "explanation": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Выделение предложений."
+  },
+  {
+    "id": "argument-builder",
+    "code": "C13",
+    "category": "communicate",
+    "subjects": ["literature"],
+    "purpose": "Построение аргументации",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["prompt", "thesis_options", "evidence_pool", "correct_thesis", "correct_evidence", "model_reasoning"],
+      "properties": {
+        "prompt": {"type": "string"},
+        "thesis_options": {"type": "array", "items": {"type": "string"}},
+        "evidence_pool": {"type": "array", "items": {"type": "string"}},
+        "correct_thesis": {"type": "string"},
+        "correct_evidence": {"type": "array", "items": {"type": "string"}},
+        "model_reasoning": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Конструктор аргумента."
+  },
+  {
+    "id": "interactive-graph",
+    "code": "C16",
+    "category": "represent",
+    "subjects": ["math"],
+    "purpose": "Исследование функций",
+    "is_assessment": false,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "description", "graph_type", "data_points", "x_label", "y_label"],
+      "properties": {
+        "title": {"type": "string"},
+        "description": {"type": "string"},
+        "graph_type": {"type": "string", "enum": ["line", "bar", "scatter"]},
+        "data_points": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["x", "y"],
+            "properties": {
+              "x": {"type": "number"},
+              "y": {"type": "number"},
+              "label": {"type": "string"}
+            }
+          }
+        },
+        "x_label": {"type": "string"},
+        "y_label": {"type": "string"},
+        "interactive_params": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "label", "min", "max", "step", "default", "formula_description"],
+            "properties": {
+              "name": {"type": "string"},
+              "label": {"type": "string"},
+              "min": {"type": "number"},
+              "max": {"type": "number"},
+              "step": {"type": "number"},
+              "default": {"type": "number"},
+              "formula_description": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "rendering_notes": "Интерактивный график."
+  },
+  {
+    "id": "presentation",
+    "code": "C21",
+    "category": "media",
+    "subjects": ["math", "literature"],
+    "purpose": "Визуальная подача материала",
+    "is_assessment": false,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "slides"],
+      "properties": {
+        "title": {"type": "string"},
+        "slides": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["heading", "body"],
+            "properties": {
+              "heading": {"type": "string"},
+              "body": {"type": "string"},
+              "visual": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "rendering_notes": "Листаемые слайды."
+  },
+  {
+    "id": "illustration",
+    "code": "C22",
+    "category": "represent",
+    "subjects": ["math", "literature"],
+    "purpose": "Схематическое пояснение",
+    "is_assessment": false,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "description", "svg_content"],
+      "properties": {
+        "title": {"type": "string"},
+        "description": {"type": "string"},
+        "svg_content": {"type": "string"},
+        "caption": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Санитизированный inline SVG."
+  },
+  {
+    "id": "mastery-check",
+    "code": "C24",
+    "category": "assess",
+    "subjects": ["math", "literature"],
+    "purpose": "Итоговая проверка",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["questions"],
+      "properties": {
+        "questions": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "required": ["question", "type", "correct_answer", "explanation", "dimension"],
+            "properties": {
+              "question": {"type": "string"},
+              "type": {"type": "string", "enum": ["multiple_choice", "numeric"]},
+              "options": {"type": "array", "items": {"type": "string"}},
+              "correct_answer": {"type": "string"},
+              "explanation": {"type": "string"},
+              "dimension": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "rendering_notes": "Ровно три итоговых вопроса."
+  },
+  {
+    "id": "reflection",
+    "code": "C23",
+    "category": "reflect",
+    "subjects": ["math", "literature"],
+    "purpose": "Осмысление изученного",
+    "is_assessment": false,
+    "content_schema": {
+      "type": "object",
+      "required": ["prompt", "scale_question", "scale_labels"],
+      "properties": {
+        "prompt": {"type": "string"},
+        "scale_question": {"type": "string"},
+        "scale_labels": {"type": "array", "items": {"type": "string"}, "minItems": 4, "maxItems": 4}
+      }
+    },
+    "rendering_notes": "Шкала и свободная рефлексия."
+  }
 ]
