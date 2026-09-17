@@ -204,15 +204,13 @@ export default function MindMap({ title, central_concept, branches }: MindMapPro
       <div className="absolute left-0 top-14 bottom-0 w-8 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
       <div className="absolute right-0 top-14 bottom-0 w-8 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
       
-      <div 
-        className="overflow-x-auto overflow-y-auto custom-scrollbar w-full relative z-0" 
-        style={{ maxHeight: '600px' }}
-      >
+      <div className="overflow-x-auto custom-scrollbar w-full relative z-0">
         <svg 
-          width={width} 
-          height={height} 
-          className="min-w-max" 
-          style={{ display: 'block' }}
+          viewBox={`0 0 ${width} ${height}`}
+          role="img"
+          aria-label={`${title}: ${central_concept}`}
+          className="block h-auto w-full min-w-[640px]"
+          style={{ aspectRatio: `${width} / ${height}` }}
         >
           <g>
             {renderEdges(positionedRoot)}
