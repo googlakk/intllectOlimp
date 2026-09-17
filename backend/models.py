@@ -91,3 +91,6 @@ class Progress(Base):
     answers: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     attempts_by_step: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     elapsed_time_sec: Mapped[int] = mapped_column(Integer, default=0)
+    objective_evidence: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    objective_mastery: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    mastery_status: Mapped[str] = mapped_column(String(50), default="not_assessed")

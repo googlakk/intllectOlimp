@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ai.generator import MODEL, classify_subject, generate_lesson, select_archetype
 from database import get_db
 from models import GeneratedLesson, Section, Subject, Teacher, Topic
+from objectives import quality_report
 
 router = APIRouter(prefix="/api/lessons", tags=["lessons"])
 
@@ -24,6 +25,7 @@ class BlocksInput(BaseModel):
 
 class PublishInput(BaseModel):
     teacher_id: int
+    acknowledge_warnings: bool = False
 
 
 def serialize_lesson(lesson: GeneratedLesson) -> dict:
@@ -82,6 +84,7 @@ async def generate(payload: GenerateInput, db: AsyncSession = Depends(get_db)):
     if lesson is None:
         lesson = GeneratedLesson(topic_id=topic.id)
         db.add(lesson)
+    quality = quality_report(blocks, topic.learning_objectives)
     lesson.blocks = blocks
     profile = classify_subject(subject.name)
     archetype = select_archetype(
@@ -101,6 +104,8 @@ async def generate(payload: GenerateInput, db: AsyncSession = Depends(get_db)):
         "topic_name": topic.name,
         "lesson_type": topic.lesson_type,
         "learning_objectives": topic.learning_objectives,
+        "objectives": quality["objectives"],
+        "quality_report": quality["quality_report"],
         "skills": topic.skills or [],
         "teacher_id": payload.teacher_id,
     }
@@ -127,6 +132,15 @@ async def by_topic(
     if lesson is None:
         detail = "Опубликованный урок пока не готов" if role == "student" else "Урок не найден"
         raise HTTPException(status_code=404, detail=detail)
+    topic = await db.get(Topic, lesson.topic_id)
+    if topic is not None:
+        metadata = dict(lesson.lesson_metadata or {})
+        report = quality_report(lesson.blocks or [], topic.learning_objectives)
+        metadata.setdefault("objectives", report["objectives"])
+        metadata.setdefault("quality_report", report["quality_report"])
+        # Legacy lessons remain drafts/review-required, but consumers receive
+        # the same canonical contract without rewriting historical rows.
+        lesson.lesson_metadata = metadata
     return serialize_lesson(lesson)
 
 
@@ -137,10 +151,30 @@ async def update_blocks(
     db: AsyncSession = Depends(get_db),
 ):
     lesson = await get_lesson_or_404(lesson_id, db)
+    topic = await db.get(Topic, lesson.topic_id)
+    if topic is None:
+        raise HTTPException(status_code=404, detail="Тема урока не найдена")
+    quality = quality_report(payload.blocks, topic.learning_objectives)
     lesson.blocks = payload.blocks
+    metadata = dict(lesson.lesson_metadata or {})
+    metadata["objectives"] = quality["objectives"]
+    metadata["quality_report"] = quality["quality_report"]
+    lesson.lesson_metadata = metadata
+    lesson.status = "draft"
+    lesson.published_at = None
+    lesson.published_by = None
     await db.commit()
     await db.refresh(lesson)
     return serialize_lesson(lesson)
+
+
+@router.get("/{lesson_id}/quality")
+async def lesson_quality(lesson_id: int, db: AsyncSession = Depends(get_db)):
+    lesson = await get_lesson_or_404(lesson_id, db)
+    topic = await db.get(Topic, lesson.topic_id)
+    if topic is None:
+        raise HTTPException(status_code=404, detail="Тема урока не найдена")
+    return quality_report(lesson.blocks or [], topic.learning_objectives)
 
 
 @router.put("/{lesson_id}/publish")
@@ -152,6 +186,38 @@ async def publish(
     if await db.get(Teacher, payload.teacher_id) is None:
         raise HTTPException(status_code=404, detail="Преподаватель не найден")
     lesson = await get_lesson_or_404(lesson_id, db)
+    topic = await db.get(Topic, lesson.topic_id)
+    if topic is None:
+        raise HTTPException(status_code=404, detail="Тема урока не найдена")
+    quality = quality_report(lesson.blocks or [], topic.learning_objectives)
+    if not quality["quality_report"]["publishable"]:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Урок нельзя опубликовать: исправьте покрытие целей и ошибки ответов",
+                "quality_report": quality,
+            },
+        )
+    warnings = quality["quality_report"]["warnings"]
+    if warnings and not payload.acknowledge_warnings:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Подтвердите некритические предупреждения перед публикацией",
+                "warnings": warnings,
+            },
+        )
+    metadata = dict(lesson.lesson_metadata or {})
+    metadata["objectives"] = quality["objectives"]
+    metadata["quality_report"] = quality["quality_report"]
+    metadata["quality_review"] = {
+        "teacher_id": payload.teacher_id,
+        "reviewed_at": datetime.now(timezone.utc).isoformat(),
+        "acknowledged_warning_codes": [
+            item.get("code") for item in warnings if isinstance(item, dict)
+        ],
+    }
+    lesson.lesson_metadata = metadata
     lesson.status = "published"
     lesson.published_at = datetime.now(timezone.utc)
     lesson.published_by = payload.teacher_id

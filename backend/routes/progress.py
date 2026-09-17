@@ -7,7 +7,8 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from models import Progress, Student, Topic
+from models import GeneratedLesson, Progress, Student, Topic
+from objectives import calculate_objective_mastery, decompose_objectives
 
 router = APIRouter(prefix="/api/progress", tags=["progress"])
 
@@ -24,6 +25,9 @@ class ProgressInput(BaseModel):
     attempts_by_step: dict = Field(default_factory=dict)
     elapsed_time_sec: int = Field(default=0, ge=0)
     status: str = Field(default="completed", pattern="^(in_progress|completed)$")
+    objective_evidence: dict | None = None
+    objective_mastery: dict | None = None
+    mastery_status: str | None = Field(default=None, pattern="^(not_assessed|in_progress|mastered|needs_practice)$")
 
 
 def serialize_progress(row: Progress) -> dict:
@@ -34,12 +38,50 @@ def serialize_progress(row: Progress) -> dict:
 async def save_progress(payload: ProgressInput, db: AsyncSession = Depends(get_db)):
     if await db.get(Student, payload.student_id) is None:
         raise HTTPException(status_code=404, detail="Ученик не найден")
-    if await db.get(Topic, payload.topic_id) is None:
+    topic = await db.get(Topic, payload.topic_id)
+    if topic is None:
         raise HTTPException(status_code=404, detail="Тема не найдена")
     if payload.status == "in_progress" and payload.current_step > payload.max_opened_step:
         raise HTTPException(status_code=422, detail="Текущий шаг ещё не открыт")
 
     now = datetime.now(timezone.utc)
+    objective_mastery = payload.objective_mastery
+    objective_evidence = payload.objective_evidence
+    mastery_status = payload.mastery_status
+    lesson = await db.scalar(
+        select(GeneratedLesson).where(GeneratedLesson.topic_id == payload.topic_id)
+    )
+    if lesson is not None:
+        objectives = (lesson.lesson_metadata or {}).get("objectives")
+        if not isinstance(objectives, list):
+            objectives = decompose_objectives(topic.learning_objectives)
+        if objectives and any(
+            isinstance(block.get("content"), dict)
+            and block["content"].get("objective_ids")
+            for block in (lesson.blocks or [])
+        ):
+            objective_mastery, objective_evidence, mastery_status = calculate_objective_mastery(
+                lesson.blocks or [],
+                objectives,
+                payload.answers,
+                payload.attempts_by_step,
+                lesson_completed=payload.status == "completed",
+            )
+    if objective_mastery:
+        statuses = [
+            item.get("status")
+            for item in objective_mastery.values()
+            if isinstance(item, dict)
+        ]
+        if statuses and all(status == "mastered" for status in statuses):
+            mastery_status = "mastered"
+        elif any(status == "needs_practice" for status in statuses):
+            mastery_status = "needs_practice"
+        else:
+            mastery_status = "in_progress"
+    insert_mastery_status = mastery_status or "not_assessed"
+    insert_objective_evidence = objective_evidence or {}
+    insert_objective_mastery = objective_mastery or {}
     status_update = case(
         (Progress.status == "completed", "completed"),
         else_=payload.status,
@@ -73,6 +115,9 @@ async def save_progress(payload: ProgressInput, db: AsyncSession = Depends(get_d
             answers=payload.answers,
             attempts_by_step=payload.attempts_by_step,
             elapsed_time_sec=payload.elapsed_time_sec,
+            objective_evidence=insert_objective_evidence,
+            objective_mastery=insert_objective_mastery,
+            mastery_status=insert_mastery_status,
         )
         .on_conflict_do_update(
             index_elements=[Progress.student_id, Progress.topic_id],
@@ -87,6 +132,21 @@ async def save_progress(payload: ProgressInput, db: AsyncSession = Depends(get_d
                 "answers": payload.answers,
                 "attempts_by_step": payload.attempts_by_step,
                 "elapsed_time_sec": payload.elapsed_time_sec,
+                "objective_evidence": (
+                    Progress.objective_evidence
+                    if objective_evidence is None
+                    else objective_evidence
+                ),
+                "objective_mastery": (
+                    Progress.objective_mastery
+                    if objective_mastery is None
+                    else objective_mastery
+                ),
+                "mastery_status": (
+                    Progress.mastery_status
+                    if mastery_status is None
+                    else mastery_status
+                ),
                 # Re-saving a completed session is idempotent. An attempt is
                 # counted only when an in-progress row first becomes complete.
                 "attempts": case(

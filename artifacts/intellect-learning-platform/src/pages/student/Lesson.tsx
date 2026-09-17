@@ -1,7 +1,7 @@
 import { useParams, Link } from 'wouter';
 import { ArrowLeft, BookOpen, Loader2, CheckCircle, ChevronDown, RefreshCw, BookMarked, Trophy } from 'lucide-react';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { useGetLesson, useSaveProgress, useGetLessonProgress } from '@/lib/api';
+import { useGetLesson, useSaveProgress, useGetLessonProgress, type LearningObjective, type ObjectiveEvidence, type ObjectiveMastery, type MasteryStatus } from '@/lib/api';
 import { componentMap, assessmentComponents } from '@/components/blocks/BlockRenderer';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
@@ -27,34 +27,93 @@ export default function Lesson() {
   const [retryKeys, setRetryKeys] = useState<Record<number, number>>({});
   const [isCompleted, setIsCompleted] = useState(false);
   const [result, setResult] = useState<{ score: number; level: string } | null>(null);
+  const [objectiveMastery, setObjectiveMastery] = useState<Record<string, ObjectiveMastery>>({});
+  const [savedObjectiveEvidence, setSavedObjectiveEvidence] = useState<Record<string, ObjectiveEvidence[]>>({});
+  const [diagnosticComplete, setDiagnosticComplete] = useState(false);
   
   const initializedForId = useRef<number | null>(null);
   const startTime = useRef(Date.now());
   const baseElapsedTime = useRef(0);
   const lastSaved = useRef<any>(null);
+  const restoredCompletionPositioned = useRef(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
 
   const blocks = lesson?.blocks || [];
+  const objectives = useMemo<LearningObjective[]>(() => {
+    const configured = lesson?.lesson_metadata?.objectives;
+    if (Array.isArray(configured)) return configured;
+    return [];
+  }, [lesson?.lesson_metadata?.objectives]);
+  const objectiveIdsForBlock = useCallback((block: typeof blocks[number]) => {
+    const value = block.content?.objective_ids;
+    if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string');
+    if (typeof value === 'string') return [value];
+    return [];
+  }, []);
+  const stageForBlock = useCallback((block: typeof blocks[number]) => {
+    const stage = block.content?.evidence_stage;
+    return typeof stage === 'string' ? stage : undefined;
+  }, []);
+  const diagnosticOriginalIndices = useMemo(() => blocks
+    .map((block, index) => ({ block, index }))
+    .filter(({ block }) => stageForBlock(block) === 'diagnostic')
+    .map(({ index }) => index), [blocks, stageForBlock]);
+  const hasObjectiveRoute = objectives.length > 0 && diagnosticOriginalIndices.length > 0;
+  const passedDiagnosticIds = useMemo(() => new Set(
+    Object.entries(objectiveMastery)
+      .filter(([, mastery]) => mastery.diagnostic_passed === true)
+      .map(([id]) => id)
+  ), [objectiveMastery]);
+  const activeBlocks = useMemo(() => {
+    if (!hasObjectiveRoute) return blocks;
+    if (!diagnosticComplete) return diagnosticOriginalIndices.map((index) => blocks[index]);
+    return blocks.filter((block) => {
+      const ids = objectiveIdsForBlock(block);
+      const stage = stageForBlock(block);
+      return stage !== 'diagnostic' && (stage === 'assessment' || ids.length === 0 || !ids.every((id) => passedDiagnosticIds.has(id)));
+    });
+  }, [blocks, diagnosticComplete, diagnosticOriginalIndices, hasObjectiveRoute, objectiveIdsForBlock, passedDiagnosticIds, stageForBlock]);
+  const activeOriginalIndices = useMemo(() => {
+    if (!hasObjectiveRoute) return blocks.map((_, index) => index);
+    if (!diagnosticComplete) return diagnosticOriginalIndices;
+    return blocks
+      .map((block, index) => ({ block, index }))
+      .filter(({ block }) => {
+        const ids = objectiveIdsForBlock(block);
+        const stage = stageForBlock(block);
+        return stage !== 'diagnostic' && (stage === 'assessment' || ids.length === 0 || !ids.every((id) => passedDiagnosticIds.has(id)));
+      })
+      .map(({ index }) => index);
+  }, [blocks, diagnosticComplete, diagnosticOriginalIndices, hasObjectiveRoute, objectiveIdsForBlock, passedDiagnosticIds, stageForBlock]);
   
   const assessmentBlocksCount = useMemo(() => {
-    return blocks.filter(b => assessmentComponents.includes(b.component)).length;
-  }, [blocks]);
+    return activeBlocks.filter(b => assessmentComponents.includes(b.component)).length;
+  }, [activeBlocks]);
 
   // Init state from progress
   useEffect(() => {
     if (progress && initializedForId.current !== progress.id && blocks.length > 0) {
       initializedForId.current = progress.id;
+      setObjectiveMastery(progress.objective_mastery || {});
+      setSavedObjectiveEvidence(progress.objective_evidence || {});
       if (progress.status === 'completed') {
         setIsCompleted(true);
         setResult({ score: progress.score || 0, level: progress.mastery_level || 'Начинающий' });
-        setCurrentStep(blocks.length);
+        restoredCompletionPositioned.current = false;
       } else {
         setCurrentStep(progress.current_step || 0);
       }
       setMaxOpenedStep(progress.max_opened_step || 0);
       setAnswers(progress.answers || {});
       setAttemptsByStep(progress.attempts_by_step || {});
+      if (progress.objective_mastery) {
+        const diagnosticFinished = diagnosticOriginalIndices.length > 0 && diagnosticOriginalIndices.every((index) => (
+          progress.answers?.[String(index)] !== undefined
+          || Object.keys(progress.answers || {}).some((key) => key.startsWith(`${index}_q`))
+        ));
+        setDiagnosticComplete(diagnosticFinished);
+      }
       baseElapsedTime.current = progress.elapsed_time_sec || progress.time_spent_sec || 0;
       startTime.current = Date.now();
       lastSaved.current = {
@@ -70,7 +129,14 @@ export default function Lesson() {
         status: 'in_progress',
       };
     }
-  }, [progress, blocks.length]);
+  }, [progress, blocks.length, objectives.length, diagnosticOriginalIndices.length]);
+
+  useEffect(() => {
+    if (isCompleted && !restoredCompletionPositioned.current && activeBlocks.length > 0) {
+      setCurrentStep(activeBlocks.length);
+      restoredCompletionPositioned.current = true;
+    }
+  }, [activeBlocks.length, isCompleted]);
 
   const saveState = useCallback((
     step: number, 
@@ -79,7 +145,10 @@ export default function Lesson() {
     ans: Record<string | number, boolean>, 
     att: Record<number, number>,
     finalScore?: number,
-    finalLevel?: string
+    finalLevel?: string,
+    mastery?: Record<string, ObjectiveMastery>,
+    evidence?: Record<string, ObjectiveEvidence[]>,
+    masteryStatus?: MasteryStatus
   ) => {
     if (!user?.id) return;
     const timeSpentSec = baseElapsedTime.current + Math.round((Date.now() - startTime.current) / 1000);
@@ -97,12 +166,17 @@ export default function Lesson() {
       attempts_by_step: att,
       time_spent_sec: timeSpentSec,
       elapsed_time_sec: timeSpentSec,
-      ...(status === 'completed' && finalScore !== undefined ? { score: finalScore, mastery_level: finalLevel } : {})
+      ...(finalScore !== undefined ? { score: finalScore, mastery_level: finalLevel } : {}),
+      ...(mastery ? { objective_mastery: mastery } : {}),
+      ...(evidence ? { objective_evidence: evidence } : {}),
+      ...(masteryStatus ? { mastery_status: masteryStatus } : {})
     }, {
       onSuccess: (data) => {
         // Optimistic query patch
         queryClient.setQueryData(['progress', user.id, topicId], data);
         if (status === 'completed') {
+           setObjectiveMastery(data.objective_mastery || {});
+           setSavedObjectiveEvidence(data.objective_evidence || {});
            queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
            queryClient.invalidateQueries({ queryKey: ['dashboard-students'] });
            queryClient.invalidateQueries({ queryKey: ['subjects'] });
@@ -115,39 +189,126 @@ export default function Lesson() {
     let score = 0;
     let level = 'Начинающий';
     
-    if (assessmentBlocksCount > 0) {
-      const masteryAnswers = Object.entries(ans).filter(([key]) => key.includes('_q'));
-      if (masteryAnswers.length > 0) {
-        const correctCount = masteryAnswers.filter(([, value]) => value === true).length;
-        score = Math.round((correctCount / masteryAnswers.length) * 100);
-      } else {
-        const correctCount = Object.keys(ans)
-          .filter(key => !isNaN(Number(key)))
-          .filter(key => ans[key as keyof typeof ans] === true)
-          .length;
-        score = Math.round((correctCount / assessmentBlocksCount) * 100);
+    const finalAnswerKeys = activeBlocks.flatMap((block, activeIndex) => {
+      const originalIndex = activeOriginalIndices[activeIndex];
+      if (stageForBlock(block) === 'diagnostic') return [];
+      if (block.component === 'MasteryCheck') {
+        const questions = Array.isArray(block.content.questions) ? block.content.questions : [];
+        return questions.map((_, questionIndex) => `${originalIndex}_q${questionIndex}`);
       }
+      return assessmentComponents.includes(block.component) ? [String(originalIndex)] : [];
+    });
+    const answeredFinalKeys = finalAnswerKeys.filter((key) => ans[key] !== undefined);
+
+    if (finalAnswerKeys.length > 0) {
+      const correctCount = answeredFinalKeys.filter((key) => ans[key] === true).length;
+      score = Math.round((correctCount / finalAnswerKeys.length) * 100);
       
       if (score >= 86) level = 'Мастер';
       else if (score >= 66) level = 'Уверенный';
       else if (score >= 41) level = 'Развивающийся';
       else level = 'Начинающий';
     } else {
-      score = 100;
-      level = 'Мастер';
+      score = 0;
+      level = 'Не оценено';
     }
     
+    const mastery: Record<string, ObjectiveMastery> = {};
+    const evidence: Record<string, ObjectiveEvidence[]> = {};
+    objectives.forEach((objective) => {
+      const answersForObjective = activeBlocks.flatMap((block, activeIndex) => {
+        const originalIndex = activeOriginalIndices[activeIndex];
+        if (stageForBlock(block) === 'diagnostic') return [];
+        if (block.component === 'MasteryCheck') {
+          const questions = Array.isArray(block.content.questions)
+            ? block.content.questions as Array<Record<string, unknown>>
+            : [];
+          return questions.flatMap((question, questionIndex) => {
+            const rawIds = question.objective_ids;
+            const questionIds = Array.isArray(rawIds)
+              ? rawIds.filter((id): id is string => typeof id === 'string')
+              : typeof rawIds === 'string' ? [rawIds] : [];
+            const matches = questionIds.includes(objective.id) || question.dimension === objective.id;
+            const key = `${originalIndex}_q${questionIndex}`;
+            return matches && ans[key] !== undefined
+              ? [{ key, blockIndex: originalIndex, correct: ans[key] === true }]
+              : [];
+          });
+        }
+        const isFinalAssessment = stageForBlock(block) === 'assessment'
+          && assessmentComponents.includes(block.component)
+          && objectiveIdsForBlock(block).includes(objective.id);
+        const key = String(originalIndex);
+        return isFinalAssessment && ans[key] !== undefined
+          ? [{ key, blockIndex: originalIndex, correct: ans[key] === true }]
+          : [];
+      });
+      const objectiveScore = answersForObjective.length
+        ? Math.round(answersForObjective.filter((item) => item.correct).length / answersForObjective.length * 100)
+        : 0;
+      const diagnosticPassed = objectiveMastery[objective.id]?.diagnostic_passed === true;
+      const mastered = answersForObjective.length > 0 && objectiveScore >= 80 && answersForObjective.some((item) => item.correct);
+      const status: MasteryStatus = mastered ? 'mastered' : (answersForObjective.length ? 'needs_practice' : (diagnosticPassed ? 'in_progress' : 'not_assessed'));
+      const objectiveEvidence = answersForObjective.map(({ blockIndex, correct }) => ({
+        objective_id: objective.id,
+        correct,
+        attempts: att[blockIndex] || 1,
+        block_index: blockIndex,
+        stage: 'assessment',
+      }));
+      mastery[objective.id] = { status, score: objectiveScore, diagnostic_passed: diagnosticPassed, final_passed: mastered };
+      evidence[objective.id] = [...(savedObjectiveEvidence[objective.id] || []), ...objectiveEvidence];
+    });
+    const masteredCount = Object.values(mastery).filter((item) => item.status === 'mastered').length;
+    const masteryStatus: MasteryStatus = objectives.length === 0 ? 'not_assessed' : (masteredCount === objectives.length ? 'mastered' : 'needs_practice');
+    setObjectiveMastery(mastery);
+    setSavedObjectiveEvidence(evidence);
     setResult({ score, level });
     setIsCompleted(true);
-    saveState(blocks.length, Math.max(maxOpenedStep, blocks.length - 1), 'completed', ans, att, score, level);
-  }, [assessmentBlocksCount, blocks.length, maxOpenedStep, saveState]);
+    saveState(activeBlocks.length, Math.max(maxOpenedStep, activeBlocks.length - 1), 'completed', ans, att, score, level, mastery, evidence, masteryStatus);
+  }, [activeBlocks, activeOriginalIndices, objectiveIdsForBlock, objectives, objectiveMastery, maxOpenedStep, saveState, savedObjectiveEvidence, stageForBlock]);
+
+  const completeDiagnostic = useCallback(() => {
+    const mastery: Record<string, ObjectiveMastery> = {};
+    const evidence: Record<string, ObjectiveEvidence[]> = {};
+    objectives.forEach((objective) => {
+      const related = diagnosticOriginalIndices
+        .filter((originalIndex) => objectiveIdsForBlock(blocks[originalIndex]).includes(objective.id));
+      const objectiveEvidence = related.flatMap((originalIndex) => {
+        const questionAnswers = Object.entries(answers)
+          .filter(([key]) => key.startsWith(`${originalIndex}_q`))
+          .map(([key, correct]) => ({ key, correct }));
+        if (questionAnswers.length > 0) {
+          return questionAnswers.map(({ correct }) => ({ objective_id: objective.id, block_index: originalIndex, stage: 'diagnostic', correct, attempts: attemptsByStep[originalIndex] || 1 }));
+        }
+        return answers[originalIndex] === undefined
+          ? []
+          : [{ objective_id: objective.id, block_index: originalIndex, stage: 'diagnostic', correct: answers[originalIndex] === true, attempts: attemptsByStep[originalIndex] || 1 }];
+      });
+      const score = objectiveEvidence.length
+        ? Math.round(objectiveEvidence.filter((item) => item.correct).length / objectiveEvidence.length * 100)
+        : 0;
+      const passed = objectiveEvidence.length > 0 && score >= 80;
+      mastery[objective.id] = { status: passed ? 'in_progress' : 'needs_practice', score, diagnostic_passed: passed, final_passed: false };
+      evidence[objective.id] = objectiveEvidence;
+    });
+    setObjectiveMastery(mastery);
+    setDiagnosticComplete(true);
+    setCurrentStep(0);
+    setMaxOpenedStep(0);
+    saveState(0, 0, 'in_progress', answers, attemptsByStep, undefined, undefined, mastery, evidence, 'in_progress');
+  }, [answers, attemptsByStep, blocks, diagnosticOriginalIndices, objectiveIdsForBlock, objectives, saveState]);
 
   const handleNextStep = () => {
-    if (currentStep === blocks.length - 1) {
+    if (currentStep === activeBlocks.length - 1) {
+      if (hasObjectiveRoute && !diagnosticComplete) {
+        completeDiagnostic();
+        return;
+      }
       if (!isCompleted) {
         completeLesson(answers, attemptsByStep);
       }
-      setCurrentStep(blocks.length);
+      setCurrentStep(activeBlocks.length);
       return;
     }
     
@@ -159,8 +320,9 @@ export default function Lesson() {
   };
 
   const handleBlockAnswer = (blockIndex: number, isCorrect: boolean) => {
-    const newAnswers = { ...answers, [blockIndex]: isCorrect };
-    const newAttempts = { ...attemptsByStep, [blockIndex]: (attemptsByStep[blockIndex] || 0) + 1 };
+    const originalIndex = activeOriginalIndices[blockIndex] ?? blockIndex;
+    const newAnswers = { ...answers, [originalIndex]: isCorrect };
+    const newAttempts = { ...attemptsByStep, [originalIndex]: (attemptsByStep[originalIndex] || 0) + 1 };
     
     setAnswers(newAnswers);
     setAttemptsByStep(newAttempts);
@@ -180,7 +342,7 @@ export default function Lesson() {
 
   const findNearestExplanation = (currentIndex: number) => {
     for (let i = currentIndex - 1; i >= 0; i--) {
-      if (!assessmentComponents.includes(blocks[i].component)) {
+      if (!assessmentComponents.includes(activeBlocks[i].component)) {
         return i;
       }
     }
@@ -209,10 +371,10 @@ export default function Lesson() {
   };
 
   useEffect(() => {
-    if (!isLoading && currentStep < blocks.length) {
+    if (!isLoading && currentStep < activeBlocks.length) {
       contentRef.current?.focus({ preventScroll: true });
     }
-  }, [currentStep, isLoading, blocks.length]);
+  }, [currentStep, isLoading, activeBlocks.length]);
 
   return (
     <div className="max-w-5xl mx-auto pb-24">
@@ -253,7 +415,7 @@ export default function Lesson() {
                 Преподаватель еще не опубликовал этот урок. Возвращайтесь позже!
               </p>
             </div>
-          ) : isCompleted && result && currentStep === blocks.length ? (
+          ) : isCompleted && result && currentStep === activeBlocks.length ? (
             <div className="text-center py-20 border-2 border-dashed border-primary/30 rounded-3xl bg-primary/5 px-4 animate-in fade-in zoom-in duration-500">
               <CheckCircle className="w-20 h-20 text-primary mx-auto mb-6" />
               <h3 className="text-3xl font-extrabold text-foreground mb-4">Урок завершён!</h3>
@@ -266,11 +428,30 @@ export default function Lesson() {
                 </div>
               )}
               {!assessmentBlocksCount && (
-                 <p className="text-muted-foreground font-medium mb-8">Вы успешно изучили материал урока.</p>
+                 <p className="text-muted-foreground font-medium mb-8">Урок завершён, но в нём нет оцениваемых заданий. Освоение целей не подтверждено.</p>
+              )}
+              {objectives.length > 0 && (
+                <div data-testid="objective-results" className="mx-auto mb-8 max-w-2xl text-left">
+                  <h4 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">Результаты по целям</h4>
+                  <div className="space-y-2">
+                    {objectives.map((objective) => {
+                      const objectiveResult = objectiveMastery[objective.id];
+                      const mastered = objectiveResult?.status === 'mastered';
+                      return (
+                        <div data-testid={`objective-result-${objective.id}`} key={objective.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
+                          <span className="text-sm font-semibold text-foreground">{objective.text}</span>
+                          <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${mastered ? 'bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-amber-500/10 text-amber-700 dark:text-amber-400'}`}>
+                            {mastered ? 'Освоено' : objectiveResult?.status === 'in_progress' ? 'В процессе' : objectiveResult?.status === 'not_assessed' ? 'Не оценено' : 'Нужна практика'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
               <div className="flex gap-4 justify-center">
                 <button 
-                  onClick={() => setCurrentStep(blocks.length - 1)}
+                  onClick={() => setCurrentStep(activeBlocks.length - 1)}
                   className="px-6 py-3 border border-border bg-card text-foreground font-bold rounded-xl shadow-sm hover:bg-muted transition-all"
                 >
                   Просмотреть ответы
@@ -288,7 +469,7 @@ export default function Lesson() {
               <div className="w-full lg:w-64 shrink-0" aria-label="Прогресс урока">
                 <div className="sticky top-8 flex flex-col gap-3">
                   <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2">Шаги урока</h3>
-                  {blocks.slice(0, maxOpenedStep + 1).map((block, index) => {
+                  {activeBlocks.slice(0, maxOpenedStep + 1).map((block, index) => {
                     const isActive = index === currentStep;
                     const isCompletedBlock = index < maxOpenedStep || answers[index] !== undefined;
                     const isAssessment = assessmentComponents.includes(block.component);
@@ -318,20 +499,20 @@ export default function Lesson() {
                   })}
                   {isCompleted && (
                     <button
-                      onClick={() => setCurrentStep(blocks.length)}
+                      onClick={() => setCurrentStep(activeBlocks.length)}
                       className={`text-left p-3 rounded-xl border transition-all duration-300 flex items-start gap-3 mt-4 ${
-                        currentStep === blocks.length 
+                        currentStep === activeBlocks.length
                           ? 'bg-primary/5 border-primary shadow-sm ring-1 ring-primary/20' 
                           : 'bg-card border-border hover:border-primary/50'
                       }`}
                     >
                       <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                        currentStep === blocks.length ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                        currentStep === activeBlocks.length ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
                       }`}>
                         <Trophy className="w-3.5 h-3.5" />
                       </div>
                       <div className="flex-1 overflow-hidden">
-                        <div className={`text-sm font-semibold truncate ${currentStep === blocks.length ? 'text-foreground' : 'text-muted-foreground'}`}>
+                        <div className={`text-sm font-semibold truncate ${currentStep === activeBlocks.length ? 'text-foreground' : 'text-muted-foreground'}`}>
                           Итоги
                         </div>
                       </div>
@@ -345,22 +526,22 @@ export default function Lesson() {
                 <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-wider text-primary">
-                      {phaseLabels[blocks[currentStep]?.component] || 'Учебный шаг'}
+                      {phaseLabels[activeBlocks[currentStep]?.component] || 'Учебный шаг'}
                     </p>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Шаг {currentStep + 1} из {blocks.length}
+                      Шаг {currentStep + 1} из {activeBlocks.length}
                     </p>
                   </div>
                   <div
                     className="w-full sm:w-48 h-2 rounded-full bg-muted overflow-hidden"
                     role="progressbar"
                     aria-valuemin={0}
-                    aria-valuemax={blocks.length}
+                    aria-valuemax={activeBlocks.length}
                     aria-valuenow={currentStep + 1}
                   >
                     <div
                       className="h-full rounded-full bg-primary transition-all"
-                      style={{ width: `${((currentStep + 1) / blocks.length) * 100}%` }}
+                      style={{ width: `${((currentStep + 1) / activeBlocks.length) * 100}%` }}
                     />
                   </div>
                 </div>
@@ -374,25 +555,27 @@ export default function Lesson() {
                     className="space-y-8"
                   >
                     {(() => {
-                      const block = blocks[currentStep];
+                      const block = activeBlocks[currentStep];
                       const Component = componentMap[block.component];
                       if (!Component) return <div className="text-destructive">Неизвестный блок</div>;
 
                       const isAssessment = assessmentComponents.includes(block.component);
-                      const isAnswered = answers[currentStep] !== undefined;
-                      const isCorrect = answers[currentStep] === true;
+                      const originalIndex = activeOriginalIndices[currentStep] ?? currentStep;
+                      const isAnswered = answers[originalIndex] !== undefined;
+                      const isCorrect = answers[originalIndex] === true;
                       
                       const injectProps = isAssessment 
                         ? { onAnswer: (correct: boolean, detail?: { questionIndex: number; isFinished: boolean }) => {
                               if (block.component === 'MasteryCheck' && detail) {
-                                const intermediateAns = { ...answers, [`${currentStep}_q${detail.questionIndex}`]: correct };
-                                setAnswers(intermediateAns);
-                                
                                 if (!detail.isFinished) {
+                                  const intermediateAns = { ...answers, [`${originalIndex}_q${detail.questionIndex}`]: correct };
+                                  setAnswers(intermediateAns);
                                   saveState(currentStep, maxOpenedStep, 'in_progress', intermediateAns, attemptsByStep);
                                   return;
                                 }
-                                
+
+                                // The final callback contains aggregate block success.
+                                // Keep all recorded per-question answers unchanged.
                                 // Block finished, compute overall block success
                                 handleBlockAnswer(currentStep, correct);
                                 return;
@@ -427,7 +610,7 @@ export default function Lesson() {
                                     onClick={() => {
                                       const newAns = Object.fromEntries(
                                         Object.entries(answers).filter(([key]) => (
-                                          key !== String(currentStep) && !key.startsWith(`${currentStep}_q`)
+                                          key !== String(originalIndex) && !key.startsWith(`${originalIndex}_q`)
                                         ))
                                       );
                                       setAnswers(newAns);
@@ -447,15 +630,15 @@ export default function Lesson() {
                               <div className="w-full flex justify-end">
                                 <button
                                   onClick={() => {
-                                    if (currentStep === blocks.length - 1 && isCompleted) {
-                                      setCurrentStep(blocks.length); // go to summary
+                                    if (currentStep === activeBlocks.length - 1 && isCompleted) {
+                                      setCurrentStep(activeBlocks.length); // go to summary
                                     } else {
                                       handleNextStep();
                                     }
                                   }}
                                   className="px-8 py-3.5 bg-primary text-primary-foreground font-bold rounded-xl shadow-sm hover:bg-primary/90 hover:-translate-y-0.5 transition-all flex items-center gap-2"
                                 >
-                                  {currentStep === blocks.length - 1 ? 'Завершить урок' : 'Продолжить'}
+                                  {currentStep === activeBlocks.length - 1 ? 'Завершить урок' : 'Продолжить'}
                                   <ChevronDown className="w-5 h-5 -rotate-90" />
                                 </button>
                               </div>

@@ -4,6 +4,7 @@ import re
 from typing import Any
 
 from anthropic import AsyncAnthropic
+from objectives import decompose_objectives
 
 MODEL = "claude-sonnet-4-6"
 
@@ -144,9 +145,15 @@ correct_segments должны дословно совпадать с предл�
 {"title": string, "description": string, "svg_content": string, "caption"?: string}
 svg_content — безопасный автономный inline SVG без script, event-атрибутов и внешних ресурсов.
 
+В content любого блока допускаются служебные поля objective_ids (массив строк)
+и evidence_stage ("diagnostic", "explanation", "practice" или "assessment"). Они не отображаются
+ученику. Каждый блок, кроме Reflection, должен указывать objective_ids. В MasteryCheck
+каждый вопрос также должен иметь objective_ids (или dimension равный ID цели).
+
 14. MasteryCheck:
-{"questions": [{"question": string, "type": "multiple_choice"|"numeric", "options"?: string[], "correct_answer": string, "explanation": string, "dimension": string}]}
-MasteryCheck всегда должен содержать РОВНО 3 вопроса. Для multiple_choice дай ровно 4 варианта.
+{"questions": [{"question": string, "type": "multiple_choice"|"numeric", "options"?: string[], "correct_answer": string, "explanation": string, "dimension": string, "objective_ids": string[]}]}
+MasteryCheck должен содержать столько вопросов, чтобы каждая цель имела хотя бы один
+независимо оцениваемый итоговый вопрос; для multiple_choice дай ровно 4 варианта.
 
 15. Reflection:
 {"prompt": string, "scale_question": string, "scale_labels": [string, string, string, string]}
@@ -157,7 +164,7 @@ scale_labels всегда содержит ровно 4 подписи.
 данные и вывод; для языков — образец и создание речи/текста; для гуманитарных предметов —
 источник, свидетельства и аргументацию; для практических предметов — показ, критерии,
 выполнение и самооценку. Цифровой тест не должен подменять физическое или творческое
-выполнение. Заверши урок Reflection и MasteryCheck из трёх вопросов. В уроке должно быть
+выполнение. Заверши урок Reflection и MasteryCheck с вопросом по каждой цели. В уроке должно быть
 не менее пяти оцениваемых действий с учётом отдельных вопросов MasteryCheck.
 
 Не добавляй поля вне описанных схем. Правильные ответы должны точно совпадать с одним из
@@ -213,6 +220,7 @@ async def generate_lesson(
         str(profile["family"]), topic_name, lesson_type, learning_objectives
     )
     route = SUBJECT_FAMILY_PROFILES[str(profile["family"])]["route"]
+    objective_catalog = decompose_objectives(learning_objectives)
     language_label = "кыргызском" if content_language == "ky" else "русском"
     user_prompt = f"""
 Создай полный урок.
@@ -225,10 +233,15 @@ async def generate_lesson(
 Тема: {topic_name}
 Класс: {grade if grade is not None else "не указан"}
 Тип урока: {lesson_type or "не указан"}
-Цели обучения: {learning_objectives or "не указаны"}
+Цели обучения (исходный текст): {learning_objectives or "не указаны"}
+Структурированные цели с ID: {json.dumps(objective_catalog, ensure_ascii=False)}
 Навыки: {", ".join(skills or []) or "не указаны"}
 Ресурсы: {resources or "не указаны"}
 
+Свяжи каждый блок и каждый вопрос MasteryCheck с ID из структурированных целей.
+До объяснения дай по одному диагностическому RetrievalCheck с evidence_stage
+"diagnostic" на каждую цель. Для каждой цели обязательно дай объяснение, практику и
+независимую итоговую проверку.
 Ответь только JSON-массивом блоков.
 """.strip()
 

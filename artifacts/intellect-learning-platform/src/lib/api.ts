@@ -5,7 +5,47 @@ export type LoginUsers = { students: User[]; teachers: User[] };
 export type Subject = { id: number; name: string; grade: number; hours_per_week: number; hours_per_year: number; source_info: string | null; instruction_language?: 'ru' | 'ky'; progress?: number };
 export type Section = { id: number; subject_id: number; name: string; sort_order: number; total_hours: number };
 export type Topic = { id: number; section_id: number; ktp_number: string | null; name: string; hours: number; lesson_type: string; learning_objectives: string | null; skills: string[]; resources: string | null };
-export type ProgressRecord = { id: number; student_id: number; topic_id: number; status: 'not_started' | 'in_progress' | 'completed'; score: number | null; mastery_level: string | null; time_spent_sec: number; attempts: number; current_step: number; max_opened_step: number; answers: Record<string, boolean>; attempts_by_step: Record<string, number>; elapsed_time_sec: number; };
+export type LearningObjective = {
+  id: string;
+  text: string;
+  success_criteria?: string;
+};
+export type ObjectiveEvidence = {
+  objective_id: string;
+  block_index?: number;
+  stage?: 'diagnostic' | 'explanation' | 'practice' | 'assessment' | string;
+  correct?: boolean;
+  score?: number;
+  attempts?: number;
+};
+export type MasteryStatus = 'not_assessed' | 'in_progress' | 'mastered' | 'needs_practice';
+export type ObjectiveMastery = {
+  status: MasteryStatus;
+  score?: number;
+  diagnostic_passed?: boolean;
+  final_passed?: boolean;
+};
+export type QualityReport = {
+  publishable?: boolean;
+  objectives?: Record<string, {
+    objective?: string;
+    diagnostic?: number[];
+    explanation?: number[];
+    practice?: number[];
+    assessment?: number[];
+    evidence?: Array<{ block: number; stage: string }>;
+  }>;
+  gaps?: Array<{ objective_id?: string; objective?: string; missing?: string[] } | string>;
+  errors?: Array<{ code?: string; block?: number; message?: string } | string>;
+  warnings?: Array<{ code?: string; block?: number; message?: string } | string>;
+  legacy?: boolean;
+};
+export type ObjectiveResult = {
+  status: MasteryStatus;
+  score?: number;
+  evidence?: ObjectiveEvidence[];
+};
+export type ProgressRecord = { id: number; student_id: number; topic_id: number; status: 'not_started' | 'in_progress' | 'completed'; score: number | null; mastery_level: string | null; mastery_status?: MasteryStatus; objective_mastery?: Record<string, ObjectiveMastery>; objective_evidence?: Record<string, ObjectiveEvidence[]>; time_spent_sec: number; attempts: number; current_step: number; max_opened_step: number; answers: Record<string, boolean>; attempts_by_step: Record<string, number>; elapsed_time_sec: number; };
 export type DashboardOverview = { students: number; subjects: number; topics: number; published_lessons: number; average_progress: number };
 export type StudentSummary = { id: number; name: string; grade: number; completed_topics: number; average_score: number };
 export type ComponentSchema = {
@@ -35,9 +75,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({ detail: 'Ошибка сервера' }));
-    throw new Error(body.detail ?? 'Ошибка сервера');
+    throw new Error(formatApiDetail(body.detail ?? body));
   }
   return response.json() as Promise<T>;
+}
+
+export function formatApiDetail(detail: unknown): string {
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) return detail.map(formatApiDetail).filter(Boolean).join('; ');
+  if (detail && typeof detail === 'object') {
+    const value = detail as Record<string, unknown>;
+    const primary = value.message ?? value.detail ?? value.error;
+    const quality = value.quality;
+    const qualityText = quality && typeof quality === 'object'
+      ? formatApiDetail((quality as Record<string, unknown>).errors || (quality as Record<string, unknown>).gaps)
+      : '';
+    return [primary ? formatApiDetail(primary) : '', qualityText].filter(Boolean).join(' — ') || JSON.stringify(detail);
+  }
+  return detail == null ? 'Ошибка сервера' : String(detail);
 }
 
 export const useLoginUsers = () =>
@@ -79,7 +134,11 @@ export type GeneratedLesson = {
   id: number;
   topic_id: number;
   blocks: Block[];
-  lesson_metadata: Record<string, unknown>;
+  lesson_metadata: Record<string, unknown> & {
+    objectives?: LearningObjective[];
+    quality_report?: QualityReport;
+    legacy_review_required?: boolean;
+  };
   status: 'draft' | 'published';
   generated_at: string;
   published_at: string | null;
@@ -95,7 +154,7 @@ export async function getLessonByTopic(
   if (response.status === 404) return null;
   if (!response.ok) {
     const body = await response.json().catch(() => ({ detail: 'Ошибка сервера' }));
-    throw new Error(body.detail ?? 'Ошибка сервера');
+    throw new Error(formatApiDetail(body.detail ?? body));
   }
   return response.json() as Promise<GeneratedLesson>;
 }
@@ -112,10 +171,10 @@ export const updateLessonBlocks = (lessonId: number, blocks: Block[]) =>
     body: JSON.stringify({ blocks }),
   });
 
-export const publishLesson = (lessonId: number, teacherId: number) =>
+export const publishLesson = (lessonId: number, teacherId: number, acknowledgeWarnings = false) =>
   request<GeneratedLesson>(`/lessons/${lessonId}/publish`, {
     method: 'PUT',
-    body: JSON.stringify({ teacher_id: teacherId }),
+    body: JSON.stringify({ teacher_id: teacherId, acknowledge_warnings: acknowledgeWarnings }),
   });
 
 export const unpublishLesson = (lessonId: number) =>
@@ -148,8 +207,8 @@ export const useUpdateLessonBlocks = () =>
 
 export const usePublishLesson = () =>
   useMutation({
-    mutationFn: (data: { lesson_id: number; teacher_id: number }) =>
-      publishLesson(data.lesson_id, data.teacher_id),
+    mutationFn: (data: { lesson_id: number; teacher_id: number; acknowledge_warnings?: boolean }) =>
+      publishLesson(data.lesson_id, data.teacher_id, data.acknowledge_warnings),
   });
 
 export const useUnpublishLesson = () =>
@@ -170,6 +229,9 @@ export const saveProgress = (
     answers?: Record<string, boolean>;
     attempts_by_step?: Record<string, number>;
     elapsed_time_sec?: number;
+    objective_mastery?: Record<string, ObjectiveMastery>;
+    objective_evidence?: Record<string, ObjectiveEvidence[]>;
+    mastery_status?: MasteryStatus;
   }
 ) =>
   request<ProgressRecord>('/progress', {
@@ -182,16 +244,26 @@ export const getLessonProgress = async (studentId: number, topicId: number): Pro
   if (response.status === 404) return null;
   if (!response.ok) {
     const body = await response.json().catch(() => ({ detail: 'Ошибка сервера' }));
-    throw new Error(body.detail ?? 'Ошибка сервера');
+    throw new Error(formatApiDetail(body.detail ?? body));
   }
   return response.json() as Promise<ProgressRecord>;
 };
+
+export const getStudentProgress = (studentId: number) =>
+  request<ProgressRecord[]>(`/progress/${studentId}`);
 
 export const useGetLessonProgress = (studentId: number, topicId: number, enabled = true) =>
   useQuery({
     queryKey: ['progress', studentId, topicId],
     queryFn: () => getLessonProgress(studentId, topicId),
     enabled: enabled && studentId > 0 && topicId > 0,
+  });
+
+export const useGetStudentProgress = (studentId: number, enabled = true) =>
+  useQuery({
+    queryKey: ['progress', studentId],
+    queryFn: () => getStudentProgress(studentId),
+    enabled: enabled && studentId > 0,
   });
 
 export const useSaveProgress = () =>

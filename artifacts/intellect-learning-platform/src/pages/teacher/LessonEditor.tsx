@@ -1,5 +1,6 @@
 import { useParams, Link } from 'wouter';
-import { AlertTriangle, ArrowLeft, Loader2, Sparkles, Globe, EyeOff } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Loader2, Sparkles, Globe, EyeOff, CheckCircle2, XCircle } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useGetLesson, useGenerateLesson, usePublishLesson, useUnpublishLesson } from '@/lib/api';
 import BlockRenderer from '@/components/blocks/BlockRenderer';
 import { useAuth } from '@/components/auth/AuthContext';
@@ -15,9 +16,46 @@ export default function LessonEditor() {
   const generateLessonMutation = useGenerateLesson();
   const publishLessonMutation = usePublishLesson();
   const unpublishLessonMutation = useUnpublishLesson();
+  const [warningsAcknowledged, setWarningsAcknowledged] = useState(false);
 
   const blocks = lesson?.blocks || [];
   const isPublished = lesson?.status === 'published';
+  const metadata = lesson?.lesson_metadata;
+  const objectives = metadata?.objectives || [];
+  const qualityReport = metadata?.quality_report;
+  const hasObjectiveContract = objectives.length > 0 || Boolean(qualityReport);
+  const objectiveIdsForBlock = (block: typeof blocks[number]) => {
+    const ids = block.content?.objective_ids;
+    if (Array.isArray(ids)) return ids.filter((id): id is string => typeof id === 'string');
+    return typeof ids === 'string' ? [ids] : [];
+  };
+  const qualityMessage = (item: unknown) => {
+    if (typeof item === 'string') return item;
+    if (item && typeof item === 'object') {
+      const value = item as Record<string, unknown>;
+      return String(value.message || value.detail || value.code || JSON.stringify(item));
+    }
+    return String(item);
+  };
+  const coverage = useMemo(() => objectives.map((objective) => {
+    const related = blocks.filter((block) => objectiveIdsForBlock(block).includes(objective.id));
+    const report = qualityReport?.objectives?.[objective.id];
+    return {
+      objective,
+      explanation: report ? (report.explanation?.length || 0) > 0 : related.some((block) => ['ShortExplanation', 'KeyConcept', 'WorkedExample', 'Presentation', 'Illustration'].includes(block.component)),
+      practice: report ? (report.practice?.length || 0) > 0 : related.some((block) => ['GuidedPractice', 'IndependentProblem', 'RetrievalCheck', 'TextEvidencePicker', 'ArgumentBuilder'].includes(block.component)),
+      assessment: report ? (report.assessment?.length || 0) > 0 : related.some((block) => block.component === 'MasteryCheck' || ['IndependentProblem', 'RetrievalCheck', 'TextEvidencePicker', 'ArgumentBuilder'].includes(block.component)),
+    };
+  }), [objectives, blocks, qualityReport]);
+  const blockingIssues = [
+    ...(qualityReport?.publishable === false ? ['Автоматическая проверка считает урок непригодным к публикации'] : []),
+    ...(qualityReport?.errors || []).map(qualityMessage),
+    ...(qualityReport?.gaps || []).map((gap) => typeof gap === 'string' ? `Не покрыта цель: ${gap}` : `Не покрыта цель: ${gap.objective || gap.objective_id || 'неизвестная цель'} (${(gap.missing || []).join(', ')})`),
+    ...(!hasObjectiveContract && blocks.length > 0 ? ['Старый урок нужно проверить или перегенерировать перед публикацией'] : []),
+    ...(hasObjectiveContract && !qualityReport ? ['Для нового урока отсутствует отчёт проверки качества'] : []),
+  ];
+  const warningMessages = (qualityReport?.warnings || []).map(qualityMessage);
+  const canPublish = blockingIssues.length === 0 && (warningMessages.length === 0 || warningsAcknowledged);
 
   const handleGenerate = () => {
     if (!user) return;
@@ -39,7 +77,11 @@ export default function LessonEditor() {
         }
       });
     } else {
-      publishLessonMutation.mutate({ lesson_id: lesson.id, teacher_id: user.id }, {
+      publishLessonMutation.mutate({
+        lesson_id: lesson.id,
+        teacher_id: user.id,
+        acknowledge_warnings: warningsAcknowledged,
+      }, {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ['lesson', tId, 'teacher'] });
           queryClient.invalidateQueries({ queryKey: ['lesson-status', tId] });
@@ -70,7 +112,7 @@ export default function LessonEditor() {
           {blocks.length > 0 && (
             <button 
               onClick={handleTogglePublish}
-              disabled={publishLessonMutation.isPending || unpublishLessonMutation.isPending}
+              disabled={publishLessonMutation.isPending || unpublishLessonMutation.isPending || (!isPublished && !canPublish)}
               className={`px-6 py-2.5 text-sm font-bold rounded-xl border shadow-sm transition-colors flex items-center gap-2 ${
                 isPublished 
                   ? 'bg-card text-foreground border-border hover:bg-muted' 
@@ -84,6 +126,11 @@ export default function LessonEditor() {
       </div>
 
       <div className="flex-1 min-h-0 bg-card rounded-[2rem] border border-border shadow-sm p-6 md:p-10 overflow-y-auto custom-scrollbar">
+        {(publishLessonMutation.error || generateLessonMutation.error) && (
+          <div data-testid="status-api-error" role="alert" className="mb-6 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm font-medium text-destructive">
+            {((publishLessonMutation.error || generateLessonMutation.error) as Error).message}
+          </div>
+        )}
         {isLoadingLesson ? (
           <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
             <Loader2 className="w-8 h-8 animate-spin mb-4 text-primary" />
@@ -91,6 +138,72 @@ export default function LessonEditor() {
           </div>
         ) : blocks.length > 0 ? (
           <div>
+            {!hasObjectiveContract && (
+              <div data-testid="status-legacy-review" role="alert" className="mb-6 flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-foreground">
+                <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
+                <div>
+                  <p className="font-bold">Старый урок требует повторной проверки</p>
+                  <p className="mt-1 text-muted-foreground">В этом уроке нет разметки целей КТП. Проверьте материалы вручную или перегенерируйте урок перед публикацией.</p>
+                </div>
+              </div>
+            )}
+            {blockingIssues.length > 0 && (
+              <div data-testid="status-quality-blocked" role="alert" className="mb-6 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground">
+                <div className="flex items-start gap-3">
+                  <XCircle className="h-5 w-5 shrink-0 text-destructive" />
+                  <div>
+                    <p className="font-bold text-destructive">Публикация заблокирована до проверки урока</p>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
+                      {blockingIssues.map((issue, index) => <li key={`${issue}-${index}`}>{issue}</li>)}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+            {blockingIssues.length === 0 && warningMessages.length > 0 && (
+              <div data-testid="status-quality-warnings" className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-foreground">
+                <p className="font-bold">Нужна проверка учителя</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
+                  {warningMessages.map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}
+                </ul>
+                <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-amber-500/20 bg-card/60 p-3">
+                  <input
+                    type="checkbox"
+                    checked={warningsAcknowledged}
+                    onChange={(event) => setWarningsAcknowledged(event.target.checked)}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  <span>Я проверил предупреждения и подтверждаю публикацию урока.</span>
+                </label>
+              </div>
+            )}
+            {objectives.length > 0 && (
+              <section data-testid="objective-coverage-matrix" className="mb-8 rounded-2xl border border-border bg-muted/20 p-5">
+                <div className="mb-4">
+                  <h2 className="text-lg font-bold text-foreground">Покрытие целей КТП</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">Каждая цель должна иметь объяснение, практику и проверяемое доказательство.</p>
+                </div>
+                <div className="space-y-3">
+                  {coverage.map(({ objective, explanation, practice, assessment }) => (
+                    <div data-testid={`objective-row-${objective.id}`} key={objective.id} className="rounded-xl border border-border bg-card p-4">
+                      <p className="mb-3 font-semibold text-foreground">{objective.text}</p>
+                      <div className="grid grid-cols-3 gap-2 text-xs font-semibold">
+                        {[
+                          ['Объяснение', explanation],
+                          ['Практика', practice],
+                          ['Проверка', assessment],
+                        ].map(([label, present]) => (
+                          <div key={String(label)} className={`flex items-center gap-1.5 rounded-lg px-3 py-2 ${present ? 'bg-green-500/10 text-green-700 dark:text-green-400' : 'bg-destructive/10 text-destructive'}`}>
+                            {present ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                            {label}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
             {lesson?.lesson_metadata?.teacher_review_required === true && (
               <div role="alert" className="mb-6 flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-foreground">
                 <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
