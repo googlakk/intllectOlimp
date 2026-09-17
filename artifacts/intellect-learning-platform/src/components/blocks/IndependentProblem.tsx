@@ -5,11 +5,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 export interface IndependentProblemProps {
   question: string;
-  type: "text" | "number" | "multiple_choice";
+  type: "text" | "numeric" | "expression" | "number" | "multiple_choice";
   options?: string[];
   correct_answer: string | string[];
   explanation: string;
-  difficulty: "easy" | "medium" | "hard";
+  difficulty: "basic" | "advanced" | "easy" | "medium" | "hard";
   onAnswer?: (isCorrect: boolean) => void;
 }
 
@@ -41,12 +41,16 @@ export default function IndependentProblem({ question, type, options, correct_an
   const isLocked = status === 'correct' || attempts >= 3;
 
   const difficultyColors = {
+    basic: "bg-green-500/20 text-green-700 dark:text-green-400",
+    advanced: "bg-red-500/20 text-red-700 dark:text-red-400",
     easy: "bg-green-500/20 text-green-700 dark:text-green-400",
     medium: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400",
     hard: "bg-red-500/20 text-red-700 dark:text-red-400"
   };
   
   const difficultyLabels = {
+    basic: "Базовая",
+    advanced: "Повышенная",
     easy: "Легкая",
     medium: "Средняя",
     hard: "Сложная"
@@ -97,7 +101,7 @@ export default function IndependentProblem({ question, type, options, correct_an
         ) : (
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <input
-              type={type === 'number' ? 'number' : 'text'}
+              type={type === 'numeric' || type === 'number' ? 'number' : 'text'}
               value={value}
               onChange={(e) => {
                 setValue(e.target.value);

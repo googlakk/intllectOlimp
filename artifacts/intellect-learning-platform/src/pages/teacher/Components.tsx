@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Blocks, CheckCircle2, Code2, Search, Sparkles } from 'lucide-react';
+import { Blocks, CheckCircle2, Code2, Eye, Info, MousePointerClick, Search, Sparkles } from 'lucide-react';
 import { useComponents, ComponentRegistryEntry, ComponentSchema } from '@/lib/api';
+import BlockRenderer from '@/components/blocks/BlockRenderer';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { componentDemos } from './componentDemos';
 
 const categoryLabels: Record<string, string> = {
   explain: 'Объяснение',
@@ -65,7 +68,13 @@ function formatSchemaType(schema: ComponentSchema) {
   return schema.type ?? 'значение';
 }
 
-function ComponentCard({ component }: { component: ComponentRegistryEntry }) {
+function ComponentCard({
+  component,
+  onOpenDemo,
+}: {
+  component: ComponentRegistryEntry;
+  onOpenDemo: (component: ComponentRegistryEntry) => void;
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
   const categoryClass = categoryStyles[component.category] ?? 'bg-muted text-muted-foreground border-border';
 
@@ -110,10 +119,21 @@ function ComponentCard({ component }: { component: ComponentRegistryEntry }) {
           ))}
         </div>
 
-        <div className="mt-auto rounded-xl border border-border/80 bg-muted/20">
+        <button
+          type="button"
+          onClick={() => onOpenDemo(component)}
+          data-testid={`button-demo-${component.id}`}
+          className="mt-auto flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+        >
+          <Eye className="h-4 w-4" />
+          Посмотреть демонстрацию
+        </button>
+
+        <div className="rounded-xl border border-border/80 bg-muted/20">
           <button
             type="button"
             onClick={() => setIsExpanded((expanded) => !expanded)}
+            data-testid={`button-schema-${component.id}`}
             className="flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left text-xs font-semibold text-foreground transition-colors hover:bg-muted/50"
             aria-expanded={isExpanded}
           >
@@ -138,6 +158,8 @@ export default function Components() {
   const { data: components, isLoading, isError } = useComponents();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'assessment' | 'math' | 'literature'>('all');
+  const [selectedComponent, setSelectedComponent] = useState<ComponentRegistryEntry | null>(null);
+  const selectedDemo = selectedComponent ? componentDemos[selectedComponent.id] : undefined;
 
   const filteredComponents = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -164,8 +186,8 @@ export default function Components() {
             </div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">Библиотека компонентов</h1>
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground md:text-base">
-              Здесь собраны блоки, из которых ИИ формирует уроки. Откройте схему, чтобы увидеть,
-              какие данные получает каждый компонент.
+              Здесь собраны блоки, из которых ИИ формирует уроки. Откройте живую демонстрацию,
+              чтобы увидеть компонент глазами ученика и попробовать его в действии.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-border bg-muted/30 px-4 py-3">
@@ -187,6 +209,7 @@ export default function Components() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
+              data-testid="input-component-search"
               placeholder="Поиск компонента..."
               className="h-11 w-full rounded-xl border border-border bg-card pl-10 pr-4 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
@@ -202,6 +225,7 @@ export default function Components() {
                 key={value}
                 type="button"
                 onClick={() => setFilter(value as typeof filter)}
+                data-testid={`button-filter-${value}`}
                 className={`whitespace-nowrap rounded-xl px-3.5 py-2 text-xs font-semibold transition-colors ${
                   filter === value
                     ? 'bg-primary text-primary-foreground shadow-sm'
@@ -231,10 +255,61 @@ export default function Components() {
         )}
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {filteredComponents.map((component) => (
-            <ComponentCard key={component.id} component={component} />
+            <ComponentCard key={component.id} component={component} onOpenDemo={setSelectedComponent} />
           ))}
         </div>
       </section>
+
+      <Dialog open={selectedComponent !== null} onOpenChange={(open) => !open && setSelectedComponent(null)}>
+        <DialogContent
+          className="max-h-[92vh] max-w-[min(1000px,calc(100vw-2rem))] overflow-y-auto p-0"
+          data-testid="dialog-component-demo"
+        >
+          {selectedComponent && selectedDemo && (
+            <>
+              <DialogHeader className="border-b border-border bg-muted/20 px-6 py-5 text-left">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${categoryStyles[selectedComponent.category] ?? 'bg-muted text-muted-foreground border-border'}`}>
+                    {categoryLabels[selectedComponent.category] ?? selectedComponent.category}
+                  </span>
+                  <span className="font-mono text-xs font-semibold text-muted-foreground">{selectedComponent.code}</span>
+                </div>
+                <DialogTitle className="text-2xl">{selectedComponent.purpose}</DialogTitle>
+                <p className="text-sm text-muted-foreground">{selectedComponent.id}</p>
+              </DialogHeader>
+
+              <div className="space-y-6 px-4 py-5 sm:px-6">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+                    <div className="mb-2 flex items-center gap-2 text-sm font-bold text-foreground">
+                      <Info className="h-4 w-4 text-blue-600" />
+                      Когда использовать
+                    </div>
+                    <p className="text-sm leading-relaxed text-muted-foreground">{selectedDemo.usage}</p>
+                  </div>
+                  <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
+                    <div className="mb-2 flex items-center gap-2 text-sm font-bold text-foreground">
+                      <MousePointerClick className="h-4 w-4 text-violet-600" />
+                      Как попробовать
+                    </div>
+                    <p className="text-sm leading-relaxed text-muted-foreground">{selectedDemo.interaction}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Живая демонстрация</h3>
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-border bg-background p-2 sm:p-4">
+                    <BlockRenderer blocks={[selectedDemo.block]} />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 export interface GuidedPracticeProps {
   question: string;
   hints: string[];
-  input_type: "text" | "number" | "multiple_choice";
+  input_type: "text" | "numeric" | "expression" | "number" | "multiple_choice";
   correct_answer: string | string[];
   explanation: string;
   onAnswer?: (isCorrect: boolean) => void;
@@ -55,14 +55,14 @@ export default function GuidedPractice({ question, hints, input_type, correct_an
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <input
-            type={input_type === 'number' ? 'number' : 'text'}
+            type={input_type === 'numeric' || input_type === 'number' ? 'number' : 'text'}
             value={value}
             onChange={(e) => {
               setValue(e.target.value);
               if (status !== 'idle') setStatus('idle');
             }}
             disabled={isLocked}
-            placeholder={input_type === 'number' ? "Введите число..." : "Введите ваш ответ..."}
+            placeholder={input_type === 'numeric' || input_type === 'number' ? "Введите число..." : "Введите ваш ответ..."}
             className="flex-1 px-4 py-2.5 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 transition-all"
             aria-label="Ваш ответ"
             step="any"
