@@ -14,7 +14,7 @@ export interface MasteryCheckQuestion {
 
 export interface MasteryCheckProps {
   questions: MasteryCheckQuestion[];
-  onAnswer?: (isCorrect: boolean) => void;
+  onAnswer?: (isCorrect: boolean, detail?: { questionIndex: number; isFinished: boolean }) => void;
 }
 
 export default function MasteryCheck({ questions, onAnswer }: MasteryCheckProps) {
@@ -53,6 +53,7 @@ export default function MasteryCheck({ questions, onAnswer }: MasteryCheckProps)
     
     setAnswers(prev => ({ ...prev, [currentIndex]: isCorrect }));
     setShowExplanation(true);
+    onAnswer?.(isCorrect, { questionIndex: currentIndex, isFinished: false });
   };
 
   const handleNext = () => {
@@ -60,10 +61,9 @@ export default function MasteryCheck({ questions, onAnswer }: MasteryCheckProps)
     setShowExplanation(false);
     
     if (currentIndex === questions.length - 1) {
-      // Calculate final score
       const correctCount = Object.values(answers).filter(Boolean).length;
       const percentage = (correctCount / questions.length) * 100;
-      onAnswer?.(percentage >= 66);
+      onAnswer?.(percentage >= 66, { questionIndex: currentIndex, isFinished: true });
     }
     
     setCurrentIndex(prev => prev + 1);
@@ -94,7 +94,6 @@ export default function MasteryCheck({ questions, onAnswer }: MasteryCheckProps)
 
   return (
     <div className="border rounded-2xl overflow-hidden my-8 shadow-sm bg-card">
-      {/* Progress Bar */}
       <div className="h-2 bg-muted w-full">
         <div 
           className="h-full bg-primary transition-all duration-500 ease-in-out"
@@ -167,7 +166,7 @@ export default function MasteryCheck({ questions, onAnswer }: MasteryCheckProps)
               <div className={`p-5 rounded-xl border ${isCorrect ? 'bg-green-500/10 border-green-500/20' : 'bg-destructive/10 border-destructive/20'}`}>
                 <div className={`flex items-center gap-2 font-medium mb-3 ${isCorrect ? 'text-green-700 dark:text-green-400' : 'text-destructive'}`}>
                   {isCorrect ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-                  {isCorrect ? 'Абсолютно верно! (✓)' : 'Неверно. (✗)'}
+                  {isCorrect ? 'Абсолютно верно!' : 'Неверно.'}
                 </div>
                 
                 {!isCorrect && currentQ.type === 'numeric' && (

@@ -121,12 +121,12 @@ export default function TextEvidencePicker({ passage, claim, correct_segments, e
             {isCorrect ? (
               <div className="flex items-center gap-2 text-green-700 dark:text-green-400 text-sm font-medium bg-green-500/10 border border-green-500/20 p-3.5 rounded-lg">
                 <CheckCircle2 className="w-5 h-5 shrink-0" />
-                <span>Отлично! Вы нашли все правильные подтверждения. (✓)</span>
+                <span>Отлично! Вы нашли все правильные подтверждения. </span>
               </div>
             ) : (
               <div className="flex items-center gap-2 text-destructive text-sm font-medium bg-destructive/10 border border-destructive/20 p-3.5 rounded-lg">
                 <XCircle className="w-5 h-5 shrink-0" />
-                <span>Не совсем так. Ознакомьтесь с правильным выбором (отмечен зеленым). (✗)</span>
+                <span>Не совсем так. Ознакомьтесь с правильным выбором (отмечен зеленым). </span>
               </div>
             )}
             

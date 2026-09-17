@@ -15,7 +15,7 @@ import Presentation from './Presentation';
 import MasteryCheck from './MasteryCheck';
 import Reflection from './Reflection';
 
-const componentMap: Record<string, React.ComponentType<any>> = {
+export const componentMap: Record<string, React.ComponentType<any>> = {
   ShortExplanation,
   KeyConcept,
   WorkedExample,
@@ -33,7 +33,7 @@ const componentMap: Record<string, React.ComponentType<any>> = {
   Reflection
 };
 
-const assessmentComponents = [
+export const assessmentComponents = [
   'GuidedPractice',
   'IndependentProblem',
   'RetrievalCheck',

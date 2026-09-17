@@ -31,6 +31,7 @@ class KtpUploadInput(BaseModel):
     grade: int = Field(ge=1, le=12)
     hours_per_week: int = Field(ge=0)
     hours_per_year: int = Field(ge=0)
+    instruction_language: Literal["ru", "ky"] = "ru"
     sections: list[SectionInput] = Field(default_factory=list)
 
 
@@ -43,6 +44,7 @@ async def upload_ktp(payload: KtpUploadInput, db: AsyncSession = Depends(get_db)
             hours_per_week=payload.hours_per_week,
             hours_per_year=payload.hours_per_year,
             source_info="Загружено из КТП",
+            instruction_language=payload.instruction_language,
         )
         db.add(subject)
         await db.flush()
@@ -82,6 +84,7 @@ async def upload_ktp(payload: KtpUploadInput, db: AsyncSession = Depends(get_db)
             "hours_per_week": subject.hours_per_week,
             "hours_per_year": subject.hours_per_year,
             "source_info": subject.source_info,
+            "instruction_language": subject.instruction_language,
             "created_at": subject.created_at,
             "section_count": len(payload.sections),
             "topic_count": topic_count,

@@ -7,6 +7,83 @@ from anthropic import AsyncAnthropic
 
 MODEL = "claude-sonnet-4-6"
 
+SUBJECT_FAMILY_PROFILES = {
+    "mathematical": {
+        "label": "математические науки",
+        "keywords": ("математ", "алгебр", "геометр", "арифмет", "статист"),
+        "archetypes": ("concept_and_procedure", "problem_solving", "investigation"),
+        "route": "объяснение → разобранный пример → практика с поддержкой → самостоятельная задача → проверка",
+    },
+    "natural_science": {
+        "label": "естественные науки",
+        "keywords": ("физик", "хими", "биолог", "географ", "естествозн", "природовед", "астроном"),
+        "archetypes": ("phenomenon_inquiry", "experiment_and_evidence", "system_model"),
+        "route": "явление или вопрос → прогноз → наблюдение, модель или эксперимент → интерпретация данных → вывод → проверка",
+    },
+    "language": {
+        "label": "языки и речевое развитие",
+        "keywords": ("русск", "кыргыз", "киргиз", "английск", "немецк", "француз", "язык", "граммат", "родной", "кыргыз тили", "кыргызча"),
+        "archetypes": ("language_practice", "text_comprehension", "communication"),
+        "route": "языковой образец → распознавание → управляемая практика → понимание или создание текста/речи → обратная связь → применение",
+    },
+    "humanities_social_science": {
+        "label": "гуманитарные и общественные науки",
+        "keywords": ("литератур", "истори", "тарых", "адабият", "обществозн", "право", "эконом", "граждан"),
+        "archetypes": ("source_analysis", "historical_context", "argumentation"),
+        "route": "контекст → первичный текст или источник → анализ свидетельств → аргументация или интерпретация → сопоставление → рефлексия",
+    },
+    "computing_technology": {
+        "label": "информатика и технологии",
+        "keywords": ("информат", "программ", "робот", "цифров", "компьютер"),
+        "archetypes": ("algorithm_design", "debugging", "digital_project"),
+        "route": "демонстрация → выполнение процедуры → самостоятельное создание результата → проверка по критериям → улучшение",
+    },
+    "arts_practical_physical": {
+        "label": "искусство, практика и физическое воспитание",
+        "keywords": ("музык", "изобразитель", "рисован", "искусств", "труд", "технолог", "физическ культур", "спорт", "черчени", "дене тарбия"),
+        "archetypes": ("demonstration_and_practice", "creative_project", "performance_and_reflection"),
+        "route": "показ и критерии → безопасная практика → выполнение или создание → самооценка по критериям → рефлексия",
+    },
+    "general": {
+        "label": "общий предмет (требует проверки учителем)",
+        "keywords": (),
+        "archetypes": ("general_explanation_and_practice",),
+        "route": "цель → короткое объяснение → активная практика → проверка → рефлексия",
+    },
+}
+
+
+def classify_subject(subject_name: str) -> dict[str, str | bool]:
+    normalized = subject_name.casefold().replace("ё", "е")
+    for family, profile in SUBJECT_FAMILY_PROFILES.items():
+        if any(keyword in normalized for keyword in profile["keywords"]):
+            return {"family": family, "family_label": profile["label"], "archetype": profile["archetypes"][0], "teacher_review_required": False}
+    return {"family": "general", "family_label": SUBJECT_FAMILY_PROFILES["general"]["label"], "archetype": "general_explanation_and_practice", "teacher_review_required": True}
+
+
+def select_archetype(
+    family: str,
+    topic_name: str,
+    lesson_type: str | None,
+    learning_objectives: str | None,
+) -> str:
+    profile = SUBJECT_FAMILY_PROFILES[family]
+    haystack = " ".join((topic_name, lesson_type or "", learning_objectives or "")).casefold()
+    if lesson_type == "project":
+        project_by_family = {
+            "computing_technology": "digital_project",
+            "arts_practical_physical": "creative_project",
+            "natural_science": "experiment_and_evidence",
+        }
+        return project_by_family.get(family, profile["archetypes"][-1])
+    if lesson_type == "assessment":
+        return "retrieval_and_assessment"
+    if any(word in haystack for word in ("эксперимент", "исследован", "опыт", "тажрыйба")):
+        return "experiment_and_evidence"
+    if any(word in haystack for word in ("текст", "чтени", "окуу", "пониман")) and family == "language":
+        return "text_comprehension"
+    return profile["archetypes"][0]
+
 SYSTEM_PROMPT = """
 Ты создаёшь готовые интерактивные уроки для русскоязычной образовательной платформы.
 Весь учебный текст, инструкции, варианты ответов, объяснения, подписи и обратная связь
@@ -70,18 +147,13 @@ MasteryCheck всегда должен содержать РОВНО 3 вопр�
 {"prompt": string, "scale_question": string, "scale_labels": [string, string, string, string]}
 scale_labels всегда содержит ровно 4 подписи.
 
-Правила сборки урока по математике:
-- последовательность: explain → model → represent (необязательно) → practice → assess → reflect;
-- обязательны ShortExplanation, WorkedExample и MasteryCheck;
-- рекомендуется использовать InteractiveGraph, GuidedPractice и IndependentProblem;
-- всего в уроке должно быть не менее 5 оцениваемых заданий. Каждый отдельный вопрос
-  внутри MasteryCheck считается одним заданием, остальные assessment-компоненты — по одному.
-
-Правила сборки урока по литературе:
-- последовательность: explain → represent (необязательно) → interact → assess → reflect;
-- обязательны ShortExplanation и MasteryCheck;
-- рекомендуется использовать Timeline, Presentation, TextEvidencePicker и RetrievalCheck;
-- всего в уроке должно быть не менее 5 оцениваемых заданий по тому же правилу подсчёта.
+Следуй переданному предметному маршруту, а не одной универсальной последовательности.
+Для математических задач используй разобранные примеры; для наук — прогноз, модель,
+данные и вывод; для языков — образец и создание речи/текста; для гуманитарных предметов —
+источник, свидетельства и аргументацию; для практических предметов — показ, критерии,
+выполнение и самооценку. Цифровой тест не должен подменять физическое или творческое
+выполнение. Заверши урок Reflection и MasteryCheck из трёх вопросов. В уроке должно быть
+не менее пяти оцениваемых действий с учётом отдельных вопросов MasteryCheck.
 
 Не добавляй поля вне описанных схем. Правильные ответы должны точно совпадать с одним из
 вариантов там, где варианты предусмотрены. Урок должен соответствовать теме, целям,
@@ -117,6 +189,9 @@ async def generate_lesson(
     learning_objectives: str | None,
     skills: list[str] | None,
     resources: str | None,
+    grade: int | None = None,
+    lesson_type: str | None = None,
+    content_language: str = "ru",
 ) -> list[dict[str, Any]]:
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
@@ -128,12 +203,23 @@ async def generate_lesson(
             "Для этого ключа Anthropic требуется ID workspace."
         )
 
-    subject_type = "math" if "математика" in subject_name.casefold() else "literature"
+    profile = classify_subject(subject_name)
+    archetype = select_archetype(
+        str(profile["family"]), topic_name, lesson_type, learning_objectives
+    )
+    route = SUBJECT_FAMILY_PROFILES[str(profile["family"])]["route"]
+    language_label = "кыргызском" if content_language == "ky" else "русском"
     user_prompt = f"""
 Создай полный урок.
-Тип предмета: {subject_type}
+Семейство предмета: {profile["family_label"]} ({profile["family"]})
+Архетип урока: {archetype}
+Предметный маршрут: {route}
+Язык всего учебного содержания: на {language_label} языке.
+Проверка учителем: {"обязательна — предмет не распознан" if profile["teacher_review_required"] else "не требуется"}
 Предмет: {subject_name}
 Тема: {topic_name}
+Класс: {grade if grade is not None else "не указан"}
+Тип урока: {lesson_type or "не указан"}
 Цели обучения: {learning_objectives or "не указаны"}
 Навыки: {", ".join(skills or []) or "не указаны"}
 Ресурсы: {resources or "не указаны"}

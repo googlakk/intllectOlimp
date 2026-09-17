@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai.generator import MODEL, generate_lesson
+from ai.generator import MODEL, classify_subject, generate_lesson
 from database import get_db
 from models import GeneratedLesson, Section, Subject, Teacher, Topic
 
@@ -71,6 +71,9 @@ async def generate(payload: GenerateInput, db: AsyncSession = Depends(get_db)):
             learning_objectives=topic.learning_objectives,
             skills=topic.skills,
             resources=topic.resources,
+            grade=subject.grade,
+            lesson_type=topic.lesson_type,
+            content_language=subject.instruction_language,
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Не удалось сгенерировать урок: {exc}") from exc
@@ -80,9 +83,19 @@ async def generate(payload: GenerateInput, db: AsyncSession = Depends(get_db)):
         lesson = GeneratedLesson(topic_id=topic.id)
         db.add(lesson)
     lesson.blocks = blocks
+    profile = classify_subject(subject.name)
     lesson.lesson_metadata = {
         "subject_name": subject.name,
+        "subject_grade": subject.grade,
+        "content_language": subject.instruction_language,
+        "subject_family": profile["family"],
+        "subject_family_label": profile["family_label"],
+        "lesson_archetype": profile["archetype"],
+        "teacher_review_required": profile["teacher_review_required"],
         "topic_name": topic.name,
+        "lesson_type": topic.lesson_type,
+        "learning_objectives": topic.learning_objectives,
+        "skills": topic.skills or [],
         "teacher_id": payload.teacher_id,
     }
     lesson.status = "draft"

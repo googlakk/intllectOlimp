@@ -142,7 +142,7 @@ export default function IndependentProblem({ question, type, options, correct_an
             >
               <div className="flex items-center gap-2 text-green-700 dark:text-green-400 text-sm font-medium bg-green-500/10 border border-green-500/20 p-3.5 rounded-lg">
                 <CheckCircle2 className="w-5 h-5 shrink-0" />
-                <span>Абсолютно верно! (✓)</span>
+                <span>Абсолютно верно! </span>
               </div>
               <div className="p-4 bg-muted/30 border rounded-lg text-sm text-foreground">
                 <span className="font-semibold block mb-1">Объяснение:</span>
@@ -159,7 +159,7 @@ export default function IndependentProblem({ question, type, options, correct_an
             >
               <div className="flex items-center gap-2 text-destructive font-medium">
                 <XCircle className="w-5 h-5 shrink-0" />
-                <span>Неверный ответ. (✗)</span>
+                <span>Неверный ответ. </span>
               </div>
               {attempts >= 3 && (
                 <div className="mt-2 pt-2 border-t border-destructive/20">

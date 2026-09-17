@@ -82,7 +82,7 @@ export default function RetrievalCheck({ question, options, correct_answer, expl
               >
                 <div className="flex justify-center items-center gap-2 text-green-600 dark:text-green-400 font-medium mb-4">
                   <CheckCircle2 className="w-5 h-5" />
-                  <span>Абсолютно верно! (✓)</span>
+                  <span>Абсолютно верно! </span>
                 </div>
                 <div className="text-left p-4 bg-muted/50 rounded-lg text-sm text-foreground">
                   <span className="font-semibold block mb-1">Объяснение:</span>
@@ -99,7 +99,7 @@ export default function RetrievalCheck({ question, options, correct_answer, expl
               >
                 <div className="flex justify-center items-center gap-2 text-destructive font-medium mb-4">
                   <XCircle className="w-5 h-5" />
-                  <span>Неверно (✗)</span>
+                  <span>Неверно </span>
                 </div>
                 <div className="text-left p-4 bg-muted/50 rounded-lg text-sm text-foreground">
                   <span className="font-semibold block mb-1">Объяснение:</span>

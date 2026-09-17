@@ -1,19 +1,11 @@
 import { useParams, Link } from 'wouter';
-import { ArrowLeft, BookOpen, Loader2, CheckCircle } from 'lucide-react';
-import { useState, useRef, useEffect, useMemo } from 'react';
-import { useGetLesson, useSaveProgress } from '@/lib/api';
-import BlockRenderer from '@/components/blocks/BlockRenderer';
+import { ArrowLeft, BookOpen, Loader2, CheckCircle, ChevronDown, RefreshCw, BookMarked, Trophy } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useGetLesson, useSaveProgress, useGetLessonProgress } from '@/lib/api';
+import { componentMap, assessmentComponents, Block } from '@/components/blocks/BlockRenderer';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
-
-const assessmentComponents = [
-  'GuidedPractice',
-  'IndependentProblem',
-  'RetrievalCheck',
-  'TextEvidencePicker',
-  'ArgumentBuilder',
-  'MasteryCheck'
-];
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Lesson() {
   const params = useParams();
@@ -21,16 +13,23 @@ export default function Lesson() {
   const topicId = Number(params.topicId);
   const { user } = useAuth();
   
-  const { data: lesson, isLoading } = useGetLesson(topicId, 'student');
+  const { data: lesson, isLoading: isLoadingLesson } = useGetLesson(topicId, 'student');
+  const { data: progress, isLoading: isLoadingProgress } = useGetLessonProgress(user?.id || 0, topicId, !!user?.id);
+  
   const saveProgressMutation = useSaveProgress();
   const queryClient = useQueryClient();
   
-  const [answers, setAnswers] = useState<Record<number, boolean>>({});
+  const [currentStep, setCurrentStep] = useState(0);
+  const [maxOpenedStep, setMaxOpenedStep] = useState(0);
+  const [answers, setAnswers] = useState<Record<string | number, boolean>>({});
+  const [attemptsByStep, setAttemptsByStep] = useState<Record<number, number>>({});
+  const [retryKeys, setRetryKeys] = useState<Record<number, number>>({});
   const [isCompleted, setIsCompleted] = useState(false);
   const [result, setResult] = useState<{ score: number; level: string } | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [startTime] = useState(Date.now());
-  const savedRef = useRef(false);
+  
+  const initializedForId = useRef<number | null>(null);
+  const startTime = useRef(Date.now());
+  const lastSaved = useRef<any>(null);
 
   const blocks = lesson?.blocks || [];
   
@@ -38,47 +37,82 @@ export default function Lesson() {
     return blocks.filter(b => assessmentComponents.includes(b.component)).length;
   }, [blocks]);
 
-  const handleAnswer = (blockIndex: number, isCorrect: boolean) => {
-    setAnswers(prev => ({ ...prev, [blockIndex]: isCorrect }));
-  };
-
+  // Init state from progress
   useEffect(() => {
-    if (assessmentBlocksCount > 0 && Object.keys(answers).length === assessmentBlocksCount && !savedRef.current) {
-      completeLesson();
+    if (progress && initializedForId.current !== progress.id && blocks.length > 0) {
+      initializedForId.current = progress.id;
+      if (progress.status === 'completed') {
+        setIsCompleted(true);
+        setResult({ score: progress.score || 0, level: progress.mastery_level || 'Начинающий' });
+        setCurrentStep(blocks.length);
+      } else {
+        setCurrentStep(progress.current_step || 0);
+      }
+      setMaxOpenedStep(progress.max_opened_step || 0);
+      setAnswers(progress.answers || {});
+      setAttemptsByStep(progress.attempts_by_step || {});
+      lastSaved.current = {
+        current_step: progress.current_step || 0,
+        max_opened_step: progress.max_opened_step || 0,
+        status: progress.status,
+      };
+    } else if (progress === null && initializedForId.current !== -1 && blocks.length > 0) {
+      initializedForId.current = -1; // brand new
+      lastSaved.current = {
+        current_step: 0,
+        max_opened_step: 0,
+        status: 'in_progress',
+      };
     }
-  }, [answers, assessmentBlocksCount]);
+  }, [progress, blocks.length]);
 
-  const persistResult = (score: number, level: string) => {
-    if (!user?.id || savedRef.current) return;
-    savedRef.current = true;
-    setSaveError(null);
-    const timeSpentSec = Math.round((Date.now() - startTime) / 1000);
+  const saveState = useCallback((
+    step: number, 
+    maxStep: number, 
+    status: 'in_progress' | 'completed', 
+    ans: Record<string | number, boolean>, 
+    att: Record<number, number>,
+    finalScore?: number,
+    finalLevel?: string
+  ) => {
+    if (!user?.id) return;
+    const timeSpentSec = Math.round((Date.now() - startTime.current) / 1000);
+    
+    // update lastSaved
+    lastSaved.current = { current_step: step, max_opened_step: maxStep, status };
+
     saveProgressMutation.mutate({
-      topic_id: topicId,
       student_id: user.id,
-      score,
-      mastery_level: level,
+      topic_id: topicId,
+      status,
+      current_step: step,
+      max_opened_step: maxStep,
+      answers: ans,
+      attempts_by_step: att,
       time_spent_sec: timeSpentSec,
+      ...(status === 'completed' && finalScore !== undefined ? { score: finalScore, mastery_level: finalLevel } : {})
     }, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
-        queryClient.invalidateQueries({ queryKey: ['dashboard-students'] });
-        queryClient.invalidateQueries({ queryKey: ['subjects'] });
-      },
-      onError: (saveError) => {
-        savedRef.current = false;
-        setSaveError(saveError.message || 'Не удалось сохранить результат');
-      },
+      onSuccess: (data) => {
+        // Optimistic query patch
+        queryClient.setQueryData(['progress', user.id, topicId], data);
+        if (status === 'completed') {
+           queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
+           queryClient.invalidateQueries({ queryKey: ['dashboard-students'] });
+           queryClient.invalidateQueries({ queryKey: ['subjects'] });
+        }
+      }
     });
-  };
+  }, [user?.id, topicId, saveProgressMutation, queryClient]);
 
-  const completeLesson = () => {
-    if (savedRef.current) return;
+  const completeLesson = useCallback((ans: Record<string | number, boolean>, att: Record<number, number>) => {
     let score = 0;
     let level = 'Начинающий';
     
     if (assessmentBlocksCount > 0) {
-      const correctCount = Object.values(answers).filter(Boolean).length;
+      const correctCount = Object.keys(ans)
+        .filter(key => !isNaN(Number(key)))
+        .filter(key => ans[key as keyof typeof ans] === true)
+        .length;
       score = Math.round((correctCount / assessmentBlocksCount) * 100);
       
       if (score >= 86) level = 'Мастер';
@@ -92,8 +126,53 @@ export default function Lesson() {
     
     setResult({ score, level });
     setIsCompleted(true);
-    persistResult(score, level);
+    saveState(currentStep, maxOpenedStep, 'completed', ans, att, score, level);
+  }, [assessmentBlocksCount, currentStep, maxOpenedStep, saveState]);
+
+  const handleNextStep = () => {
+    if (currentStep === blocks.length - 1) {
+      if (!isCompleted) {
+        completeLesson(answers, attemptsByStep);
+      }
+      setCurrentStep(blocks.length);
+      return;
+    }
+    
+    const nextStep = currentStep + 1;
+    const nextMax = Math.max(maxOpenedStep, nextStep);
+    setCurrentStep(nextStep);
+    setMaxOpenedStep(nextMax);
+    saveState(nextStep, nextMax, 'in_progress', answers, attemptsByStep);
   };
+
+  const handleBlockAnswer = (blockIndex: number, isCorrect: boolean) => {
+    const newAnswers = { ...answers, [blockIndex]: isCorrect };
+    const newAttempts = { ...attemptsByStep, [blockIndex]: (attemptsByStep[blockIndex] || 0) + 1 };
+    
+    setAnswers(newAnswers);
+    setAttemptsByStep(newAttempts);
+    
+    // Save immediate state
+    saveState(currentStep, maxOpenedStep, 'in_progress', newAnswers, newAttempts);
+  };
+
+  const navigateToStep = (index: number) => {
+    if (index <= maxOpenedStep) {
+      setCurrentStep(index);
+      saveState(index, maxOpenedStep, 'in_progress', answers, attemptsByStep);
+    }
+  };
+
+  const findNearestExplanation = (currentIndex: number) => {
+    for (let i = currentIndex - 1; i >= 0; i--) {
+      if (!assessmentComponents.includes(blocks[i].component)) {
+        return i;
+      }
+    }
+    return 0;
+  };
+
+  const isLoading = isLoadingLesson || isLoadingProgress;
 
   return (
     <div className="max-w-5xl mx-auto pb-24">
@@ -101,7 +180,7 @@ export default function Lesson() {
         <ArrowLeft className="w-4 h-4" /> Назад к программе
       </Link>
       
-      <div className="bg-card rounded-[2rem] border border-border shadow-sm overflow-hidden">
+      <div className="bg-card rounded-[2rem] border border-border shadow-sm overflow-hidden min-h-[500px]">
         <div className="h-48 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent relative p-8 flex flex-col justify-end border-b border-border/50">
           <div className="absolute top-6 right-6 px-4 py-1.5 bg-card/80 backdrop-blur-sm rounded-full shadow-sm text-sm font-bold text-primary flex items-center gap-2 border border-border/50">
             <div className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse"></div>
@@ -110,16 +189,13 @@ export default function Lesson() {
           <h1 className="text-3xl md:text-4xl font-extrabold text-foreground mt-4 mb-2 leading-tight">Урок</h1>
         </div>
 
-        <div className="p-6 md:p-10 space-y-12">
+        <div className="p-6 md:p-10">
           {isLoading ? (
             <div className="text-center py-20 border-2 border-dashed border-border rounded-3xl bg-muted/10 px-4">
               <Loader2 className="w-16 h-16 text-primary animate-spin mx-auto mb-6" />
               <h3 className="text-2xl font-bold text-foreground mb-3">Загрузка урока</h3>
-              <p className="text-muted-foreground max-w-md mx-auto font-medium">
-                Пожалуйста, подождите...
-              </p>
             </div>
-          ) : !lesson ? (
+          ) : !lesson || blocks.length === 0 ? (
             <div className="text-center py-20 border-2 border-dashed border-border rounded-3xl bg-muted/10 px-4">
               <BookOpen className="w-16 h-16 text-muted-foreground/30 mx-auto mb-6" />
               <h3 className="text-2xl font-bold text-foreground mb-3">Урок готовится</h3>
@@ -127,8 +203,8 @@ export default function Lesson() {
                 Преподаватель еще не опубликовал этот урок. Возвращайтесь позже!
               </p>
             </div>
-          ) : isCompleted && result ? (
-            <div className="text-center py-20 border-2 border-dashed border-primary/30 rounded-3xl bg-primary/5 px-4">
+          ) : isCompleted && result && currentStep === blocks.length ? (
+            <div className="text-center py-20 border-2 border-dashed border-primary/30 rounded-3xl bg-primary/5 px-4 animate-in fade-in zoom-in duration-500">
               <CheckCircle className="w-20 h-20 text-primary mx-auto mb-6" />
               <h3 className="text-3xl font-extrabold text-foreground mb-4">Урок завершён!</h3>
               {assessmentBlocksCount > 0 && (
@@ -142,39 +218,180 @@ export default function Lesson() {
               {!assessmentBlocksCount && (
                  <p className="text-muted-foreground font-medium mb-8">Вы успешно изучили материал урока.</p>
               )}
-              {saveError && (
-                <div className="mb-6">
-                  <p className="text-sm font-semibold text-destructive mb-3">{saveError}</p>
-                  <button
-                    onClick={() => persistResult(result.score, result.level)}
-                    disabled={saveProgressMutation.isPending}
-                    className="px-5 py-2.5 border border-border bg-card font-bold rounded-xl hover:bg-muted transition-colors disabled:opacity-50"
-                  >
-                    {saveProgressMutation.isPending ? 'Сохранение...' : 'Повторить сохранение'}
-                  </button>
-                </div>
-              )}
-              <Link href={`/learn/${subjectId}`}>
-                <button className="px-8 py-3.5 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg shadow-primary/30 hover:bg-primary/90 hover:-translate-y-0.5 transition-all">
-                  Вернуться к курсу
+              <div className="flex gap-4 justify-center">
+                <button 
+                  onClick={() => setCurrentStep(blocks.length - 1)}
+                  className="px-6 py-3 border border-border bg-card text-foreground font-bold rounded-xl shadow-sm hover:bg-muted transition-all"
+                >
+                  Просмотреть ответы
                 </button>
-              </Link>
+                <Link href={`/learn/${subjectId}`}>
+                  <button className="px-8 py-3 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg shadow-primary/30 hover:bg-primary/90 hover:-translate-y-0.5 transition-all">
+                    Вернуться к курсу
+                  </button>
+                </Link>
+              </div>
             </div>
           ) : (
-            <div className="space-y-12">
-              <BlockRenderer blocks={blocks} onAnswer={handleAnswer} />
-              
-              {assessmentBlocksCount === 0 && (
-                <div className="pt-8 border-t border-border flex justify-center">
-                  <button 
-                    onClick={completeLesson}
-                    disabled={savedRef.current || saveProgressMutation.isPending}
-                    className="px-8 py-3.5 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg shadow-primary/30 hover:bg-primary/90 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0"
-                  >
-                    {saveProgressMutation.isPending ? 'Сохранение...' : 'Завершить урок'}
-                  </button>
+            <div className="flex flex-col lg:flex-row gap-8 relative">
+              {/* Sidebar stepper */}
+              <div className="w-full lg:w-64 shrink-0" aria-label="Прогресс урока">
+                <div className="sticky top-8 flex flex-col gap-3">
+                  <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2">Шаги урока</h3>
+                  {blocks.slice(0, maxOpenedStep + 1).map((block, index) => {
+                    const isActive = index === currentStep;
+                    const isCompletedBlock = index < maxOpenedStep || answers[index] !== undefined;
+                    const isAssessment = assessmentComponents.includes(block.component);
+                    
+                    return (
+                      <button
+                        key={index}
+                        onClick={() => navigateToStep(index)}
+                        className={`text-left p-3 rounded-xl border transition-all duration-300 flex items-start gap-3 ${
+                          isActive 
+                            ? 'bg-primary/5 border-primary shadow-sm ring-1 ring-primary/20' 
+                            : 'bg-card border-border hover:border-primary/50'
+                        }`}
+                      >
+                        <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                          isCompletedBlock ? 'bg-primary text-primary-foreground' : (isActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground')
+                        }`}>
+                          {isCompletedBlock ? <CheckCircle className="w-3.5 h-3.5" /> : index + 1}
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                          <div className={`text-sm font-semibold truncate ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}>
+                            {isAssessment ? 'Практика' : 'Теория'}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {isCompleted && (
+                    <button
+                      onClick={() => setCurrentStep(blocks.length)}
+                      className={`text-left p-3 rounded-xl border transition-all duration-300 flex items-start gap-3 mt-4 ${
+                        currentStep === blocks.length 
+                          ? 'bg-primary/5 border-primary shadow-sm ring-1 ring-primary/20' 
+                          : 'bg-card border-border hover:border-primary/50'
+                      }`}
+                    >
+                      <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        currentStep === blocks.length ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                      }`}>
+                        <Trophy className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="flex-1 overflow-hidden">
+                        <div className={`text-sm font-semibold truncate ${currentStep === blocks.length ? 'text-foreground' : 'text-muted-foreground'}`}>
+                          Итоги
+                        </div>
+                      </div>
+                    </button>
+                  )}
                 </div>
-              )}
+              </div>
+
+              {/* Main content area */}
+              <div className="flex-1" aria-live="polite">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={currentStep}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.3 }}
+                    className="space-y-8"
+                  >
+                    {(() => {
+                      const block = blocks[currentStep];
+                      const Component = componentMap[block.component];
+                      if (!Component) return <div className="text-destructive">Неизвестный блок</div>;
+
+                      const isAssessment = assessmentComponents.includes(block.component);
+                      const isAnswered = answers[currentStep] !== undefined;
+                      const isCorrect = answers[currentStep] === true;
+                      
+                      const injectProps = isAssessment 
+                        ? { onAnswer: (correct: boolean, detail?: { questionIndex: number; isFinished: boolean }) => {
+                              if (block.component === 'MasteryCheck' && detail) {
+                                const intermediateAns = { ...answers, [`${currentStep}_q${detail.questionIndex}`]: correct };
+                                setAnswers(intermediateAns);
+                                
+                                if (!detail.isFinished) {
+                                  saveState(currentStep, maxOpenedStep, 'in_progress', intermediateAns, attemptsByStep);
+                                  return;
+                                }
+                                
+                                // Block finished, compute overall block success
+                                handleBlockAnswer(currentStep, correct);
+                                return;
+                              }
+                              
+                              handleBlockAnswer(currentStep, correct);
+                            } 
+                          } 
+                        : {};
+
+                      return (
+                        <div key={`block-${currentStep}-${retryKeys[currentStep] || 0}`} className="bg-card rounded-2xl border border-border/50 shadow-sm p-6 lg:p-8">
+                          <Component {...block.content} {...injectProps} />
+
+                          {/* Navigation Controls */}
+                          <div className="mt-8 pt-6 border-t border-border flex flex-wrap gap-4 items-center justify-between">
+                            
+                            {/* Assessment Feedback and Retry */}
+                            {isAssessment && isAnswered && !isCorrect && (
+                              <div className="w-full p-4 rounded-xl bg-destructive/5 border border-destructive/20 mb-4 flex flex-col sm:flex-row gap-4 justify-between items-center">
+                                <div className="text-sm font-medium text-destructive">
+                                  Материал требует повторения.
+                                </div>
+                                <div className="flex gap-3">
+                                  <button
+                                    onClick={() => navigateToStep(findNearestExplanation(currentStep))}
+                                    className="inline-flex items-center gap-2 px-4 py-2 bg-background border border-border rounded-lg text-sm font-semibold shadow-sm hover:bg-muted transition-colors"
+                                  >
+                                    <BookMarked className="w-4 h-4" /> Повторить теорию
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const newAns = {...answers};
+                                      delete newAns[currentStep];
+                                      setAnswers(newAns);
+                                      setRetryKeys(prev => ({ ...prev, [currentStep]: (prev[currentStep] || 0) + 1 }));
+                                    }}
+                                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold shadow-sm hover:bg-primary/90 transition-colors"
+                                  >
+                                    <RefreshCw className="w-4 h-4" /> Попробовать снова
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Continue Button */}
+                            {(!isAssessment || (isAssessment && isCorrect)) && (
+                              <div className="w-full flex justify-end">
+                                <button
+                                  onClick={() => {
+                                    if (currentStep === blocks.length - 1 && isCompleted) {
+                                      setCurrentStep(blocks.length); // go to summary
+                                    } else {
+                                      handleNextStep();
+                                    }
+                                  }}
+                                  className="px-8 py-3.5 bg-primary text-primary-foreground font-bold rounded-xl shadow-sm hover:bg-primary/90 hover:-translate-y-0.5 transition-all flex items-center gap-2"
+                                >
+                                  {currentStep === blocks.length - 1 ? 'Завершить урок' : 'Продолжить'}
+                                  <ChevronDown className="w-5 h-5 -rotate-90" />
+                                </button>
+                              </div>
+                            )}
+
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
             </div>
           )}
         </div>

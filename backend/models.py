@@ -16,6 +16,7 @@ class Subject(Base):
     hours_per_week: Mapped[int] = mapped_column(Integer)
     hours_per_year: Mapped[int] = mapped_column(Integer)
     source_info: Mapped[str | None] = mapped_column(Text)
+    instruction_language: Mapped[str] = mapped_column(String(10), default="ru")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     sections: Mapped[list["Section"]] = relationship(cascade="all, delete-orphan")
 
@@ -85,3 +86,8 @@ class Progress(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     attempts: Mapped[int] = mapped_column(Integer, default=0)
+    current_step: Mapped[int] = mapped_column(Integer, default=0)
+    max_opened_step: Mapped[int] = mapped_column(Integer, default=0)
+    answers: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    attempts_by_step: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    elapsed_time_sec: Mapped[int] = mapped_column(Integer, default=0)

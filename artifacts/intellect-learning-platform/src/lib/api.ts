@@ -5,7 +5,7 @@ export type LoginUsers = { students: User[]; teachers: User[] };
 export type Subject = { id: number; name: string; grade: number; hours_per_week: number; hours_per_year: number; source_info: string | null; progress?: number };
 export type Section = { id: number; subject_id: number; name: string; sort_order: number; total_hours: number };
 export type Topic = { id: number; section_id: number; ktp_number: string | null; name: string; hours: number; lesson_type: string; learning_objectives: string | null; skills: string[]; resources: string | null };
-export type ProgressRecord = { id: number; student_id: number; topic_id: number; status: string; score: number | null; mastery_level: string | null; time_spent_sec: number; attempts: number };
+export type ProgressRecord = { id: number; student_id: number; topic_id: number; status: string; score: number | null; mastery_level: string | null; time_spent_sec: number; attempts: number; current_step: number; max_opened_step: number; answers: Record<string, any>; attempts_by_step: Record<string, any>; elapsed_time_sec: number; };
 export type DashboardOverview = { students: number; subjects: number; topics: number; published_lessons: number; average_progress: number };
 export type StudentSummary = { id: number; name: string; grade: number; completed_topics: number; average_score: number };
 export type ComponentSchema = {
@@ -127,24 +127,6 @@ export const uploadKtp = (data: unknown) =>
     body: JSON.stringify(data),
   });
 
-export const saveProgress = (
-  studentId: number,
-  topicId: number,
-  score: number,
-  masteryLevel: string,
-  timeSpentSec = 0,
-) =>
-  request<ProgressRecord>('/progress', {
-    method: 'POST',
-    body: JSON.stringify({
-      student_id: studentId,
-      topic_id: topicId,
-      score,
-      mastery_level: masteryLevel,
-      time_spent_sec: timeSpentSec,
-    }),
-  });
-
 export const useGetLesson = (topicId: number, role?: 'student' | 'teacher', enabled = true) =>
   useQuery({
     queryKey: ['lesson', topicId, role],
@@ -175,10 +157,48 @@ export const useUnpublishLesson = () =>
     mutationFn: (lessonId: number) => unpublishLesson(lessonId),
   });
 
+export const saveProgress = (
+  data: {
+    student_id: number;
+    topic_id: number;
+    status: string;
+    score?: number | null;
+    mastery_level?: string | null;
+    time_spent_sec?: number;
+    current_step?: number;
+    max_opened_step?: number;
+    answers?: Record<string, any>;
+    attempts_by_step?: Record<string, any>;
+    elapsed_time_sec?: number;
+  }
+) =>
+  request<ProgressRecord>('/progress', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const getLessonProgress = async (studentId: number, topicId: number): Promise<ProgressRecord | null> => {
+  try {
+    return await request<ProgressRecord>(`/progress/${studentId}/${topicId}`);
+  } catch (error: any) {
+    if (error.message.includes('404') || error.message.includes('не найдена')) {
+      return null;
+    }
+    throw error;
+  }
+};
+
+export const useGetLessonProgress = (studentId: number, topicId: number, enabled = true) =>
+  useQuery({
+    queryKey: ['progress', studentId, topicId],
+    queryFn: () => getLessonProgress(studentId, topicId),
+    enabled: enabled && studentId > 0 && topicId > 0,
+  });
+
 export const useSaveProgress = () =>
   useMutation({
-    mutationFn: (data: { topic_id: number; student_id: number; score: number; mastery_level: string; time_spent_sec?: number }) =>
-      saveProgress(data.student_id, data.topic_id, data.score, data.mastery_level, data.time_spent_sec),
+    mutationFn: (data: Parameters<typeof saveProgress>[0]) =>
+      saveProgress(data),
   });
 
 export const useLessonStatus = (topicId: number, enabled = true) =>

@@ -85,7 +85,7 @@ export default function GuidedPractice({ question, hints, input_type, correct_an
             >
               <div className="flex items-center gap-2 text-green-700 dark:text-green-400 text-sm font-medium bg-green-500/10 border border-green-500/20 p-3.5 rounded-lg">
                 <CheckCircle2 className="w-5 h-5 shrink-0" />
-                <span>Верно! Отличная работа. (✓)</span>
+                <span>Верно! Отличная работа. </span>
               </div>
               <div className="p-4 bg-muted/30 border rounded-lg text-sm text-foreground">
                 <span className="font-semibold block mb-1">Объяснение:</span>
@@ -101,7 +101,7 @@ export default function GuidedPractice({ question, hints, input_type, correct_an
               className="flex items-center gap-2 text-destructive text-sm font-medium bg-destructive/10 border border-destructive/20 p-3.5 rounded-lg"
             >
               <XCircle className="w-5 h-5 shrink-0" />
-              <span>Неверно. Попробуйте еще раз или используйте подсказку. (✗)</span>
+              <span>Неверно. Попробуйте еще раз или используйте подсказку. </span>
             </motion.div>
           )}
         </AnimatePresence>
