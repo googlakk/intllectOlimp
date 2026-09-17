@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Intellect Learning Platform"
+description = "A Russian-language educational platform for olympiad students, with student learning paths, progress views, and teacher lesson-management tools."
+version = "1.0.0"
+id = "artifacts/intellect-learning-platform"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25288
+
+[services.development]
+run = "pnpm --filter @workspace/intellect-learning-platform run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/intellect-learning-platform", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/intellect-learning-platform/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25288"
+BASE_PATH = "/"

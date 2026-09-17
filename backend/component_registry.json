@@ -1,0 +1,17 @@
+[
+  {"id":"short-explanation","code":"C01","category":"explain","subjects":["math","literature"],"purpose":"Краткое объяснение нового понятия","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Краткий текст с главной мыслью."},
+  {"id":"key-concept","code":"C02","category":"explain","subjects":["math","literature"],"purpose":"Фиксация ключевого понятия","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Термин и определение."},
+  {"id":"worked-example","code":"C03","category":"model","subjects":["math"],"purpose":"Пошаговый разбор решения","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Нумерованные шаги."},
+  {"id":"guided-practice","code":"C04","category":"practice","subjects":["math"],"purpose":"Решение с подсказками","is_assessment":true,"content_schema":{"type":"object"},"rendering_notes":"Последовательные подсказки."},
+  {"id":"independent-problem","code":"C05","category":"practice","subjects":["math","literature"],"purpose":"Самостоятельное применение знаний","is_assessment":true,"content_schema":{"type":"object"},"rendering_notes":"Поле ответа."},
+  {"id":"retrieval-check","code":"C07","category":"assess","subjects":["math","literature"],"purpose":"Быстрая проверка воспроизведения","is_assessment":true,"content_schema":{"type":"object"},"rendering_notes":"Мгновенная обратная связь."},
+  {"id":"mind-map","code":"C09","category":"represent","subjects":["math","literature"],"purpose":"Визуализация связей","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Карта узлов."},
+  {"id":"timeline","code":"C11","category":"represent","subjects":["literature"],"purpose":"Хронология событий","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Адаптивная временная шкала."},
+  {"id":"text-evidence-picker","code":"C12","category":"interact","subjects":["literature"],"purpose":"Выбор доказательств из текста","is_assessment":true,"content_schema":{"type":"object"},"rendering_notes":"Выделение фрагментов."},
+  {"id":"argument-builder","code":"C13","category":"communicate","subjects":["literature"],"purpose":"Построение аргументации","is_assessment":true,"content_schema":{"type":"object"},"rendering_notes":"Конструктор аргумента."},
+  {"id":"interactive-graph","code":"C16","category":"represent","subjects":["math"],"purpose":"Исследование функций","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Интерактивный график."},
+  {"id":"presentation","code":"C21","category":"media","subjects":["math","literature"],"purpose":"Визуальная подача материала","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Листаемые слайды."},
+  {"id":"illustration","code":"C22","category":"represent","subjects":["math","literature"],"purpose":"Схематическое пояснение","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Изображение с подписью."},
+  {"id":"reflection","code":"C23","category":"reflect","subjects":["math","literature"],"purpose":"Осмысление изученного","is_assessment":false,"content_schema":{"type":"object"},"rendering_notes":"Свободный ответ."},
+  {"id":"mastery-check","code":"C24","category":"assess","subjects":["math","literature"],"purpose":"Итоговая проверка","is_assessment":true,"content_schema":{"type":"object"},"rendering_notes":"Результат и уровень освоения."}
+]
