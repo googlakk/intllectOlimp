@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
 import { useAuth } from '@/components/auth/AuthContext';
-import { LogOut, BookOpen, BarChart, LayoutDashboard, FileText } from 'lucide-react';
+import { LogOut, BookOpen, BarChart, LayoutDashboard, FileText, Blocks } from 'lucide-react';
 
 export function Shell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
@@ -39,6 +39,7 @@ export function Shell({ children }: { children: ReactNode }) {
               <>
                 <NavLink href="/dashboard" icon={LayoutDashboard} label="Обзор" />
                 <NavLink href="/dashboard/lessons" icon={FileText} label="Уроки" />
+                <NavLink href="/dashboard/components" icon={Blocks} label="Компоненты" />
               </>
             )}
           </nav>
@@ -65,6 +66,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <>
               <NavLink href="/dashboard" icon={LayoutDashboard} label="Обзор" />
               <NavLink href="/dashboard/lessons" icon={FileText} label="Уроки" />
+              <NavLink href="/dashboard/components" icon={Blocks} label="Компоненты" />
             </>
           )}
       </div>

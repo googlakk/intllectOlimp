@@ -8,6 +8,25 @@ export type Topic = { id: number; section_id: number; ktp_number: string | null;
 export type ProgressRecord = { id: number; student_id: number; topic_id: number; status: string; score: number | null; mastery_level: string | null; time_spent_sec: number; attempts: number };
 export type DashboardOverview = { students: number; subjects: number; topics: number; published_lessons: number; average_progress: number };
 export type StudentSummary = { id: number; name: string; grade: number; completed_topics: number; average_score: number };
+export type ComponentSchema = {
+  type?: string;
+  enum?: string[];
+  required?: string[];
+  minItems?: number;
+  maxItems?: number;
+  properties?: Record<string, ComponentSchema>;
+  items?: ComponentSchema;
+};
+export type ComponentRegistryEntry = {
+  id: string;
+  code: string;
+  category: string;
+  subjects: string[];
+  purpose: string;
+  is_assessment: boolean;
+  content_schema: ComponentSchema;
+  rendering_notes: string;
+};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
@@ -45,6 +64,12 @@ export const useDashboardOverview = () =>
 
 export const useDashboardStudents = () =>
   useQuery({ queryKey: ['dashboard-students'], queryFn: () => request<StudentSummary[]>('/dashboard/students') });
+
+export const useComponents = () =>
+  useQuery({
+    queryKey: ['components'],
+    queryFn: () => request<ComponentRegistryEntry[]>('/components'),
+  });
 export type Block = {
   component: string;
   content: Record<string, unknown>;

@@ -11,6 +11,7 @@ import Progress from '@/pages/student/Progress';
 import Dashboard from '@/pages/teacher/Dashboard';
 import Lessons from '@/pages/teacher/Lessons';
 import LessonEditor from '@/pages/teacher/LessonEditor';
+import Components from '@/pages/teacher/Components';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -51,6 +52,7 @@ function Router() {
       <Route path="/dashboard" component={() => <Shell><ProtectedRoute component={Dashboard} allowedRole="teacher" /></Shell>} />
       <Route path="/dashboard/lessons" component={() => <Shell><ProtectedRoute component={Lessons} allowedRole="teacher" /></Shell>} />
       <Route path="/dashboard/lessons/:topicId" component={() => <Shell><ProtectedRoute component={LessonEditor} allowedRole="teacher" /></Shell>} />
+      <Route path="/dashboard/components" component={() => <Shell><ProtectedRoute component={Components} allowedRole="teacher" /></Shell>} />
       
       <Route>
         <div className="flex min-h-[100dvh] items-center justify-center bg-background">
