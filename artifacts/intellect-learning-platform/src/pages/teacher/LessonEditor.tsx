@@ -1,5 +1,5 @@
 import { useParams, Link } from 'wouter';
-import { ArrowLeft, Loader2, Sparkles, Globe, EyeOff } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Loader2, Sparkles, Globe, EyeOff } from 'lucide-react';
 import { useGetLesson, useGenerateLesson, usePublishLesson, useUnpublishLesson } from '@/lib/api';
 import BlockRenderer from '@/components/blocks/BlockRenderer';
 import { useAuth } from '@/components/auth/AuthContext';
@@ -91,6 +91,17 @@ export default function LessonEditor() {
           </div>
         ) : blocks.length > 0 ? (
           <div>
+            {lesson?.lesson_metadata?.teacher_review_required === true && (
+              <div role="alert" className="mb-6 flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-foreground">
+                <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
+                <div>
+                  <p className="font-bold">Предметный профиль требует проверки</p>
+                  <p className="mt-1 text-muted-foreground">
+                    Система использовала общий сценарий. Проверьте порядок этапов и задания перед публикацией.
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="flex justify-end mb-6">
                <button 
                   onClick={handleGenerate}

@@ -2,10 +2,10 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 
 export type User = { id: number; name: string; role: 'student' | 'teacher'; grade: number | null };
 export type LoginUsers = { students: User[]; teachers: User[] };
-export type Subject = { id: number; name: string; grade: number; hours_per_week: number; hours_per_year: number; source_info: string | null; progress?: number };
+export type Subject = { id: number; name: string; grade: number; hours_per_week: number; hours_per_year: number; source_info: string | null; instruction_language?: 'ru' | 'ky'; progress?: number };
 export type Section = { id: number; subject_id: number; name: string; sort_order: number; total_hours: number };
 export type Topic = { id: number; section_id: number; ktp_number: string | null; name: string; hours: number; lesson_type: string; learning_objectives: string | null; skills: string[]; resources: string | null };
-export type ProgressRecord = { id: number; student_id: number; topic_id: number; status: string; score: number | null; mastery_level: string | null; time_spent_sec: number; attempts: number; current_step: number; max_opened_step: number; answers: Record<string, any>; attempts_by_step: Record<string, any>; elapsed_time_sec: number; };
+export type ProgressRecord = { id: number; student_id: number; topic_id: number; status: 'not_started' | 'in_progress' | 'completed'; score: number | null; mastery_level: string | null; time_spent_sec: number; attempts: number; current_step: number; max_opened_step: number; answers: Record<string, boolean>; attempts_by_step: Record<string, number>; elapsed_time_sec: number; };
 export type DashboardOverview = { students: number; subjects: number; topics: number; published_lessons: number; average_progress: number };
 export type StudentSummary = { id: number; name: string; grade: number; completed_topics: number; average_score: number };
 export type ComponentSchema = {
@@ -161,14 +161,14 @@ export const saveProgress = (
   data: {
     student_id: number;
     topic_id: number;
-    status: string;
+    status: 'in_progress' | 'completed';
     score?: number | null;
     mastery_level?: string | null;
     time_spent_sec?: number;
     current_step?: number;
     max_opened_step?: number;
-    answers?: Record<string, any>;
-    attempts_by_step?: Record<string, any>;
+    answers?: Record<string, boolean>;
+    attempts_by_step?: Record<string, number>;
     elapsed_time_sec?: number;
   }
 ) =>
@@ -178,14 +178,13 @@ export const saveProgress = (
   });
 
 export const getLessonProgress = async (studentId: number, topicId: number): Promise<ProgressRecord | null> => {
-  try {
-    return await request<ProgressRecord>(`/progress/${studentId}/${topicId}`);
-  } catch (error: any) {
-    if (error.message.includes('404') || error.message.includes('не найдена')) {
-      return null;
-    }
-    throw error;
+  const response = await fetch(`/api/progress/${studentId}/${topicId}`);
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ detail: 'Ошибка сервера' }));
+    throw new Error(body.detail ?? 'Ошибка сервера');
   }
+  return response.json() as Promise<ProgressRecord>;
 };
 
 export const useGetLessonProgress = (studentId: number, topicId: number, enabled = true) =>

@@ -2,10 +2,10 @@ import { useParams, Link } from 'wouter';
 import { ArrowLeft, BookOpen, Loader2, CheckCircle, ChevronDown, RefreshCw, BookMarked, Trophy } from 'lucide-react';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useGetLesson, useSaveProgress, useGetLessonProgress } from '@/lib/api';
-import { componentMap, assessmentComponents, Block } from '@/components/blocks/BlockRenderer';
+import { componentMap, assessmentComponents } from '@/components/blocks/BlockRenderer';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 
 export default function Lesson() {
   const params = useParams();
@@ -17,6 +17,7 @@ export default function Lesson() {
   const { data: progress, isLoading: isLoadingProgress } = useGetLessonProgress(user?.id || 0, topicId, !!user?.id);
   
   const saveProgressMutation = useSaveProgress();
+  const saveError = saveProgressMutation.error as Error | null;
   const queryClient = useQueryClient();
   
   const [currentStep, setCurrentStep] = useState(0);
@@ -29,7 +30,10 @@ export default function Lesson() {
   
   const initializedForId = useRef<number | null>(null);
   const startTime = useRef(Date.now());
+  const baseElapsedTime = useRef(0);
   const lastSaved = useRef<any>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const prefersReducedMotion = useReducedMotion();
 
   const blocks = lesson?.blocks || [];
   
@@ -51,6 +55,8 @@ export default function Lesson() {
       setMaxOpenedStep(progress.max_opened_step || 0);
       setAnswers(progress.answers || {});
       setAttemptsByStep(progress.attempts_by_step || {});
+      baseElapsedTime.current = progress.elapsed_time_sec || progress.time_spent_sec || 0;
+      startTime.current = Date.now();
       lastSaved.current = {
         current_step: progress.current_step || 0,
         max_opened_step: progress.max_opened_step || 0,
@@ -76,7 +82,7 @@ export default function Lesson() {
     finalLevel?: string
   ) => {
     if (!user?.id) return;
-    const timeSpentSec = Math.round((Date.now() - startTime.current) / 1000);
+    const timeSpentSec = baseElapsedTime.current + Math.round((Date.now() - startTime.current) / 1000);
     
     // update lastSaved
     lastSaved.current = { current_step: step, max_opened_step: maxStep, status };
@@ -90,6 +96,7 @@ export default function Lesson() {
       answers: ans,
       attempts_by_step: att,
       time_spent_sec: timeSpentSec,
+      elapsed_time_sec: timeSpentSec,
       ...(status === 'completed' && finalScore !== undefined ? { score: finalScore, mastery_level: finalLevel } : {})
     }, {
       onSuccess: (data) => {
@@ -109,11 +116,17 @@ export default function Lesson() {
     let level = 'Начинающий';
     
     if (assessmentBlocksCount > 0) {
-      const correctCount = Object.keys(ans)
-        .filter(key => !isNaN(Number(key)))
-        .filter(key => ans[key as keyof typeof ans] === true)
-        .length;
-      score = Math.round((correctCount / assessmentBlocksCount) * 100);
+      const masteryAnswers = Object.entries(ans).filter(([key]) => key.includes('_q'));
+      if (masteryAnswers.length > 0) {
+        const correctCount = masteryAnswers.filter(([, value]) => value === true).length;
+        score = Math.round((correctCount / masteryAnswers.length) * 100);
+      } else {
+        const correctCount = Object.keys(ans)
+          .filter(key => !isNaN(Number(key)))
+          .filter(key => ans[key as keyof typeof ans] === true)
+          .length;
+        score = Math.round((correctCount / assessmentBlocksCount) * 100);
+      }
       
       if (score >= 86) level = 'Мастер';
       else if (score >= 66) level = 'Уверенный';
@@ -126,8 +139,8 @@ export default function Lesson() {
     
     setResult({ score, level });
     setIsCompleted(true);
-    saveState(currentStep, maxOpenedStep, 'completed', ans, att, score, level);
-  }, [assessmentBlocksCount, currentStep, maxOpenedStep, saveState]);
+    saveState(blocks.length, Math.max(maxOpenedStep, blocks.length - 1), 'completed', ans, att, score, level);
+  }, [assessmentBlocksCount, blocks.length, maxOpenedStep, saveState]);
 
   const handleNextStep = () => {
     if (currentStep === blocks.length - 1) {
@@ -159,7 +172,9 @@ export default function Lesson() {
   const navigateToStep = (index: number) => {
     if (index <= maxOpenedStep) {
       setCurrentStep(index);
-      saveState(index, maxOpenedStep, 'in_progress', answers, attemptsByStep);
+      if (!isCompleted) {
+        saveState(index, maxOpenedStep, 'in_progress', answers, attemptsByStep);
+      }
     }
   };
 
@@ -173,6 +188,31 @@ export default function Lesson() {
   };
 
   const isLoading = isLoadingLesson || isLoadingProgress;
+  const topicTitle = String(lesson?.lesson_metadata?.topic_name || 'Урок');
+  const learningObjective = String(lesson?.lesson_metadata?.learning_objectives || '');
+  const phaseLabels: Record<string, string> = {
+    ShortExplanation: 'Объяснение',
+    KeyConcept: 'Ключевое понятие',
+    WorkedExample: 'Разобранный пример',
+    GuidedPractice: 'Практика с поддержкой',
+    IndependentProblem: 'Самостоятельная практика',
+    RetrievalCheck: 'Проверка понимания',
+    TextEvidencePicker: 'Работа с текстом',
+    ArgumentBuilder: 'Аргументация',
+    MasteryCheck: 'Итоговая проверка',
+    Reflection: 'Рефлексия',
+    MindMap: 'Связи между идеями',
+    Timeline: 'Последовательность событий',
+    InteractiveGraph: 'Исследование данных',
+    Presentation: 'Материал урока',
+    Illustration: 'Визуальная модель',
+  };
+
+  useEffect(() => {
+    if (!isLoading && currentStep < blocks.length) {
+      contentRef.current?.focus({ preventScroll: true });
+    }
+  }, [currentStep, isLoading, blocks.length]);
 
   return (
     <div className="max-w-5xl mx-auto pb-24">
@@ -186,10 +226,20 @@ export default function Lesson() {
             <div className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse"></div>
             Изучение
           </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-foreground mt-4 mb-2 leading-tight">Урок</h1>
+          <h1 className="text-3xl md:text-4xl font-extrabold text-foreground mt-4 mb-2 leading-tight">{topicTitle}</h1>
+          {learningObjective && (
+            <p className="text-sm md:text-base text-muted-foreground max-w-2xl line-clamp-2">
+              Цель: {learningObjective}
+            </p>
+          )}
         </div>
 
         <div className="p-6 md:p-10">
+          {saveError && (
+            <div role="alert" className="mb-6 rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-sm font-medium text-destructive">
+              Прогресс пока не сохранён: {saveError.message}
+            </div>
+          )}
           {isLoading ? (
             <div className="text-center py-20 border-2 border-dashed border-border rounded-3xl bg-muted/10 px-4">
               <Loader2 className="w-16 h-16 text-primary animate-spin mx-auto mb-6" />
@@ -291,14 +341,36 @@ export default function Lesson() {
               </div>
 
               {/* Main content area */}
-              <div className="flex-1" aria-live="polite">
+              <div ref={contentRef} tabIndex={-1} className="flex-1 outline-none" aria-live="polite">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-primary">
+                      {phaseLabels[blocks[currentStep]?.component] || 'Учебный шаг'}
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Шаг {currentStep + 1} из {blocks.length}
+                    </p>
+                  </div>
+                  <div
+                    className="w-full sm:w-48 h-2 rounded-full bg-muted overflow-hidden"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={blocks.length}
+                    aria-valuenow={currentStep + 1}
+                  >
+                    <div
+                      className="h-full rounded-full bg-primary transition-all"
+                      style={{ width: `${((currentStep + 1) / blocks.length) * 100}%` }}
+                    />
+                  </div>
+                </div>
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={currentStep}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.3 }}
+                    transition={{ duration: prefersReducedMotion ? 0 : 0.3 }}
                     className="space-y-8"
                   >
                     {(() => {
@@ -353,10 +425,14 @@ export default function Lesson() {
                                   </button>
                                   <button
                                     onClick={() => {
-                                      const newAns = {...answers};
-                                      delete newAns[currentStep];
+                                      const newAns = Object.fromEntries(
+                                        Object.entries(answers).filter(([key]) => (
+                                          key !== String(currentStep) && !key.startsWith(`${currentStep}_q`)
+                                        ))
+                                      );
                                       setAnswers(newAns);
                                       setRetryKeys(prev => ({ ...prev, [currentStep]: (prev[currentStep] || 0) + 1 }));
+                                      saveState(currentStep, maxOpenedStep, 'in_progress', newAns, attemptsByStep);
                                     }}
                                     className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold shadow-sm hover:bg-primary/90 transition-colors"
                                   >
@@ -367,7 +443,7 @@ export default function Lesson() {
                             )}
 
                             {/* Continue Button */}
-                            {(!isAssessment || (isAssessment && isCorrect)) && (
+                            {(!isAssessment || isAnswered) && (
                               <div className="w-full flex justify-end">
                                 <button
                                   onClick={() => {

@@ -22,13 +22,13 @@ SUBJECT_FAMILY_PROFILES = {
     },
     "language": {
         "label": "языки и речевое развитие",
-        "keywords": ("русск", "кыргыз", "киргиз", "английск", "немецк", "француз", "язык", "граммат", "родной", "кыргыз тили", "кыргызча"),
+        "keywords": ("русский язык", "кыргыз тили", "киргизский язык", "английск", "немецк", "француз", "иностранный язык", "граммат", "родной язык", "кыргызча"),
         "archetypes": ("language_practice", "text_comprehension", "communication"),
         "route": "языковой образец → распознавание → управляемая практика → понимание или создание текста/речи → обратная связь → применение",
     },
     "humanities_social_science": {
         "label": "гуманитарные и общественные науки",
-        "keywords": ("литератур", "истори", "тарых", "адабият", "обществозн", "право", "эконом", "граждан"),
+        "keywords": ("литератур", "истори", "тарых", "адабият", "обществозн", "человек и обществ", "адам жана коом", "право", "эконом", "граждан"),
         "archetypes": ("source_analysis", "historical_context", "argumentation"),
         "route": "контекст → первичный текст или источник → анализ свидетельств → аргументация или интерпретация → сопоставление → рефлексия",
     },
@@ -55,9 +55,14 @@ SUBJECT_FAMILY_PROFILES = {
 
 def classify_subject(subject_name: str) -> dict[str, str | bool]:
     normalized = subject_name.casefold().replace("ё", "е")
+    matches: list[tuple[int, str, dict[str, Any]]] = []
     for family, profile in SUBJECT_FAMILY_PROFILES.items():
-        if any(keyword in normalized for keyword in profile["keywords"]):
-            return {"family": family, "family_label": profile["label"], "archetype": profile["archetypes"][0], "teacher_review_required": False}
+        for keyword in profile["keywords"]:
+            if keyword in normalized:
+                matches.append((len(keyword), family, profile))
+    if matches:
+        _, family, profile = max(matches, key=lambda match: match[0])
+        return {"family": family, "family_label": profile["label"], "archetype": profile["archetypes"][0], "teacher_review_required": False}
     return {"family": "general", "family_label": SUBJECT_FAMILY_PROFILES["general"]["label"], "archetype": "general_explanation_and_practice", "teacher_review_required": True}
 
 
@@ -85,9 +90,9 @@ def select_archetype(
     return profile["archetypes"][0]
 
 SYSTEM_PROMPT = """
-Ты создаёшь готовые интерактивные уроки для русскоязычной образовательной платформы.
-Весь учебный текст, инструкции, варианты ответов, объяснения, подписи и обратная связь
-должны быть только на русском языке.
+Ты создаёшь готовые интерактивные уроки для школьной образовательной платформы Кыргызстана.
+Язык всего учебного текста, инструкций, вариантов ответов, объяснений, подписей и обратной
+связи передаётся в запросе. Строго используй только этот язык.
 
 Верни ТОЛЬКО корректный JSON-массив без Markdown, комментариев и пояснений.
 Каждый элемент массива имеет ровно такую оболочку:

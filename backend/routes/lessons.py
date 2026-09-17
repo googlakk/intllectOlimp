@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai.generator import MODEL, classify_subject, generate_lesson
+from ai.generator import MODEL, classify_subject, generate_lesson, select_archetype
 from database import get_db
 from models import GeneratedLesson, Section, Subject, Teacher, Topic
 
@@ -84,13 +84,19 @@ async def generate(payload: GenerateInput, db: AsyncSession = Depends(get_db)):
         db.add(lesson)
     lesson.blocks = blocks
     profile = classify_subject(subject.name)
+    archetype = select_archetype(
+        str(profile["family"]),
+        topic.name,
+        topic.lesson_type,
+        topic.learning_objectives,
+    )
     lesson.lesson_metadata = {
         "subject_name": subject.name,
         "subject_grade": subject.grade,
         "content_language": subject.instruction_language,
         "subject_family": profile["family"],
         "subject_family_label": profile["family_label"],
-        "lesson_archetype": profile["archetype"],
+        "lesson_archetype": archetype,
         "teacher_review_required": profile["teacher_review_required"],
         "topic_name": topic.name,
         "lesson_type": topic.lesson_type,
