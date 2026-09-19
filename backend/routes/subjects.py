@@ -26,5 +26,5 @@ async def sections(subject_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.get("/sections/{section_id}/topics")
 async def topics(section_id: int, db: AsyncSession = Depends(get_db)):
-    rows = (await db.scalars(select(Topic).where(Topic.section_id == section_id).order_by(Topic.ktp_number))).all()
+    rows = (await db.scalars(select(Topic).where(Topic.section_id == section_id).order_by(Topic.sort_order, Topic.id))).all()
     return [serialize(row) for row in rows]

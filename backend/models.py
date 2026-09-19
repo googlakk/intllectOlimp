@@ -42,6 +42,7 @@ class Topic(Base):
     learning_objectives: Mapped[str | None] = mapped_column(Text)
     skills: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     resources: Mapped[str | None] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)   # порядок тем в КТП
 
 
 class Teacher(Base):

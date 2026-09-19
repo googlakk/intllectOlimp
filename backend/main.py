@@ -29,6 +29,9 @@ async def lifespan(app: FastAPI):
             # Часы в неделю бывают дробными ("1,8 часа в неделю" в КТП литературы),
             # а колонка создавалась целочисленной. Меняем тип только если он
             # ещё целый — иначе Postgres переписывал бы таблицу на каждом старте.
+            await connection.execute(text(
+                "ALTER TABLE topics ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0"
+            ))
             current_type = await connection.scalar(text(
                 "SELECT data_type FROM information_schema.columns "
                 "WHERE table_name = 'subjects' AND column_name = 'hours_per_week'"

@@ -51,3 +51,5 @@ Thumbs.db
 .env
 .venv/
 __pycache__/
+api-parse-result.json
+import-result.json

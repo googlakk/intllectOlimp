@@ -144,6 +144,12 @@ function TopicsList({ sectionId }: { sectionId: number }) {
   );
 }
 
+const LESSON_TYPE_LABELS: Record<string, string> = {
+  study: "изучение нового",
+  assessment: "контроль",
+  project: "проект",
+};
+
 function TopicRow({ topic }: { topic: any }) {
   const { data: statusData, isLoading } = useLessonStatus(topic.id);
   
@@ -161,8 +167,8 @@ function TopicRow({ topic }: { topic: any }) {
   }
 
   return (
-    <div className="p-6 md:px-8 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-muted/10 transition-colors">
-      <div>
+    <div className="p-6 md:px-8 flex flex-col md:flex-row md:items-start justify-between gap-4 hover:bg-muted/10 transition-colors">
+      <div className="flex-1 min-w-0">
         <div className="flex items-center gap-3 mb-2">
           {topic.ktp_number && <span className="text-xs font-mono font-bold bg-muted px-2 py-1 rounded text-muted-foreground">{topic.ktp_number}</span>}
           <span className="font-bold text-foreground text-lg">{topic.name}</span>
@@ -175,8 +181,32 @@ function TopicRow({ topic }: { topic: any }) {
         </div>
         <div className="text-sm font-semibold text-muted-foreground flex items-center gap-4">
           <span className="bg-card border border-border px-2 py-0.5 rounded">{topic.hours} ч.</span>
-          <span className="text-primary">{topic.lesson_type}</span>
+          <span className="text-primary">{LESSON_TYPE_LABELS[topic.lesson_type] ?? topic.lesson_type}</span>
         </div>
+
+        {topic.learning_objectives && (
+          <div className="mt-3 text-sm text-foreground/80 leading-relaxed">
+            <span className="font-bold text-muted-foreground">Цели обучения: </span>
+            {topic.learning_objectives}
+          </div>
+        )}
+
+        {topic.skills?.length > 0 && (
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {topic.skills.map((skill: string, index: number) => (
+              <span key={index} className="text-xs font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded">
+                {skill}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {topic.resources && (
+          <div className="mt-2.5 text-xs text-muted-foreground leading-relaxed">
+            <span className="font-bold">Ресурсы: </span>
+            {topic.resources}
+          </div>
+        )}
       </div>
       <Link href={`/dashboard/lessons/${topic.id}`}>
         <button className="flex items-center justify-center gap-2 px-5 py-2.5 bg-primary/10 text-primary font-bold rounded-xl hover:bg-primary hover:text-primary-foreground transition-all text-sm w-full md:w-auto">
