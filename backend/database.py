@@ -17,6 +17,9 @@ parts = urlsplit(DATABASE_URL)
 query = dict(parse_qsl(parts.query))
 sslmode = query.pop("sslmode", None)
 query.pop("channel_binding", None)
+# Строка Supabase из вкладки Transaction pooler несёт ?pgbouncer=true —
+# это параметр для Prisma. asyncpg такого аргумента не знает и падает.
+query.pop("pgbouncer", None)
 if sslmode and sslmode != "disable":
     query["ssl"] = "require"
 DATABASE_URL = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
