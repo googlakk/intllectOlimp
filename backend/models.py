@@ -13,7 +13,7 @@ class Subject(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255))
     grade: Mapped[int] = mapped_column(Integer)
-    hours_per_week: Mapped[int] = mapped_column(Integer)
+    hours_per_week: Mapped[float] = mapped_column(Float)   # 1,8 часа в неделю бывает
     hours_per_year: Mapped[int] = mapped_column(Integer)
     source_info: Mapped[str | None] = mapped_column(Text)
     instruction_language: Mapped[str] = mapped_column(String(10), default="ru")

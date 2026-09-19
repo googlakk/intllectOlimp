@@ -26,6 +26,17 @@ async def lifespan(app: FastAPI):
             await connection.execute(text(
                 "ALTER TABLE progress ADD COLUMN IF NOT EXISTS mastery_status VARCHAR(50) DEFAULT 'not_assessed'"
             ))
+            # Часы в неделю бывают дробными ("1,8 часа в неделю" в КТП литературы),
+            # а колонка создавалась целочисленной. Меняем тип только если он
+            # ещё целый — иначе Postgres переписывал бы таблицу на каждом старте.
+            current_type = await connection.scalar(text(
+                "SELECT data_type FROM information_schema.columns "
+                "WHERE table_name = 'subjects' AND column_name = 'hours_per_week'"
+            ))
+            if current_type and current_type != "double precision":
+                await connection.execute(text(
+                    "ALTER TABLE subjects ALTER COLUMN hours_per_week TYPE double precision"
+                ))
     await seed_if_empty()
     yield
     await engine.dispose()

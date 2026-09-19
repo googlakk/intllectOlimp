@@ -29,7 +29,7 @@ class SectionInput(BaseModel):
 class KtpUploadInput(BaseModel):
     subject_name: str = Field(min_length=1)
     grade: int = Field(ge=1, le=12)
-    hours_per_week: int = Field(ge=0)
+    hours_per_week: float = Field(ge=0)
     hours_per_year: int = Field(ge=0)
     instruction_language: Literal["ru", "ky"] = "ru"
     sections: list[SectionInput] = Field(default_factory=list)

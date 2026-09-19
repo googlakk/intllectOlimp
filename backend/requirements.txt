@@ -5,3 +5,5 @@ asyncpg
 python-dotenv
 anthropic
 pydantic
+python-docx
+pdfplumber
