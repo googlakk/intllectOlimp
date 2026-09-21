@@ -1,17 +1,18 @@
+import { lazy, Suspense, useEffect, type ComponentType } from 'react';
 import { Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/components/auth/AuthContext';
 import { Shell } from '@/components/layout/Shell';
 
-import Login from '@/pages/Login';
-import Learn from '@/pages/student/Learn';
-import SubjectView from '@/pages/student/Subject';
-import Lesson from '@/pages/student/Lesson';
-import Progress from '@/pages/student/Progress';
-import Dashboard from '@/pages/teacher/Dashboard';
-import Lessons from '@/pages/teacher/Lessons';
-import LessonEditor from '@/pages/teacher/LessonEditor';
-import Components from '@/pages/teacher/Components';
+const Login = lazy(() => import('@/pages/Login'));
+const Learn = lazy(() => import('@/pages/student/Learn'));
+const SubjectView = lazy(() => import('@/pages/student/Subject'));
+const Lesson = lazy(() => import('@/pages/student/Lesson'));
+const Progress = lazy(() => import('@/pages/student/Progress'));
+const Dashboard = lazy(() => import('@/pages/teacher/Dashboard'));
+const Lessons = lazy(() => import('@/pages/teacher/Lessons'));
+const LessonEditor = lazy(() => import('@/pages/teacher/LessonEditor'));
+const Components = lazy(() => import('@/pages/teacher/Components'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,37 +23,56 @@ const queryClient = new QueryClient({
   },
 });
 
-function ProtectedRoute({ component: Component, allowedRole }: { component: any, allowedRole: string }) {
+function PageLoader() {
+  return (
+    <div className="flex min-h-[320px] items-center justify-center text-sm font-semibold text-muted-foreground">
+      Загрузка...
+    </div>
+  );
+}
+
+function ProtectedRoute({ component: Component, allowedRole }: { component: ComponentType, allowedRole: string }) {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const redirectTo = !user
+    ? '/'
+    : user.role !== allowedRole
+      ? (user.role === 'student' ? '/learn' : '/dashboard')
+      : null;
 
-  if (!user) {
-    setLocation('/');
-    return null;
-  }
-  
-  if (user.role !== allowedRole) {
-    setLocation(user.role === 'student' ? '/learn' : '/dashboard');
-    return null;
-  }
+  useEffect(() => {
+    if (redirectTo) setLocation(redirectTo);
+  }, [redirectTo, setLocation]);
+
+  if (redirectTo) return null;
   
   return <Component />;
+}
+
+function RoutedPage({ component: Component, allowedRole }: { component: ComponentType, allowedRole: string }) {
+  return (
+    <Shell>
+      <Suspense fallback={<PageLoader />}>
+        <ProtectedRoute component={Component} allowedRole={allowedRole} />
+      </Suspense>
+    </Shell>
+  );
 }
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Login} />
+      <Route path="/" component={() => <Suspense fallback={<PageLoader />}><Login /></Suspense>} />
       
-      <Route path="/learn" component={() => <Shell><ProtectedRoute component={Learn} allowedRole="student" /></Shell>} />
-      <Route path="/learn/:subjectId" component={() => <Shell><ProtectedRoute component={SubjectView} allowedRole="student" /></Shell>} />
-      <Route path="/learn/:subjectId/:topicId" component={() => <Shell><ProtectedRoute component={Lesson} allowedRole="student" /></Shell>} />
-      <Route path="/progress" component={() => <Shell><ProtectedRoute component={Progress} allowedRole="student" /></Shell>} />
+      <Route path="/learn" component={() => <RoutedPage component={Learn} allowedRole="student" />} />
+      <Route path="/learn/:subjectId" component={() => <RoutedPage component={SubjectView} allowedRole="student" />} />
+      <Route path="/learn/:subjectId/:topicId" component={() => <RoutedPage component={Lesson} allowedRole="student" />} />
+      <Route path="/progress" component={() => <RoutedPage component={Progress} allowedRole="student" />} />
       
-      <Route path="/dashboard" component={() => <Shell><ProtectedRoute component={Dashboard} allowedRole="teacher" /></Shell>} />
-      <Route path="/dashboard/lessons" component={() => <Shell><ProtectedRoute component={Lessons} allowedRole="teacher" /></Shell>} />
-      <Route path="/dashboard/lessons/:topicId" component={() => <Shell><ProtectedRoute component={LessonEditor} allowedRole="teacher" /></Shell>} />
-      <Route path="/dashboard/components" component={() => <Shell><ProtectedRoute component={Components} allowedRole="teacher" /></Shell>} />
+      <Route path="/dashboard" component={() => <RoutedPage component={Dashboard} allowedRole="teacher" />} />
+      <Route path="/dashboard/lessons" component={() => <RoutedPage component={Lessons} allowedRole="teacher" />} />
+      <Route path="/dashboard/lessons/:topicId" component={() => <RoutedPage component={LessonEditor} allowedRole="teacher" />} />
+      <Route path="/dashboard/components" component={() => <RoutedPage component={Components} allowedRole="teacher" />} />
       
       <Route>
         <div className="flex min-h-[100dvh] items-center justify-center bg-background">

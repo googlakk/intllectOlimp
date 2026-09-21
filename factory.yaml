@@ -1,0 +1,193 @@
+version: 1
+factory: intellect-platform
+model: gpt-5
+
+planner:
+  harness: codex
+  model: gpt-5
+  thinking: high
+  sandbox_mode: read-only
+  approval_policy: on-request
+  instructions: agents/planner.md
+  skills:
+    - skills/planning
+    - skills/repository-intelligence
+    - skills/decision-making
+    - skills/project-verification
+    - skills/prompt-engineering
+    - skills/clear-prose
+  tools: [read, grep, find, ls, bash]
+  timeout_seconds: 7200
+
+plan_review:
+  harness: codex
+  model: gpt-5
+  thinking: high
+  sandbox_mode: read-only
+  approval_policy: on-request
+  instructions: agents/plan_reviewer.md
+  skills:
+    - skills/decision-making
+    - skills/project-verification
+    - skills/prompt-engineering
+    - skills/clear-prose
+  tools: [read, grep, find, ls]
+  min_score: 8.5
+  max_cycles: 3
+  timeout_seconds: 7200
+
+approval:
+  mode: judge
+
+routing:
+  mode: adaptive
+  fast_path:
+    enabled: true
+    owner: product
+    max_file_patterns: 12
+    max_success_criteria: 10
+    max_acceptance_commands: 12
+
+intelligence:
+  provider: graphify
+  required: false
+  auto_install: true
+  enrichment:
+    enabled: false
+
+implementers:
+  - id: product
+    scope: FastAPI backend, KTP parsing, LLM routing, data models, tests, and tightly coupled docs
+    harness: codex
+    model: gpt-5
+    thinking: high
+    sandbox_mode: workspace-write
+    approval_policy: on-request
+    instructions: agents/implementer.md
+    skills:
+      - skills/implementation
+      - skills/tdd
+      - skills/diagnosing-bugs
+      - skills/project-verification
+      - skills/prompt-engineering
+      - skills/ponytail
+      - skills/clear-prose
+    tools: [read, edit, write, bash]
+    timeout_seconds: 14400
+  - id: design
+    scope: React/Vite UI, interaction states, visual QA, accessibility, and frontend tests
+    harness: claude-code
+    model: claude-sonnet-4-6
+    thinking: medium
+    sandbox_mode: workspace-write
+    approval_policy: on-request
+    fallbacks:
+      - harness: codex
+        model: gpt-5
+        thinking: high
+        sandbox_mode: workspace-write
+        approval_policy: on-request
+    instructions: agents/designer.md
+    skills:
+      - skills/design
+      - skills/taste
+      - skills/project-verification
+      - skills/tdd
+      - skills/diagnosing-bugs
+      - skills/browser-proof
+      - skills/ponytail
+      - skills/clear-prose
+    tools: [read, edit, write, bash]
+    requires_visual_smoke: true
+    timeout_seconds: 14400
+  - id: prompt
+    scope: Production prompts, LLM schemas, evaluation cases, abstention behavior, and prompt tests
+    harness: codex
+    model: gpt-5
+    thinking: high
+    sandbox_mode: workspace-write
+    approval_policy: on-request
+    instructions: agents/prompt_engineer.md
+    skills:
+      - skills/implementation
+      - skills/prompt-engineering
+      - skills/ponytail
+      - skills/clear-prose
+    tools: [read, edit, write, bash]
+    timeout_seconds: 14400
+  - id: qa
+    scope: Integration tests, smoke checks, evidence capture, CI gates, and verification tooling
+    harness: codex
+    model: gpt-5
+    thinking: medium
+    sandbox_mode: workspace-write
+    approval_policy: on-request
+    instructions: agents/qa.md
+    skills:
+      - skills/implementation
+      - skills/tdd
+      - skills/diagnosing-bugs
+      - skills/project-verification
+      - skills/ponytail
+      - skills/clear-prose
+    tools: [read, edit, write, bash]
+    timeout_seconds: 14400
+
+review:
+  harness: codex
+  model: gpt-5
+  thinking: high
+  sandbox_mode: read-only
+  approval_policy: on-request
+  instructions: agents/reviewer.md
+  skills:
+    - skills/review
+    - skills/adversarial-review
+    - skills/project-verification
+    - skills/prompt-engineering
+    - skills/ponytail-review
+    - skills/clear-prose
+  tools: [read, grep, find, ls, bash]
+  max_cycles: 3
+  projection_cycles: 5
+  timeout_seconds: 7200
+
+evidence:
+  policy: plan
+  capture_commands:
+    - node scripts/src/capture-browser-evidence.mjs
+  screenshots:
+    - evidence/factory/desktop.png
+    - evidence/factory/mobile.png
+  video: null
+  artifacts:
+    - evidence/factory/browser-receipt.json
+    - evidence/factory/api-smoke.txt
+  test_commands:
+    - pnpm run check:agent-system
+    - git diff --check
+    - ./run-tests.sh
+    - pnpm run check:architecture
+    - pnpm run test:run
+    - pnpm run typecheck
+    - PORT=3000 BASE_PATH=/ pnpm run build
+
+limits:
+  agent_timeout_seconds: 14400
+  command_timeout_seconds: 3600
+  termination_grace_seconds: 30
+  max_agent_attempts: 2
+  agent_retry_backoff_seconds: 5
+  max_total_tokens: null
+  max_total_cost_usd: null
+  require_usage: false
+
+merge:
+  target: main
+  apply: false
+
+delivery:
+  enabled: false
+  deploy_commands: []
+  health_commands: []
+  rollback_commands: []

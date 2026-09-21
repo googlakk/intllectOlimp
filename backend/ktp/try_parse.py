@@ -33,7 +33,8 @@ async def main(path_str: str) -> int:
     print(f"  таблиц: {len(extraction.tables)}, строк: {extraction.row_count}")
     print(f"  шапка первой таблицы: {extraction.tables[0][0] if extraction.tables else '—'}")
 
-    print("\n=== СОПОСТАВЛЕНИЕ МОДЕЛЬЮ ===")
+    print("\n=== КАРТА КОЛОНОК (один вызов модели) ===")
+    print("  строки плана модель не видит — их разбирает код")
     draft = await map_to_schema(extraction)
 
     sections = draft.get("sections") or []

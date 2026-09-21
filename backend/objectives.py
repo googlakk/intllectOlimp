@@ -52,6 +52,120 @@ def _normalise(value: str) -> str:
     return re.sub(r"\s+", " ", value.casefold().replace("ё", "е")).strip(" \t\r\n-–—•.;:")
 
 
+def _legacy_split(text: str) -> list[str]:
+    """Прежнее деление — по запятым и союзу «и».
+
+    В продукте больше не используется: оно давало обрывки вида
+    «складывать целые числа, распознавая обобщения. Помните, что скобки».
+    Осталось только чтобы вычислить идентификаторы, под которыми цели были
+    сохранены раньше, и перенести на них ссылки уже сгенерированных уроков.
+    """
+    parts = re.split(r"(?:\n+|;|•|\s+(?=\d+[.)]\s+)|\s+(?=[–—-]\s+))", text)
+    parts = [re.sub(r"^\s*(?:\d+[.)]|[-–—•])\s*", "", part).strip(" .;") for part in parts]
+    expanded: list[str] = []
+    action = re.compile(r"\b[а-яё-]{4,}(?:ть|ти|чь)\b", re.IGNORECASE)
+    for part in parts:
+        comma_segments = re.split(r"\s*,\s*", part)
+        clauses: list[str] = []
+        current = comma_segments[0]
+        for segment in comma_segments[1:]:
+            measurable = re.sub(r"^(?:а\s+также|также)\s+", "", segment, flags=re.IGNORECASE)
+            if action.search(measurable):
+                clauses.append(current)
+                current = measurable
+            else:
+                current = f"{current}, {segment}"
+        clauses.append(current)
+        for clause in clauses:
+            words = re.split(r"\s+и\s+", clause, flags=re.IGNORECASE)
+            if len(words) > 1 and all(action.search(word.strip()) for word in words):
+                cleaned = [word.strip() for word in words]
+                first, second = action.search(cleaned[0]), action.search(cleaned[1])
+                if first and second and not cleaned[0][first.end():].strip():
+                    suffix = cleaned[1][second.end():].strip()
+                    if suffix:
+                        cleaned[0] = f"{cleaned[0]} {suffix}"
+                expanded.extend(cleaned)
+            else:
+                expanded.append(clause.strip())
+    return expanded
+
+
+def _fragment_id(text: str) -> str | None:
+    normalized = _normalise(text)
+    if len(normalized) < 3:
+        return None
+    return f"obj-{hashlib.sha1(normalized.encode('utf-8')).hexdigest()[:12]}"
+
+
+def _historic_fragments(text: str) -> list[str]:
+    """Куски, на которые это предложение могли порезать прежние версии.
+
+    Нужно только для переноса ссылок: уроки, сгенерированные раньше, помнят
+    идентификаторы обрывков (кусок до запятой, часть после «а также»,
+    половинки вокруг союза «и»). Сам текст цели при этом не меняется.
+    """
+    fragments: list[str] = []
+    for chunk in re.split(r"(?:\n+|;|•)", text):
+        chunk = re.sub(r"^\s*(?:\d+[.)]|[-–—•])\s*", "", chunk).strip()
+        if not chunk:
+            continue
+        fragments.append(chunk)
+        segments = re.split(r"\s*,\s*", chunk)
+        if len(segments) > 1:
+            for segment in segments:
+                segment = segment.strip()
+                fragments.append(segment)
+                stripped = re.sub(
+                    r"^(?:а\s+также|также|а)\s+", "", segment, flags=re.IGNORECASE
+                )
+                if stripped != segment:
+                    fragments.append(stripped)
+    fragments.extend(_legacy_split(text))
+    return fragments
+
+
+def build_objective_aliases(
+    objectives: list[dict[str, Any]],
+    raw: str | None,
+) -> dict[str, str]:
+    """Старый идентификатор → цель, внутри которой этот обрывок целиком лежит.
+
+    Переносим ссылку только когда подходящая цель ровно одна: иначе урок
+    молча привязался бы не к тому результату.
+    """
+    known_ids = {item["id"] for item in objectives}
+    candidates: dict[str, set[str]] = {}
+
+    for item in objectives:
+        for fragment in _historic_fragments(item["text"]):
+            fragment_id = _fragment_id(fragment)
+            if fragment_id is None or fragment_id in known_ids:
+                continue
+            candidates.setdefault(fragment_id, set()).add(item["id"])
+
+    # Прежнее деление применялось ко всему тексту целиком, поэтому обрывок мог
+    # склеить хвост одного предложения с началом другого — такие переносим по
+    # вхождению и тоже только при единственном совпадении.
+    for legacy in _decompose_objectives(raw, conservative_commas=False):
+        if legacy["id"] in known_ids or legacy["id"] in candidates:
+            continue
+        fragment = _normalise(legacy["text"])
+        if not fragment:
+            continue
+        matches = {
+            item["id"] for item in objectives if fragment in _normalise(item["text"])
+        }
+        if matches:
+            candidates[legacy["id"]] = matches
+
+    return {
+        legacy_id: next(iter(targets))
+        for legacy_id, targets in candidates.items()
+        if len(targets) == 1
+    }
+
+
 def _decompose_objectives(
     raw: str | None,
     *,
@@ -61,48 +175,25 @@ def _decompose_objectives(
     if not raw or not raw.strip():
         return []
     text = re.sub(r"\r\n?", "\n", raw.strip())
+    # Явные разделители списка: перевод строки, точка с запятой, маркер, номер пункта.
     parts = re.split(r"(?:\n+|;|•|\s+(?=\d+[.)]\s+)|\s+(?=[–—-]\s+))", text)
-    parts = [re.sub(r"^\s*(?:\d+[.)]|[-–—•])\s*", "", part).strip(" .;") for part in parts]
-    # Split only explicit action-verb conjunctions. This avoids inventing
-    # separate objectives for noun phrases such as "квадраты и корни".
-    expanded: list[str] = []
-    action = re.compile(r"\b[а-яё-]{4,}(?:ть|ти|чь)\b", re.IGNORECASE)
-    for part in parts:
-        comma_segments = re.split(r"\s*,\s*", part)
-        if conservative_commas:
-            clauses: list[str] = []
-            current = comma_segments[0]
-            for segment in comma_segments[1:]:
-                measurable_segment = re.sub(
-                    r"^(?:а\s+также|также)\s+",
-                    "",
-                    segment,
-                    flags=re.IGNORECASE,
-                )
-                if action.search(measurable_segment):
-                    clauses.append(current)
-                    current = measurable_segment
-                else:
-                    current = f"{current}, {segment}"
-            clauses.append(current)
-        else:
-            clauses = comma_segments
-        for clause in clauses:
-            words = re.split(r"\s+и\s+", clause, flags=re.IGNORECASE)
-            if len(words) > 1 and all(action.search(word.strip()) for word in words):
-                cleaned_words = [word.strip() for word in words]
-                # Carry a shared complement back to a bare first verb:
-                # "складывать и вычитать целые числа" -> two complete results.
-                second_match = action.search(cleaned_words[1])
-                first_match = action.search(cleaned_words[0])
-                if first_match and second_match and not cleaned_words[0][first_match.end():].strip():
-                    suffix = cleaned_words[1][second_match.end():].strip()
-                    if suffix:
-                        cleaned_words[0] = f"{cleaned_words[0]} {suffix}"
-                expanded.extend(cleaned_words)
-            else:
-                expanded.append(clause.strip())
-    parts = expanded
+    parts = [re.sub(r"^\s*(?:\d+[.)]|[-–—•])\s*", "", part).strip() for part in parts]
+
+    # Дальше режем ТОЛЬКО по границам предложений. Деление по запятым и союзу
+    # "и" давало обрывки вида "складывать целые числа, распознавая обобщения.
+    # Помните, что скобки" — не цель обучения, а кусок текста через точку.
+    # Требуем заглавную букву после точки, чтобы не разрывать "стр. 12".
+    if not conservative_commas:                 # режим расчёта прежних ID
+        parts = _legacy_split(text)
+    else:
+        sentence_boundary = re.compile(r"(?<=[.!?])\s+(?=[А-ЯЁA-Z])")
+        expanded: list[str] = []
+        for part in parts:
+            for sentence in sentence_boundary.split(part):
+                sentence = sentence.strip().strip(";")
+                if sentence:
+                    expanded.append(sentence)
+        parts = expanded
     parts = [part for part in parts if len(_normalise(part)) >= 3]
     # A single sentence is one result; do not invent granularity from conjunctions.
     seen: set[str] = set()
@@ -124,7 +215,7 @@ def _decompose_objectives(
 
 
 def decompose_objectives(raw: str | None) -> list[dict[str, Any]]:
-    """Turn a KTP string into stable, deliberately conservative objective records."""
+    """Разбивает текст целей из КТП на отдельные результаты — по предложениям."""
     return _decompose_objectives(raw, conservative_commas=True)
 
 
@@ -447,15 +538,9 @@ def build_coverage(
 
 def quality_report(blocks: list[dict[str, Any]], raw_objectives: str | None) -> dict[str, Any]:
     objectives = decompose_objectives(raw_objectives)
-    legacy_objectives = _decompose_objectives(raw_objectives, conservative_commas=False)
-    objective_aliases = {}
-    if len(objectives) == 1:
-        canonical_id = objectives[0]["id"]
-        objective_aliases = {
-            item["id"]: canonical_id
-            for item in legacy_objectives
-            if item["id"] != canonical_id
-        }
+    # Уроки, сгенерированные до перехода на деление по предложениям, ссылаются
+    # на прежние идентификаторы — переносим их на нынешние цели.
+    objective_aliases = build_objective_aliases(objectives, raw_objectives)
     normalized_blocks, normalization_warnings = normalize_lesson_blocks(
         blocks,
         objectives,

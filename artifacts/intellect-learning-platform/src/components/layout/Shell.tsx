@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
 import { useAuth } from '@/components/auth/AuthContext';
-import { LogOut, BookOpen, BarChart, LayoutDashboard, FileText, Blocks } from 'lucide-react';
+import { LogOut, BookOpen, BarChart, LayoutDashboard, FileText, Blocks, type LucideIcon } from 'lucide-react';
 
 export function Shell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
@@ -9,7 +9,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
   if (!user) return <>{children}</>;
 
-  const NavLink = ({ href, icon: Icon, label }: { href: string, icon: any, label: string }) => {
+  const NavLink = ({ href, icon: Icon, label }: { href: string, icon: LucideIcon, label: string }) => {
     const isActive = location === href || (href !== '/learn' && href !== '/dashboard' && location.startsWith(href));
     return (
       <Link href={href} className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 font-medium ${isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>

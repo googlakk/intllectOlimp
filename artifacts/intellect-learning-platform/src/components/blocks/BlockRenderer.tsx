@@ -1,51 +1,33 @@
-import React from 'react';
-import ShortExplanation from './ShortExplanation';
-import KeyConcept from './KeyConcept';
-import WorkedExample from './WorkedExample';
-import GuidedPractice from './GuidedPractice';
-import IndependentProblem from './IndependentProblem';
-import RetrievalCheck from './RetrievalCheck';
-import MindMap from './MindMap';
-import Timeline from './Timeline';
-import InteractiveGraph from './InteractiveGraph';
-import TextEvidencePicker from './TextEvidencePicker';
-import ArgumentBuilder from './ArgumentBuilder';
-import Illustration from './Illustration';
-import Presentation from './Presentation';
-import MasteryCheck from './MasteryCheck';
-import Reflection from './Reflection';
+import React, { Suspense } from 'react';
+import type { Block } from '@/lib/api/types';
+import { isAssessmentBlock } from '@/lib/lessonBlocks';
 
-export const componentMap: Record<string, React.ComponentType<any>> = {
-  ShortExplanation,
-  KeyConcept,
-  WorkedExample,
-  GuidedPractice,
-  IndependentProblem,
-  RetrievalCheck,
-  MindMap,
-  Timeline,
-  InteractiveGraph,
-  TextEvidencePicker,
-  ArgumentBuilder,
-  Illustration,
-  Presentation,
-  MasteryCheck,
-  Reflection
+type BlockComponentProps = Record<string, unknown> & {
+  onAnswer?: (isCorrect: boolean) => void;
 };
+type BlockComponent = React.ComponentType<BlockComponentProps>;
 
-export const assessmentComponents = [
-  'GuidedPractice',
-  'IndependentProblem',
-  'RetrievalCheck',
-  'TextEvidencePicker',
-  'ArgumentBuilder',
-  'MasteryCheck'
-];
-
-export interface Block {
-  component: string;
-  content: any;
+function lazyBlock(importer: () => Promise<{ default: React.ComponentType<unknown> }>) {
+  return React.lazy(importer) as React.LazyExoticComponent<BlockComponent>;
 }
+
+export const componentMap: Record<string, React.LazyExoticComponent<BlockComponent>> = {
+  ShortExplanation: lazyBlock(() => import('./ShortExplanation')),
+  KeyConcept: lazyBlock(() => import('./KeyConcept')),
+  WorkedExample: lazyBlock(() => import('./WorkedExample')),
+  GuidedPractice: lazyBlock(() => import('./GuidedPractice')),
+  IndependentProblem: lazyBlock(() => import('./IndependentProblem')),
+  RetrievalCheck: lazyBlock(() => import('./RetrievalCheck')),
+  MindMap: lazyBlock(() => import('./MindMap')),
+  Timeline: lazyBlock(() => import('./Timeline')),
+  InteractiveGraph: lazyBlock(() => import('./InteractiveGraph')),
+  TextEvidencePicker: lazyBlock(() => import('./TextEvidencePicker')),
+  ArgumentBuilder: lazyBlock(() => import('./ArgumentBuilder')),
+  Illustration: lazyBlock(() => import('./Illustration')),
+  Presentation: lazyBlock(() => import('./Presentation')),
+  MasteryCheck: lazyBlock(() => import('./MasteryCheck')),
+  Reflection: lazyBlock(() => import('./Reflection')),
+};
 
 export interface BlockRendererProps {
   blocks: Block[];
@@ -70,17 +52,27 @@ export default function BlockRenderer({ blocks, onAnswer }: BlockRendererProps) 
           );
         }
 
-        const isAssessment = assessmentComponents.includes(block.component);
+        const isAssessment = isAssessmentBlock(block);
         const injectProps = isAssessment && onAnswer 
           ? { onAnswer: (isCorrect: boolean) => onAnswer(index, isCorrect) } 
           : {};
 
         return (
           <div key={key}>
-            <Component {...block.content} {...injectProps} />
+            <Suspense fallback={<BlockLoadingFallback />}>
+              <Component {...block.content} {...injectProps} />
+            </Suspense>
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function BlockLoadingFallback() {
+  return (
+    <div className="rounded-xl border border-border/60 bg-muted/20 p-6 text-sm font-medium text-muted-foreground">
+      Загрузка блока...
     </div>
   );
 }

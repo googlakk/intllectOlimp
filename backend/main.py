@@ -3,10 +3,10 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
 
 from database import Base, engine
 from routes import auth, components, dashboard, ktp, lessons, progress, subjects
+from schema_compat import apply_schema_compatibility
 from seed import seed_if_empty
 
 
@@ -14,32 +14,7 @@ from seed import seed_if_empty
 async def lifespan(app: FastAPI):
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
-        # create_all does not alter tables from earlier releases. These additive
-        # columns keep existing progress rows readable without a migration runner.
-        if connection.dialect.name == "postgresql":
-            await connection.execute(text(
-                "ALTER TABLE progress ADD COLUMN IF NOT EXISTS objective_evidence JSON DEFAULT '{}'::json"
-            ))
-            await connection.execute(text(
-                "ALTER TABLE progress ADD COLUMN IF NOT EXISTS objective_mastery JSON DEFAULT '{}'::json"
-            ))
-            await connection.execute(text(
-                "ALTER TABLE progress ADD COLUMN IF NOT EXISTS mastery_status VARCHAR(50) DEFAULT 'not_assessed'"
-            ))
-            # Часы в неделю бывают дробными ("1,8 часа в неделю" в КТП литературы),
-            # а колонка создавалась целочисленной. Меняем тип только если он
-            # ещё целый — иначе Postgres переписывал бы таблицу на каждом старте.
-            await connection.execute(text(
-                "ALTER TABLE topics ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0"
-            ))
-            current_type = await connection.scalar(text(
-                "SELECT data_type FROM information_schema.columns "
-                "WHERE table_name = 'subjects' AND column_name = 'hours_per_week'"
-            ))
-            if current_type and current_type != "double precision":
-                await connection.execute(text(
-                    "ALTER TABLE subjects ALTER COLUMN hours_per_week TYPE double precision"
-                ))
+        await apply_schema_compatibility(connection)
     await seed_if_empty()
     yield
     await engine.dispose()

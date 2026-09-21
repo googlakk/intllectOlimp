@@ -31,12 +31,26 @@ interface PositionedNode {
   children: PositionedNode[];
 }
 
+interface TreeNode {
+  id: string;
+  label: string;
+  isRoot?: boolean;
+  isLeaf?: boolean;
+  children: TreeNode[];
+}
+
+interface MeasuredTreeNode extends TreeNode {
+  width: number;
+  subtreeHeight: number;
+  children: MeasuredTreeNode[];
+}
+
 export default function MindMap({ title, central_concept, branches }: MindMapProps) {
   const { positionedRoot, width, height } = useMemo(() => {
     if (!central_concept) return { positionedRoot: null, width: 0, height: 0 };
     
     // Build tree
-    const rootTree = {
+    const rootTree: TreeNode = {
       id: 'root',
       label: central_concept,
       isRoot: true,
@@ -53,13 +67,21 @@ export default function MindMap({ title, central_concept, branches }: MindMapPro
     };
 
     // Calculate heights
-    const calcHeights = (node: any): any => {
-      if (!node.children || node.children.length === 0) {
-        return { ...node, subtreeHeight: NODE_HEIGHT, width: node.isLeaf ? LEAF_WIDTH : NODE_WIDTH };
+    const calcHeights = (node: TreeNode): MeasuredTreeNode => {
+      if (node.children.length === 0) {
+        return {
+          id: node.id,
+          label: node.label,
+          isRoot: node.isRoot,
+          isLeaf: node.isLeaf,
+          children: [],
+          subtreeHeight: NODE_HEIGHT,
+          width: node.isLeaf ? LEAF_WIDTH : NODE_WIDTH,
+        };
       }
       
       const children = node.children.map(calcHeights);
-      const h = children.reduce((sum: number, c: any) => sum + c.subtreeHeight, 0) + (children.length - 1) * SIBLING_GAP;
+      const h = children.reduce((sum, child) => sum + child.subtreeHeight, 0) + (children.length - 1) * SIBLING_GAP;
       
       return { 
         ...node, 
@@ -73,12 +95,12 @@ export default function MindMap({ title, central_concept, branches }: MindMapPro
     const totalHeight = treeWithHeights.subtreeHeight;
     
     // Assign positions
-    const assignPos = (node: any, x: number, yCenter: number): PositionedNode => {
-      const children = node.children || [];
+    const assignPos = (node: MeasuredTreeNode, x: number, yCenter: number): PositionedNode => {
+      const children = node.children;
       const posChildren: PositionedNode[] = [];
       
       if (children.length > 0) {
-        const totalChildrenHeight = children.reduce((sum: number, c: any) => sum + c.subtreeHeight, 0) + (children.length - 1) * SIBLING_GAP;
+        const totalChildrenHeight = children.reduce((sum, child) => sum + child.subtreeHeight, 0) + (children.length - 1) * SIBLING_GAP;
         let currentY = yCenter - totalChildrenHeight / 2;
         
         for (const child of children) {

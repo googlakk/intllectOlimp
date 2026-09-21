@@ -3,17 +3,24 @@ from copy import deepcopy
 import hashlib
 import re
 
-from fastapi import HTTPException
-
-from models import GeneratedLesson, Teacher, Topic
+from models import GeneratedLesson, Section, Subject, Teacher, Topic
 from objectives import (
     calculate_objective_mastery,
     decompose_objectives,
     normalize_lesson_blocks,
     quality_report,
 )
-from routes.lessons import PublishInput, publish
-from routes.progress import derive_canonical_mastery
+from services.lessons import (
+    LessonServiceError,
+    delete_lesson_record,
+    generate_lesson_draft,
+    get_lesson_by_topic,
+    get_lesson_quality,
+    publish_lesson,
+    update_lesson_blocks,
+    unpublish_lesson,
+)
+from services.progress import derive_canonical_mastery
 
 
 def without_service_metadata(value):
@@ -43,8 +50,11 @@ class FakeLessonSession:
         self.lesson = lesson
         self.topic = topic
         self.commits = 0
+        self.deleted = []
+        self.get_calls = []
 
     async def get(self, model, row_id):
+        self.get_calls.append((model, row_id))
         if model is Teacher and row_id == self.teacher.id:
             return self.teacher
         if model is GeneratedLesson and row_id == self.lesson.id:
@@ -52,6 +62,54 @@ class FakeLessonSession:
         if model is Topic and row_id == self.topic.id:
             return self.topic
         return None
+
+    async def scalar(self, _statement):
+        return self.lesson
+
+    async def commit(self):
+        self.commits += 1
+
+    async def refresh(self, _row):
+        return None
+
+    async def delete(self, row):
+        self.deleted.append(row)
+
+
+class _FakeExecuteResult:
+    def __init__(self, row):
+        self._row = row
+
+    def first(self):
+        return self._row
+
+
+class FakeGenerateSession:
+    def __init__(self, teacher, topic, section, subject, lesson=None):
+        self.teacher = teacher
+        self.topic = topic
+        self.section = section
+        self.subject = subject
+        self.lesson = lesson
+        self.added = []
+        self.commits = 0
+
+    async def get(self, model, row_id):
+        if model is Teacher and self.teacher is not None and row_id == self.teacher.id:
+            return self.teacher
+        return None
+
+    async def execute(self, _statement):
+        if self.topic is None:
+            return _FakeExecuteResult(None)
+        return _FakeExecuteResult((self.topic, self.section, self.subject))
+
+    async def scalar(self, _statement):
+        return self.lesson
+
+    def add(self, row):
+        self.added.append(row)
+        self.lesson = row
 
     async def commit(self):
         self.commits += 1
@@ -69,11 +127,27 @@ class ObjectiveQualityTests(unittest.TestCase):
         self.assertEqual(len(first), 2)
         self.assertTrue(first[0]["id"].startswith("obj-"))
 
-    def test_compound_action_verbs_are_split_without_splitting_nouns(self):
+    def test_conjunction_does_not_split_objective(self):
+        # Союз «и» внутри предложения — часть формулировки КТП, а не граница цели.
         objectives = decompose_objectives("Складывать и вычитать целые числа; понимать связь квадратов и корней")
         self.assertEqual([item["text"] for item in objectives], [
-            "Складывать целые числа", "вычитать целые числа", "понимать связь квадратов и корней"
+            "Складывать и вычитать целые числа", "понимать связь квадратов и корней"
         ])
+
+    def test_sentences_become_separate_objectives(self):
+        raw = (
+            "Оценивать, складывать и вычитать целые числа, распознавая обобщения. "
+            "Помните, что скобки, положительные индексы и операции следуют определенному порядку."
+        )
+        objectives = decompose_objectives(raw)
+        self.assertEqual([item["text"] for item in objectives], [
+            "Оценивать, складывать и вычитать целые числа, распознавая обобщения.",
+            "Помните, что скобки, положительные индексы и операции следуют определенному порядку.",
+        ])
+
+    def test_abbreviation_dot_does_not_split_objective(self):
+        objectives = decompose_objectives("Разобрать задачи из учебника стр. 12 и записать вывод.")
+        self.assertEqual(len(objectives), 1)
 
     def test_comma_and_also_keep_one_objective(self):
         raw = (
@@ -84,27 +158,28 @@ class ObjectiveQualityTests(unittest.TestCase):
         self.assertEqual(len(objectives), 1)
         self.assertIn("кубическими корнями", objectives[0]["text"])
 
-    def test_comma_separates_independent_action_objectives(self):
+    def test_comma_keeps_one_objective(self):
         objectives = decompose_objectives("Складывать числа, вычитать числа")
         self.assertEqual(
             [item["text"] for item in objectives],
-            ["Складывать числа", "вычитать числа"],
+            ["Складывать числа, вычитать числа"],
         )
 
     def test_existing_comma_objective_ids_remain_valid(self):
+        # Уроки, сгенерированные до перехода на предложения, ссылаются на ID
+        # обрывков до и после запятой — они должны переноситься на одну цель.
         objectives = decompose_objectives("Складывать числа, вычитать числа")
-        self.assertEqual(objectives[0]["id"], persisted_objective_id("Складывать числа"))
-        self.assertEqual(objectives[1]["id"], persisted_objective_id("вычитать числа"))
+        self.assertEqual(len(objectives), 1)
         blocks = [
             {"component": "RetrievalCheck", "content": {
-                "objective_ids": [objectives[0]["id"]],
+                "objective_ids": [persisted_objective_id("Складывать числа")],
                 "evidence_stage": "diagnostic",
                 "type": "multiple_choice",
                 "options": ["1", "2", "3", "4"],
                 "correct_answer": "1",
             }},
             {"component": "RetrievalCheck", "content": {
-                "objective_ids": [objectives[1]["id"]],
+                "objective_ids": [persisted_objective_id("вычитать числа")],
                 "evidence_stage": "diagnostic",
                 "type": "multiple_choice",
                 "options": ["1", "2", "3", "4"],
@@ -116,6 +191,8 @@ class ObjectiveQualityTests(unittest.TestCase):
             error["code"] == "unknown_objective"
             for error in report["quality_report"]["errors"]
         ))
+        for block in report["normalized_blocks"]:
+            self.assertEqual(block["content"]["objective_ids"], [objectives[0]["id"]])
 
     def test_prior_comma_split_ids_are_migrated_when_merge_is_unambiguous(self):
         raw = (
@@ -543,7 +620,261 @@ class ObjectiveQualityTests(unittest.TestCase):
         self.assertFalse(evidence[second["id"]])
 
 
-class LessonPublishRouteTests(unittest.IsolatedAsyncioTestCase):
+def complete_single_objective_blocks(raw_objective):
+    objective = decompose_objectives(raw_objective)[0]
+    return [
+        {"component": "RetrievalCheck", "content": {
+            "objective_ids": [objective["id"]],
+            "evidence_stage": "diagnostic",
+            "type": "multiple_choice",
+            "question": "Диагностика",
+            "options": ["1", "2", "3", "4"],
+            "correct_answer": "1",
+            "explanation": "Проверка перед объяснением.",
+        }},
+        {"component": "ShortExplanation", "content": {
+            "objective_ids": [objective["id"]],
+            "evidence_stage": "explanation",
+            "title": "Объяснение",
+            "text": "Короткое объяснение.",
+            "key_concepts": ["идея"],
+        }},
+        {"component": "GuidedPractice", "content": {
+            "objective_ids": [objective["id"]],
+            "evidence_stage": "practice",
+            "question": "Практика",
+            "hints": ["Подсказка"],
+            "input_type": "numeric",
+            "correct_answer": "1",
+            "explanation": "Разбор.",
+        }},
+        {"component": "MasteryCheck", "content": {
+            "objective_ids": [objective["id"]],
+            "evidence_stage": "assessment",
+            "questions": [{
+                "objective_ids": [objective["id"]],
+                "question": "Итог",
+                "type": "numeric",
+                "correct_answer": "1",
+                "explanation": "Ответ.",
+                "dimension": objective["id"],
+            }],
+        }},
+        {"component": "Reflection", "content": {
+            "prompt": "Что получилось?",
+            "scale_question": "Насколько уверенно?",
+            "scale_labels": ["1", "2", "3", "4"],
+        }},
+    ]
+
+
+class LessonGenerateServiceTests(unittest.IsolatedAsyncioTestCase):
+    def _context(self, lesson=None):
+        teacher = Teacher(id=3, name="Генератор")
+        subject = Subject(
+            id=11,
+            name="Математика",
+            grade=7,
+            hours_per_week=2,
+            hours_per_year=68,
+            source_info=None,
+            instruction_language="ru",
+        )
+        section = Section(
+            id=12,
+            subject_id=subject.id,
+            name="Числа",
+            sort_order=1,
+            total_hours=8,
+        )
+        topic = Topic(
+            id=13,
+            section_id=section.id,
+            ktp_number="1",
+            name="Сложение",
+            hours=1,
+            lesson_type="study",
+            learning_objectives="Складывать числа",
+            skills=["вычисления"],
+            resources="учебник",
+        )
+        return teacher, topic, section, subject, FakeGenerateSession(
+            teacher, topic, section, subject, lesson=lesson,
+        )
+
+    async def test_generate_creates_draft_with_quality_metadata(self):
+        teacher, topic, _section, _subject, db = self._context()
+
+        async def fake_generator(**kwargs):
+            self.assertEqual(kwargs["topic_name"], topic.name)
+            self.assertEqual(kwargs["subject_name"], "Математика")
+            return complete_single_objective_blocks(topic.learning_objectives)
+
+        lesson = await generate_lesson_draft(
+            topic_id=topic.id,
+            teacher_id=teacher.id,
+            db=db,
+            lesson_generator=fake_generator,
+        )
+
+        self.assertEqual(db.commits, 1)
+        self.assertEqual(db.added, [lesson])
+        self.assertEqual(lesson.topic_id, topic.id)
+        self.assertEqual(lesson.status, "draft")
+        self.assertIsNone(lesson.published_at)
+        self.assertIsNone(lesson.published_by)
+        self.assertEqual(lesson.lesson_metadata["teacher_id"], teacher.id)
+        self.assertEqual(lesson.lesson_metadata["subject_family"], "mathematical")
+        self.assertIn("quality_report", lesson.lesson_metadata)
+
+    async def test_generate_reuses_existing_lesson_row(self):
+        teacher, topic, _section, _subject, db = self._context(
+            lesson=GeneratedLesson(
+                id=20,
+                topic_id=13,
+                blocks=[],
+                lesson_metadata={"old": True},
+                status="published",
+            )
+        )
+
+        async def fake_generator(**_kwargs):
+            return complete_single_objective_blocks(topic.learning_objectives)
+
+        lesson = await generate_lesson_draft(
+            topic_id=topic.id,
+            teacher_id=teacher.id,
+            db=db,
+            lesson_generator=fake_generator,
+        )
+
+        self.assertEqual(lesson.id, 20)
+        self.assertEqual(db.added, [])
+        self.assertEqual(lesson.status, "draft")
+        self.assertIsNone(lesson.published_by)
+
+    async def test_generate_failure_is_reported_as_provider_failure(self):
+        teacher, topic, _section, _subject, db = self._context()
+
+        async def broken_generator(**_kwargs):
+            raise RuntimeError("лимит модели")
+
+        with self.assertRaises(LessonServiceError) as rejected:
+            await generate_lesson_draft(
+                topic_id=topic.id,
+                teacher_id=teacher.id,
+                db=db,
+                lesson_generator=broken_generator,
+            )
+
+        self.assertEqual(rejected.exception.status_code, 502)
+        self.assertIn("лимит модели", str(rejected.exception.detail))
+        self.assertEqual(db.commits, 0)
+
+
+class LessonManagementServiceTests(unittest.IsolatedAsyncioTestCase):
+    def _context(self, *, status="published", blocks=None, metadata=None):
+        teacher = Teacher(id=5, name="Методист")
+        topic = Topic(
+            id=21,
+            section_id=1,
+            ktp_number="3",
+            name="Сложение",
+            hours=1,
+            lesson_type="study",
+            learning_objectives="Складывать числа",
+            skills=[],
+            resources=None,
+        )
+        lesson = GeneratedLesson(
+            id=31,
+            topic_id=topic.id,
+            blocks=deepcopy(blocks if blocks is not None else complete_single_objective_blocks(topic.learning_objectives)),
+            lesson_metadata=deepcopy(metadata if metadata is not None else {}),
+            status=status,
+            published_at="published",
+            published_by=teacher.id,
+            model_used="test-model",
+        )
+        return lesson, FakeLessonSession(teacher, lesson, topic)
+
+    async def test_get_lesson_by_topic_refreshes_quality_contract_without_commit(self):
+        lesson, db = self._context(metadata={"legacy": True})
+
+        found = await get_lesson_by_topic(topic_id=lesson.topic_id, role="teacher", db=db)
+
+        self.assertIs(found, lesson)
+        self.assertEqual(db.commits, 0)
+        self.assertTrue(found.lesson_metadata["legacy"])
+        self.assertIn("objectives", found.lesson_metadata)
+        self.assertIn("quality_report", found.lesson_metadata)
+
+    async def test_get_lesson_by_topic_reuses_current_quality_contract(self):
+        metadata = {
+            "objectives": [{"id": "obj-current", "text": "Складывать числа"}],
+            "quality_report": {"publishable": True},
+        }
+        lesson, db = self._context(metadata=metadata)
+
+        found = await get_lesson_by_topic(topic_id=lesson.topic_id, role="teacher", db=db)
+
+        self.assertIs(found, lesson)
+        self.assertEqual(found.lesson_metadata, metadata)
+        self.assertNotIn((Topic, lesson.topic_id), db.get_calls)
+
+    async def test_get_lesson_by_topic_uses_student_not_ready_message(self):
+        _lesson, db = self._context()
+        db.lesson = None
+
+        with self.assertRaises(LessonServiceError) as rejected:
+            await get_lesson_by_topic(topic_id=999, role="student", db=db)
+
+        self.assertEqual(rejected.exception.status_code, 404)
+        self.assertEqual(rejected.exception.detail, "Опубликованный урок пока не готов")
+
+    async def test_update_lesson_blocks_resets_publication_state_and_persists_quality(self):
+        lesson, db = self._context()
+        new_blocks = complete_single_objective_blocks("Складывать числа")
+
+        updated = await update_lesson_blocks(lesson.id, new_blocks, db)
+
+        self.assertIs(updated, lesson)
+        self.assertEqual(db.commits, 1)
+        self.assertEqual(updated.status, "draft")
+        self.assertIsNone(updated.published_at)
+        self.assertIsNone(updated.published_by)
+        self.assertTrue(updated.lesson_metadata["quality_report"]["publishable"])
+
+    async def test_lesson_quality_reports_current_contract(self):
+        lesson, db = self._context()
+
+        report = await get_lesson_quality(lesson.id, db)
+
+        self.assertEqual(len(report["objectives"]), 1)
+        self.assertTrue(report["quality_report"]["publishable"])
+
+    async def test_unpublish_lesson_resets_publication_fields(self):
+        lesson, db = self._context()
+
+        unpublished = await unpublish_lesson(lesson.id, db)
+
+        self.assertIs(unpublished, lesson)
+        self.assertEqual(db.commits, 1)
+        self.assertEqual(unpublished.status, "draft")
+        self.assertIsNone(unpublished.published_at)
+        self.assertIsNone(unpublished.published_by)
+
+    async def test_delete_lesson_record_deletes_and_returns_api_message(self):
+        lesson, db = self._context()
+
+        result = await delete_lesson_record(lesson.id, db)
+
+        self.assertEqual(result, {"message": "Урок удалён"})
+        self.assertEqual(db.deleted, [lesson])
+        self.assertEqual(db.commits, 1)
+
+
+class LessonPublishServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_complete_legacy_lesson_requires_ack_and_persists_metadata_only(self):
         raw_objective = "Вычислять кубические корни"
         original_blocks = [
@@ -587,21 +918,23 @@ class LessonPublishRouteTests(unittest.IsolatedAsyncioTestCase):
         )
         db = FakeLessonSession(teacher, lesson, topic)
 
-        with self.assertRaises(HTTPException) as rejected:
-            await publish(
-                lesson.id,
-                PublishInput(teacher_id=teacher.id, acknowledge_warnings=False),
-                db,
+        with self.assertRaises(LessonServiceError) as rejected:
+            await publish_lesson(
+                lesson_id=lesson.id,
+                teacher_id=teacher.id,
+                acknowledge_warnings=False,
+                db=db,
             )
         self.assertEqual(rejected.exception.status_code, 422)
         self.assertEqual(db.commits, 0)
 
-        response = await publish(
-            lesson.id,
-            PublishInput(teacher_id=teacher.id, acknowledge_warnings=True),
-            db,
+        published = await publish_lesson(
+            lesson_id=lesson.id,
+            teacher_id=teacher.id,
+            acknowledge_warnings=True,
+            db=db,
         )
-        self.assertEqual(response["status"], "published")
+        self.assertEqual(published.status, "published")
         self.assertEqual(db.commits, 1)
         self.assertEqual(
             without_service_metadata(lesson.blocks),
@@ -675,19 +1008,20 @@ class LessonPublishRouteTests(unittest.IsolatedAsyncioTestCase):
         )
         db = FakeLessonSession(teacher, lesson, topic)
 
-        response = await publish(
-            lesson.id,
-            PublishInput(teacher_id=teacher.id, acknowledge_warnings=True),
-            db,
+        published = await publish_lesson(
+            lesson_id=lesson.id,
+            teacher_id=teacher.id,
+            acknowledge_warnings=True,
+            db=db,
         )
-        canonical_id = response["lesson_metadata"]["objectives"][0]["id"]
-        self.assertEqual(response["status"], "published")
-        self.assertEqual(len(response["lesson_metadata"]["objectives"]), 1)
+        canonical_id = published.lesson_metadata["objectives"][0]["id"]
+        self.assertEqual(published.status, "published")
+        self.assertEqual(len(published.lesson_metadata["objectives"]), 1)
         self.assertEqual(
-            response["blocks"][1]["content"]["objective_ids"],
+            published.blocks[1]["content"]["objective_ids"],
             [canonical_id],
         )
-        subsequent = quality_report(response["blocks"], raw_objective)
+        subsequent = quality_report(published.blocks, raw_objective)
         self.assertTrue(subsequent["quality_report"]["publishable"])
         self.assertFalse(subsequent["quality_report"]["errors"])
 

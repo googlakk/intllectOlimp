@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from models import Student, Teacher
+from routes.http_errors import raise_http_error
+from services.auth import AuthServiceError, list_login_users, login_user
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -14,23 +14,17 @@ class LoginInput(BaseModel):
     name: str
 
 
-def to_dict(user, role: str):
-    return {"id": user.id, "name": user.name, "role": role, "grade": getattr(user, "grade", None)}
-
-
 @router.get("/users")
 async def users(db: AsyncSession = Depends(get_db)):
-    students = (await db.scalars(select(Student).order_by(Student.name))).all()
-    teachers = (await db.scalars(select(Teacher).order_by(Teacher.name))).all()
-    return {"students": [to_dict(u, "student") for u in students], "teachers": [to_dict(u, "teacher") for u in teachers]}
+    try:
+        return await list_login_users(db)
+    except AuthServiceError as exc:
+        raise_http_error(exc)
 
 
 @router.post("/login")
 async def login(payload: LoginInput, db: AsyncSession = Depends(get_db)):
-    if payload.role not in {"student", "teacher"}:
-        raise HTTPException(400, "Неизвестная роль")
-    model = Student if payload.role == "student" else Teacher
-    user = await db.scalar(select(model).where(model.name == payload.name))
-    if not user:
-        raise HTTPException(404, "Пользователь не найден")
-    return to_dict(user, payload.role)
+    try:
+        return await login_user(payload.role, payload.name, db)
+    except AuthServiceError as exc:
+        raise_http_error(exc)

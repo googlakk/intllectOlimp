@@ -1,0 +1,70 @@
+[agents]
+max_concurrent_threads_per_session = 6
+
+[mcp_servers.openaiDeveloperDocs]
+url = "https://developers.openai.com/mcp"
+required = true
+default_tools_approval_mode = "approve"
+startup_timeout_sec = 20
+tool_timeout_sec = 45
+
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+required = true
+default_tools_approval_mode = "approve"
+startup_timeout_sec = 30
+tool_timeout_sec = 60
+
+[mcp_servers.linear]
+url = "https://mcp.linear.app/mcp"
+required = false
+default_tools_approval_mode = "prompt"
+startup_timeout_sec = 20
+tool_timeout_sec = 45
+
+[mcp_servers.figma]
+url = "https://mcp.figma.com/mcp"
+required = false
+default_tools_approval_mode = "prompt"
+startup_timeout_sec = 20
+tool_timeout_sec = 45
+
+[mcp_servers.supabase]
+enabled = false
+
+[mcp_servers.supabase_plain]
+enabled = false
+
+[mcp_servers.supabase_work_kylymedu_stage]
+enabled = false
+
+[mcp_servers.supabase_clients_clienta_app_stage]
+enabled = false
+
+[mcp_servers.supabase_personal_lab_dev]
+enabled = false
+
+[mcp_servers.stitch]
+enabled = false
+
+[mcp_servers.pencil]
+enabled = false
+
+[browser_use.default_origin_policy]
+downloads = "deny"
+uploads = "deny"
+full_cdp_access = "deny"
+persistent_approval = false
+
+[browser_use.origins."http://127.0.0.1:*"]
+access = "allow"
+downloads = "deny"
+uploads = "deny"
+persistent_approval = false
+
+[browser_use.origins."http://localhost:*"]
+access = "allow"
+downloads = "deny"
+uploads = "deny"
+persistent_approval = false

@@ -3,10 +3,41 @@ import os
 import re
 from typing import Any
 
-from anthropic import AsyncAnthropic
-from objectives import decompose_objectives
+import tempfile
+from pathlib import Path
+
+from objectives import ALLOWED_COMPONENTS, decompose_objectives
 
 MODEL = "claude-sonnet-4-6"
+
+# Потолок ответа. Урок по литературе с тремя целями и четырьмя этапами на цель
+# в 8192 токена не помещался: ответ обрывался посередине, JSON переставал быть
+# JSON, и оба захода падали с «некорректный JSON урока». Выше 21333 поднимать
+# нельзя — SDK потребует стриминг (см. ktp/mapper.py).
+MAX_TOKENS = 16000
+
+LESSON_TOOL = {
+    "name": "submit_lesson",
+    "description": "Передать готовый урок — массив блоков.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "blocks": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "component": {"type": "string", "enum": sorted(ALLOWED_COMPONENTS)},
+                        "content": {"type": "object"},
+                    },
+                    "required": ["component", "content"],
+                },
+            },
+        },
+        "required": ["blocks"],
+    },
+}
 
 SUBJECT_FAMILY_PROFILES = {
     "mathematical": {
@@ -95,7 +126,8 @@ SYSTEM_PROMPT = """
 Язык всего учебного текста, инструкций, вариантов ответов, объяснений, подписей и обратной
 связи передаётся в запросе. Строго используй только этот язык.
 
-Верни ТОЛЬКО корректный JSON-массив без Markdown, комментариев и пояснений.
+Урок передавай вызовом инструмента submit_lesson: массив blocks, в каждом
+элементе component и content. Ничего не пиши текстом.
 Каждый элемент массива имеет ровно такую оболочку:
 {"component": "ИмяКомпонента", "content": { ... }}
 
@@ -177,6 +209,32 @@ def _extract_text(response: Any) -> str:
     return "".join(block.text for block in response.content if getattr(block, "type", "") == "text")
 
 
+def _blocks_from_tool(response: Any) -> list[dict[str, Any]] | None:
+    """Блоки из вызова инструмента. None — инструмент не заполнен."""
+    tool_block = next(
+        (b for b in response.content if getattr(b, "type", "") == "tool_use"), None
+    )
+    if tool_block is None:
+        return None
+    blocks = dict(tool_block.input).get("blocks")
+    if not isinstance(blocks, list):
+        return None
+    return _validate_blocks(blocks)
+
+
+def _validate_blocks(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not value:
+        raise ValueError("Урок должен быть непустым массивом блоков")
+    for block in value:
+        if (
+            not isinstance(block, dict)
+            or not isinstance(block.get("component"), str)
+            or not isinstance(block.get("content"), dict)
+        ):
+            raise ValueError("Некорректная структура блока")
+    return value
+
+
 def _parse_blocks(raw: str) -> list[dict[str, Any]]:
     cleaned = raw.strip()
     fenced = re.fullmatch(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned, flags=re.IGNORECASE)
@@ -205,15 +263,7 @@ async def generate_lesson(
     lesson_type: str | None = None,
     content_language: str = "ru",
 ) -> list[dict[str, Any]]:
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY не настроен")
-    workspace_id = os.getenv("ANTHROPIC_WORKSPACE_ID")
-    if not workspace_id:
-        raise RuntimeError(
-            "ANTHROPIC_WORKSPACE_ID не настроен. "
-            "Для этого ключа Anthropic требуется ID workspace."
-        )
+    from llm import TASK_LESSON, call_tool
 
     profile = classify_subject(subject_name)
     archetype = select_archetype(
@@ -244,30 +294,58 @@ async def generate_lesson(
 "diagnostic" на каждую цель. Каждый диагностический блок и каждый отдельный итоговый
 вопрос проверяет ровно одну цель. Для каждой цели обязательно дай объяснение, практику и
 независимую итоговую проверку.
-Ответь только JSON-массивом блоков.
+Передай урок вызовом инструмента submit_lesson.
 """.strip()
 
-    client = AsyncAnthropic(
-        api_key=api_key,
-        default_headers={"anthropic-workspace-id": workspace_id},
-    )
     last_error: Exception | None = None
     retry_prompt = user_prompt
+    result = None
     for attempt in range(2):
-        response = await client.messages.create(
-            model=MODEL,
-            max_tokens=8192,
+        result = await call_tool(
+            TASK_LESSON,
             system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": retry_prompt}],
+            user=retry_prompt,
+            tool=LESSON_TOOL,
+            max_tokens=MAX_TOKENS,
         )
-        try:
-            return _parse_blocks(_extract_text(response))
-        except (json.JSONDecodeError, ValueError) as exc:
-            last_error = exc
-            retry_prompt = (
-                user_prompt
-                + "\nПредыдущий ответ не удалось разобрать как требуемый JSON. "
-                "Исправь структуру и снова верни только JSON-массив без Markdown."
+
+        # Обрыв по лимиту — не «некорректный JSON». Повтор тем же запросом
+        # ничего не даст, поэтому говорим прямо, что урок не поместился.
+        if result.truncated:
+            raise RuntimeError(
+                f"Урок не поместился в ответ модели {result.model} "
+                f"({MAX_TOKENS} токенов). Тема слишком объёмная: уменьшите число "
+                "целей обучения у темы, выберите модель с большим лимитом или "
+                "поднимите MAX_TOKENS в ai/generator.py (не выше 21333)."
             )
 
-    raise RuntimeError("Модель дважды вернула некорректный JSON урока") from last_error
+        try:
+            if result.ok:
+                return _validate_blocks(result.data.get("blocks"))
+            # Инструмент не заполнен — пробуем разобрать текст, как раньше.
+            return _validate_blocks(_parse_blocks(result.text))
+        except (json.JSONDecodeError, ValueError) as exc:
+            last_error = exc
+            if attempt == 0:
+                retry_prompt = (
+                    user_prompt
+                    + "\nПредыдущий ответ не удалось разобрать. "
+                    "Передай урок вызовом инструмента submit_lesson."
+                )
+
+    # Второй заход тоже не дал структуры — сохраняем сырой ответ, чтобы
+    # не гадать вслепую, и называем поставщика и модель.
+    dump = Path(tempfile.gettempdir()) / "lesson-raw.txt"
+    try:
+        dump.write_text(
+            f"provider={result.provider} model={result.model} "
+            f"stop={result.stop_reason}\n\n{result.text}",
+            encoding="utf-8",
+        )
+        where = f" Сырой ответ: {dump}"
+    except OSError:
+        where = ""
+    raise RuntimeError(
+        f"Модель {result.model} дважды вернула урок в неожиданном виде: "
+        f"{last_error}.{where}"
+    ) from last_error

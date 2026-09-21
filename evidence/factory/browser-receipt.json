@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-09-21T17:24:05.501Z",
+  "status": "skipped-no-HARNESS_VISUAL_URL",
+  "url": "",
+  "note": "Set HARNESS_VISUAL_URL to make visual evidence mandatory for UI/design lanes.",
+  "expectedScreenshots": [
+    "evidence/factory/desktop.png",
+    "evidence/factory/mobile.png"
+  ]
+}

@@ -1,21 +1,17 @@
 import { Trophy, Target, BookOpen, Brain, Loader2 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useGetStudentProgress } from '@/lib/api';
+import { buildProgressOverview } from '@/features/progress/overview';
 
 export default function Progress() {
   const { user } = useAuth();
   const { data: progress = [], isLoading } = useGetStudentProgress(user?.id || 0, !!user?.id);
-  const completed = progress.filter((item) => item.status === 'completed').length;
-  const mastered = progress.filter((item) => item.mastery_status === 'mastered').length;
-  const objectiveResults = progress.flatMap((item) => Object.values(item.objective_mastery || {}));
-  const masteredObjectives = objectiveResults.filter((item) => item.status === 'mastered').length;
-  const needsPractice = objectiveResults.filter((item) => item.status === 'needs_practice').length;
-  const average = progress.length ? Math.round(progress.reduce((sum, item) => sum + (item.score || 0), 0) / progress.length) : null;
+  const overview = buildProgressOverview(progress);
   const stats = [
-    { label: 'Завершено уроков', value: String(completed), icon: BookOpen, color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
-    { label: 'Освоено целей', value: String(masteredObjectives), icon: Target, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-    { label: 'Уроков с мастерством', value: String(mastered), icon: Trophy, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { label: 'Средний результат', value: average === null ? '—' : `${average}%`, icon: Brain, color: 'text-primary', bg: 'bg-primary/10' },
+    { label: 'Завершено уроков', value: String(overview.completedLessons), icon: BookOpen, color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
+    { label: 'Освоено целей', value: String(overview.masteredObjectives), icon: Target, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { label: 'Уроков с мастерством', value: String(overview.masteredLessons), icon: Trophy, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { label: 'Средний результат', value: overview.averageScore === null ? '—' : `${overview.averageScore}%`, icon: Brain, color: 'text-primary', bg: 'bg-primary/10' },
   ];
 
   return (
@@ -46,11 +42,11 @@ export default function Progress() {
           </h3>
           <div className="space-y-8">
             {progress.length === 0 ? (
-              <p data-testid="progress-empty" className="text-muted-foreground">Пока нет завершённых уроков с измеренными результатами.</p>
+                <p data-testid="progress-empty" className="text-muted-foreground">Пока нет завершённых уроков с измеренными результатами.</p>
             ) : (
               <div className="space-y-3 text-sm text-muted-foreground">
-                <p>Освоено целей: <strong className="text-foreground">{masteredObjectives}</strong></p>
-                <p>Целей требуют практики: <strong className="text-foreground">{needsPractice}</strong></p>
+                <p>Освоено целей: <strong className="text-foreground">{overview.masteredObjectives}</strong></p>
+                <p>Целей требуют практики: <strong className="text-foreground">{overview.objectivesNeedingPractice}</strong></p>
                 <p>Результаты рассчитаны по сохранённым ответам, а не по демонстрационным показателям.</p>
               </div>
             )}
@@ -61,7 +57,7 @@ export default function Progress() {
            <Trophy className="w-24 h-24 text-primary mb-8 opacity-90 drop-shadow-md" />
            <h3 className="text-2xl font-bold text-foreground mb-3">Следующая цель</h3>
            <p className="text-muted-foreground max-w-sm font-medium leading-relaxed">
-              {needsPractice > 0 ? 'Вернитесь к целям, которым нужна дополнительная практика.' : 'Завершите урок с измеренными целями, чтобы увидеть следующий результат.'}
+              {overview.nextGoalText}
            </p>
         </div>
       </div>

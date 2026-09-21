@@ -1,0 +1,86 @@
+"""Поставщик Anthropic — прямое обращение, без посредника.
+
+Остаётся в проекте намеренно: за прямой доступ не берётся комиссия шлюза,
+и это запасной путь, если шлюз окажется недоступен.
+"""
+
+from __future__ import annotations
+
+import os
+from typing import Any
+
+from .base import STOP_MAX_TOKENS, STOP_OTHER, STOP_TOOL, LLMError, ToolResult
+
+
+class AnthropicProvider:
+    name = "anthropic"
+
+    def __init__(self, client: Any | None = None) -> None:
+        self._client = client
+
+    def _build_client(self) -> Any:
+        if self._client is not None:
+            return self._client
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise LLMError("ANTHROPIC_API_KEY не настроен", provider=self.name)
+        kwargs: dict[str, Any] = {"api_key": api_key}
+        # Workspace нужен не всем ключам, поэтому он необязателен.
+        workspace_id = os.getenv("ANTHROPIC_WORKSPACE_ID")
+        if workspace_id:
+            kwargs["default_headers"] = {"anthropic-workspace-id": workspace_id}
+        from anthropic import AsyncAnthropic
+
+        self._client = AsyncAnthropic(**kwargs)
+        return self._client
+
+    async def call_tool(
+        self,
+        *,
+        system: str,
+        user: str,
+        tool: dict[str, Any],
+        model: str,
+        max_tokens: int,
+    ) -> ToolResult:
+        client = self._build_client()
+        try:
+            message = await client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                system=system,
+                tools=[tool],
+                tool_choice={"type": "tool", "name": tool["name"]},
+                messages=[{"role": "user", "content": user}],
+            )
+        except Exception as exc:  # сеть, ключ, лимиты — наверх с контекстом
+            raise LLMError(f"Запрос не прошёл: {exc}", provider=self.name, model=model) from exc
+
+        text = "".join(
+            block.text for block in message.content
+            if getattr(block, "type", "") == "text"
+        )
+        usage = {}
+        if getattr(message, "usage", None) is not None:
+            usage = {
+                "input_tokens": getattr(message.usage, "input_tokens", None),
+                "output_tokens": getattr(message.usage, "output_tokens", None),
+            }
+
+        tool_block = next(
+            (b for b in message.content if getattr(b, "type", "") == "tool_use"), None
+        )
+        if tool_block is not None:
+            return ToolResult(
+                data=dict(tool_block.input),
+                stop_reason=STOP_TOOL,
+                text=text,
+                provider=self.name,
+                model=model,
+                usage=usage,
+            )
+
+        stop = STOP_MAX_TOKENS if message.stop_reason == "max_tokens" else STOP_OTHER
+        return ToolResult(
+            stop_reason=stop, text=text, provider=self.name, model=model, usage=usage,
+        )

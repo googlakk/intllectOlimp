@@ -1,108 +1,38 @@
 import { useParams, Link } from 'wouter';
 import { AlertTriangle, ArrowLeft, Loader2, Sparkles, Globe, EyeOff, CheckCircle2, XCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useGetLesson, useGenerateLesson, usePublishLesson, useUnpublishLesson } from '@/lib/api';
+import { useGetLesson } from '@/lib/api';
 import BlockRenderer from '@/components/blocks/BlockRenderer';
-import { useAuth } from '@/components/auth/AuthContext';
-import { useQueryClient } from '@tanstack/react-query';
+import { getLessonQualityState } from '@/features/lessons/quality';
+import { useLessonEditorWorkflow } from '@/features/lessonEditor/workflow';
 
 export default function LessonEditor() {
   const { topicId } = useParams();
   const tId = Number(topicId);
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
 
   const { data: lesson, isLoading: isLoadingLesson } = useGetLesson(tId, 'teacher');
-  const generateLessonMutation = useGenerateLesson();
-  const publishLessonMutation = usePublishLesson();
-  const unpublishLessonMutation = useUnpublishLesson();
+  const {
+    generateLesson,
+    generateLessonMutation,
+    publishLessonMutation,
+    togglePublication,
+    unpublishLessonMutation,
+  } = useLessonEditorWorkflow(tId, lesson);
   const [warningsAcknowledged, setWarningsAcknowledged] = useState(false);
 
   const blocks = lesson?.blocks || [];
   const isPublished = lesson?.status === 'published';
-  const metadata = lesson?.lesson_metadata;
-  const objectives = metadata?.objectives || [];
-  const qualityReport = metadata?.quality_report;
-  const hasObjectiveContract = objectives.length > 0 || Boolean(qualityReport);
-  const objectiveIdsForBlock = (block: typeof blocks[number]) => {
-    const ids = block.content?.objective_ids;
-    if (Array.isArray(ids)) return ids.filter((id): id is string => typeof id === 'string');
-    return typeof ids === 'string' ? [ids] : [];
-  };
-  const qualityMessage = (item: unknown) => {
-    if (typeof item === 'string') return item;
-    if (item && typeof item === 'object') {
-      const value = item as Record<string, unknown>;
-      return String(value.message || value.detail || value.code || JSON.stringify(item));
-    }
-    return String(item);
-  };
-  const groupedMessages = (items: unknown[]) => {
-    const groups = new Map<string, { message: string; count: number }>();
-    items.forEach((item) => {
-      const message = qualityMessage(item);
-      const code = item && typeof item === 'object'
-        ? String((item as Record<string, unknown>).code || message)
-        : message;
-      const current = groups.get(code);
-      groups.set(code, { message, count: (current?.count || 0) + 1 });
-    });
-    return Array.from(groups.values()).map(({ message, count }) => (
-      count > 1 ? `${message} (${count} блоков)` : message
-    ));
-  };
-  const coverage = useMemo(() => objectives.map((objective) => {
-    const related = blocks.filter((block) => objectiveIdsForBlock(block).includes(objective.id));
-    const report = qualityReport?.objectives?.[objective.id];
-    return {
-      objective,
-      explanation: report ? (report.explanation?.length || 0) > 0 : related.some((block) => ['ShortExplanation', 'KeyConcept', 'WorkedExample', 'Presentation', 'Illustration'].includes(block.component)),
-      practice: report ? (report.practice?.length || 0) > 0 : related.some((block) => ['GuidedPractice', 'IndependentProblem', 'RetrievalCheck', 'TextEvidencePicker', 'ArgumentBuilder'].includes(block.component)),
-      assessment: report ? (report.assessment?.length || 0) > 0 : related.some((block) => block.component === 'MasteryCheck' || ['IndependentProblem', 'RetrievalCheck', 'TextEvidencePicker', 'ArgumentBuilder'].includes(block.component)),
-    };
-  }), [objectives, blocks, qualityReport]);
-  const blockingIssues = [
-    ...(qualityReport?.publishable === false ? ['Автоматическая проверка считает урок непригодным к публикации'] : []),
-    ...groupedMessages(qualityReport?.errors || []),
-    ...(qualityReport?.gaps || []).map((gap) => typeof gap === 'string' ? `Не покрыта цель: ${gap}` : `Не покрыта цель: ${gap.objective || gap.objective_id || 'неизвестная цель'} (${(gap.missing || []).join(', ')})`),
-    ...(!hasObjectiveContract && blocks.length > 0 ? ['Старый урок нужно проверить или перегенерировать перед публикацией'] : []),
-    ...(hasObjectiveContract && !qualityReport ? ['Для нового урока отсутствует отчёт проверки качества'] : []),
-  ];
-  const warningMessages = groupedMessages(qualityReport?.warnings || []);
-  const canPublish = blockingIssues.length === 0 && (warningMessages.length === 0 || warningsAcknowledged);
-
-  const handleGenerate = () => {
-    if (!user) return;
-    generateLessonMutation.mutate({ topic_id: tId, teacher_id: user.id }, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['lesson', tId, 'teacher'] });
-        queryClient.invalidateQueries({ queryKey: ['lesson-status', tId] });
-      }
-    });
-  };
-
-  const handleTogglePublish = () => {
-    if (!lesson || !user) return;
-    if (isPublished) {
-      unpublishLessonMutation.mutate(lesson.id, {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ['lesson', tId, 'teacher'] });
-          queryClient.invalidateQueries({ queryKey: ['lesson-status', tId] });
-        }
-      });
-    } else {
-      publishLessonMutation.mutate({
-        lesson_id: lesson.id,
-        teacher_id: user.id,
-        acknowledge_warnings: warningsAcknowledged,
-      }, {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ['lesson', tId, 'teacher'] });
-          queryClient.invalidateQueries({ queryKey: ['lesson-status', tId] });
-        }
-      });
-    }
-  };
+  const {
+    objectives,
+    hasObjectiveContract,
+    coverage,
+    blockingIssues,
+    warningMessages,
+    canPublish,
+  } = useMemo(
+    () => getLessonQualityState(lesson, warningsAcknowledged),
+    [lesson, warningsAcknowledged],
+  );
 
   return (
     <div className="max-w-4xl mx-auto h-[calc(100vh-8rem)] flex flex-col pb-12">
@@ -125,7 +55,7 @@ export default function LessonEditor() {
         <div className="flex gap-3">
           {blocks.length > 0 && (
             <button 
-              onClick={handleTogglePublish}
+              onClick={() => togglePublication(warningsAcknowledged)}
               disabled={publishLessonMutation.isPending || unpublishLessonMutation.isPending || (!isPublished && !canPublish)}
               className={`px-6 py-2.5 text-sm font-bold rounded-xl border shadow-sm transition-colors flex items-center gap-2 ${
                 isPublished 
@@ -231,7 +161,7 @@ export default function LessonEditor() {
             )}
             <div className="flex justify-end mb-6">
                <button 
-                  onClick={handleGenerate}
+                  onClick={generateLesson}
                   disabled={generateLessonMutation.isPending}
                   className="px-4 py-2 bg-muted/50 text-foreground font-bold rounded-xl hover:bg-muted transition-colors flex items-center gap-2 text-sm"
                >
@@ -251,7 +181,7 @@ export default function LessonEditor() {
                Сгенерируйте материалы урока с помощью ИИ. Это займет около 15-30 секунд.
              </p>
              <button 
-                onClick={handleGenerate}
+               onClick={generateLesson}
                 disabled={generateLessonMutation.isPending}
                 className="px-8 py-3.5 bg-primary text-primary-foreground font-bold border border-transparent rounded-xl shadow-md shadow-primary/20 hover:bg-primary/90 transition-all flex items-center justify-center gap-2 mx-auto disabled:opacity-70 disabled:hover:bg-primary"
              >

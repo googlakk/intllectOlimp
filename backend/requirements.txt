@@ -8,3 +8,4 @@ pydantic
 python-docx
 pdfplumber
 python-multipart
+pytest
