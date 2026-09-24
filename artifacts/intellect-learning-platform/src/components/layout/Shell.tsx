@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
 import { useAuth } from '@/components/auth/AuthContext';
-import { LogOut, BookOpen, BarChart, LayoutDashboard, FileText, Blocks, type LucideIcon } from 'lucide-react';
+import { LogOut, BookOpen, BarChart, LayoutDashboard, FileText, Blocks, Users, type LucideIcon } from 'lucide-react';
 
 export function Shell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
@@ -23,7 +23,7 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="min-h-[100dvh] flex flex-col bg-background selection:bg-primary/20 selection:text-primary">
       <header className="h-16 border-b border-border/50 bg-card/80 backdrop-blur-xl px-4 md:px-6 flex items-center justify-between sticky top-0 z-50 transition-all shadow-sm">
         <div className="flex items-center gap-8">
-          <Link href={user.role === 'student' ? '/learn' : '/dashboard'} className="flex items-center gap-2.5 text-foreground font-bold text-xl tracking-tight group">
+          <Link href={user.role === 'student' ? '/learn' : user.role === 'admin' ? '/admin/accounts' : '/dashboard'} className="flex items-center gap-2.5 text-foreground font-bold text-xl tracking-tight group">
             <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
               <span className="leading-none mt-0.5">И</span>
             </div>
@@ -38,6 +38,7 @@ export function Shell({ children }: { children: ReactNode }) {
             ) : (
               <>
                 <NavLink href="/dashboard" icon={LayoutDashboard} label="Обзор" />
+                <NavLink href={user.role === 'admin' ? '/admin/accounts' : '/dashboard/students'} icon={Users} label="Классы" />
                 <NavLink href="/dashboard/lessons" icon={FileText} label="Уроки" />
                 <NavLink href="/dashboard/components" icon={Blocks} label="Компоненты" />
               </>
@@ -47,7 +48,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <div className="flex items-center gap-4">
           <div className="hidden md:block text-sm text-right">
             <div className="font-semibold text-foreground leading-tight">{user.name}</div>
-            <div className="text-muted-foreground text-xs font-medium">{user.role === 'student' ? `${user.grade} класс` : 'Преподаватель'}</div>
+            <div className="text-muted-foreground text-xs font-medium">{user.role === 'student' ? `${user.grade} класс` : user.role === 'admin' ? 'Администратор' : 'Преподаватель'}</div>
           </div>
           <button onClick={logout} className="p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-full transition-colors" title="Выйти">
             <LogOut className="w-5 h-5" />
@@ -65,6 +66,7 @@ export function Shell({ children }: { children: ReactNode }) {
           ) : (
             <>
               <NavLink href="/dashboard" icon={LayoutDashboard} label="Обзор" />
+              <NavLink href={user.role === 'admin' ? '/admin/accounts' : '/dashboard/students'} icon={Users} label="Классы" />
               <NavLink href="/dashboard/lessons" icon={FileText} label="Уроки" />
               <NavLink href="/dashboard/components" icon={Blocks} label="Компоненты" />
             </>

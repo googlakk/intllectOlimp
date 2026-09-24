@@ -47,6 +47,7 @@
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@types/dompurify": "^3.2.0",
+    "@types/matter-js": "^0.20.2",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
@@ -78,5 +79,22 @@
     "vitest": "^5.0.1",
     "wouter": "^3.3.5",
     "zod": "catalog:"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@xstate/react": "^6.1.0",
+    "@xyflow/react": "^12.11.6",
+    "blockly": "^13.3.0",
+    "matter-js": "^0.20.0",
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "vega": "^6.4.0",
+    "vega-embed": "^7.2.0",
+    "vega-lite": "^6.4.3",
+    "xstate": "^5.33.2"
   }
 }

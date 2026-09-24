@@ -16,8 +16,11 @@ EXPLANATION_COMPONENTS = {
     "WorkedExample",
     "Presentation",
     "Illustration",
+    "GeneratedMedia",
     "MindMap",
     "Timeline",
+    "PredictionLab",
+    "HotspotInvestigation",
 }
 PRACTICE_COMPONENTS = {
     "GuidedPractice",
@@ -25,6 +28,14 @@ PRACTICE_COMPONENTS = {
     "TextEvidencePicker",
     "ArgumentBuilder",
     "InteractiveGraph",
+    "SortAndClassify",
+    "ProcessBuilder",
+    "ArgumentMap",
+    "BranchingScenario",
+    "MisconceptionDebugger",
+    "DataInvestigation",
+    "PhysicsSandbox",
+    "CodeBlocksLab",
 }
 ASSESSMENT_COMPONENTS = {"RetrievalCheck", "MasteryCheck"}
 INDEPENDENT_ASSESSMENT_COMPONENTS = {
@@ -32,7 +43,27 @@ INDEPENDENT_ASSESSMENT_COMPONENTS = {
     "RetrievalCheck",
     "TextEvidencePicker",
     "ArgumentBuilder",
+    "SortAndClassify",
+    "ProcessBuilder",
+    "ArgumentMap",
+    "BranchingScenario",
+    "MisconceptionDebugger",
+    "PredictionLab",
+    "DataInvestigation",
+    "PhysicsSandbox",
+    "HotspotInvestigation",
+    "CodeBlocksLab",
     "MasteryCheck",
+}
+HEAVY_ENGINE_COMPONENTS = {
+    "ProcessBuilder",
+    "ArgumentMap",
+    "BranchingScenario",
+    "PredictionLab",
+    "DataInvestigation",
+    "PhysicsSandbox",
+    "HotspotInvestigation",
+    "CodeBlocksLab",
 }
 STAGE_COMPONENTS = {
     "diagnostic": {"RetrievalCheck"},
@@ -44,7 +75,11 @@ ALLOWED_COMPONENTS = {
     "ShortExplanation", "KeyConcept", "WorkedExample", "GuidedPractice",
     "IndependentProblem", "RetrievalCheck", "MindMap", "Timeline",
     "TextEvidencePicker", "ArgumentBuilder", "InteractiveGraph",
-    "Presentation", "Illustration", "MasteryCheck", "Reflection",
+    "Presentation", "Illustration", "GeneratedMedia", "MasteryCheck", "Reflection",
+    "SortAndClassify", "ProcessBuilder", "ArgumentMap",
+    "BranchingScenario", "MisconceptionDebugger", "PredictionLab",
+    "DataInvestigation", "PhysicsSandbox", "HotspotInvestigation",
+    "CodeBlocksLab",
 }
 
 
@@ -419,6 +454,7 @@ def build_coverage(
     objectives: list[dict[str, Any]],
     *,
     allow_legacy_diagnostic_order: bool = False,
+    assessment_only: bool = False,
 ) -> dict[str, Any]:
     ids = {item["id"] for item in objectives}
     coverage = {
@@ -509,7 +545,8 @@ def build_coverage(
         errors.extend(validate_block_answers(block, index))
     gaps = []
     for objective_id, item in coverage.items():
-        missing = [stage for stage in ("diagnostic", "explanation", "practice", "assessment") if not item[stage]]
+        required_stages = ("assessment",) if assessment_only else ("diagnostic", "explanation", "practice", "assessment")
+        missing = [stage for stage in required_stages if not item[stage]]
         teaching = item["explanation"] + item["practice"]
         if (
             item["diagnostic"]
@@ -536,7 +573,88 @@ def build_coverage(
     }
 
 
-def quality_report(blocks: list[dict[str, Any]], raw_objectives: str | None) -> dict[str, Any]:
+def _lesson_shape_warnings_and_errors(
+    blocks: list[dict[str, Any]],
+    topic_contract: dict[str, Any] | None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    if not isinstance(topic_contract, dict):
+        return [], []
+
+    errors: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+    budget = topic_contract.get("block_budget")
+    budget = budget if isinstance(budget, dict) else {}
+    minimum = budget.get("min")
+    maximum = budget.get("max")
+    heavy_max = budget.get("heavy_max")
+    block_count = len(blocks)
+    shape = str(topic_contract.get("lesson_shape") or "")
+    volume = str(topic_contract.get("volume") or "")
+
+    if isinstance(minimum, int) and block_count < minimum:
+        errors.append({
+            "code": "lesson_too_short_for_topic_volume",
+            "message": (
+                f"Урок слишком короткий для объёма темы: {block_count} блоков, "
+                f"ожидается минимум {minimum}."
+            ),
+            "block_count": block_count,
+            "expected_min": minimum,
+        })
+    if isinstance(maximum, int) and block_count > maximum:
+        warnings.append({
+            "code": "lesson_exceeds_topic_block_budget",
+            "message": (
+                f"Урок превышает рекомендуемый объём: {block_count} блоков, "
+                f"рекомендуется до {maximum}."
+            ),
+            "block_count": block_count,
+            "expected_max": maximum,
+        })
+
+    heavy_count = sum(1 for block in blocks if block.get("component") in HEAVY_ENGINE_COMPONENTS)
+    if isinstance(heavy_max, int) and heavy_count > heavy_max:
+        warnings.append({
+            "code": "too_many_heavy_interactive_blocks",
+            "message": (
+                f"Слишком много тяжёлых интерактивных блоков для этого объёма темы: "
+                f"{heavy_count}, рекомендуется до {heavy_max}."
+            ),
+            "heavy_count": heavy_count,
+            "heavy_max": heavy_max,
+        })
+
+    if volume == "micro" and block_count > 9:
+        warnings.append({
+            "code": "micro_topic_overexpanded",
+            "message": "Маленькая тема выглядит перегруженной; сократите объяснение или практику.",
+        })
+    if shape == "assessment_only" or topic_contract.get("lesson_type") == "assessment":
+        for index, block in enumerate(blocks):
+            if block.get("component") not in {"RetrievalCheck", "IndependentProblem", "MasteryCheck"}:
+                errors.append({
+                    "code": "assessment_unsupported_component", "block": index,
+                    "message": "В контрольной используйте вопрос, самостоятельную задачу или итоговую проверку. Разбор доступен после сдачи.",
+                })
+    if shape == "project_or_practical":
+        has_criteria = any(
+            isinstance(block.get("content"), dict)
+            and any("критер" in str(value).casefold() for value in block["content"].values())
+            for block in blocks
+        )
+        if not has_criteria:
+            warnings.append({
+                "code": "project_lesson_missing_criteria",
+                "message": "Проектный урок должен явно описывать критерии результата.",
+            })
+    return errors, warnings
+
+
+def quality_report(
+    blocks: list[dict[str, Any]],
+    raw_objectives: str | None,
+    topic_contract: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     objectives = decompose_objectives(raw_objectives)
     # Уроки, сгенерированные до перехода на деление по предложениям, ссылаются
     # на прежние идентификаторы — переносим их на нынешние цели.
@@ -550,8 +668,16 @@ def quality_report(blocks: list[dict[str, Any]], raw_objectives: str | None) -> 
         normalized_blocks,
         objectives,
         allow_legacy_diagnostic_order=bool(normalization_warnings),
+        assessment_only=bool(topic_contract and (topic_contract.get("lesson_type") == "assessment" or topic_contract.get("lesson_shape") == "assessment_only")),
     )
+    shape_errors, shape_warnings = _lesson_shape_warnings_and_errors(
+        normalized_blocks,
+        topic_contract,
+    )
+    coverage["errors"] = coverage["errors"] + shape_errors
     coverage["warnings"] = normalization_warnings + coverage["warnings"]
+    coverage["warnings"] = coverage["warnings"] + shape_warnings
+    coverage["publishable"] = not coverage["errors"] and not coverage["gaps"] and bool(objectives)
     return {
         "objectives": objectives,
         "normalized_blocks": normalized_blocks,

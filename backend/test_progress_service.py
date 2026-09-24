@@ -1,13 +1,14 @@
 import unittest
 from types import SimpleNamespace
 
-from models import Student, Topic
+from models import Section, Student, Subject, Topic
 from services.progress import (
     ProgressServiceError,
     derive_canonical_mastery,
     derive_mastery_status,
     get_student_topic_progress,
     list_student_progress,
+    restart_progress_record,
     save_progress_record,
 )
 from objectives import decompose_objectives
@@ -35,21 +36,43 @@ class FakeReadSession:
     async def scalars(self, _statement):
         return FakeScalars(self.rows)
 
+    async def execute(self, _statement):
+        return FakeScalars([(row, "Тема", None) for row in self.rows])
+
     async def scalar(self, _statement):
         return self.scalar_row
 
 
 class FakeSaveValidationSession:
-    def __init__(self, *, student=None, topic=None):
+    def __init__(self, *, student=None, topic=None, section=None, subject=None):
         self.student = student
         self.topic = topic
+        self.section = section
+        self.subject = subject
 
     async def get(self, model, _row_id):
         if model is Student:
             return self.student
         if model is Topic:
             return self.topic
+        if model is Section:
+            return self.section
+        if model is Subject:
+            return self.subject
         return None
+
+
+class FakeRestartSession(FakeSaveValidationSession):
+    def __init__(self, *, returned_row, **kwargs):
+        super().__init__(**kwargs)
+        self.returned_row = returned_row
+        self.committed = False
+
+    async def scalar(self, _statement):
+        return self.returned_row
+
+    async def commit(self):
+        self.committed = True
 
 
 def progress_row(**overrides):
@@ -249,8 +272,10 @@ class ProgressSaveValidationTests(unittest.TestCase):
 
     def test_current_step_cannot_exceed_opened_step(self):
         db = FakeSaveValidationSession(
-            student=SimpleNamespace(id=2),
-            topic=SimpleNamespace(id=3),
+            student=SimpleNamespace(id=2, grade=7),
+            topic=SimpleNamespace(id=3, section_id=4),
+            section=SimpleNamespace(id=4, subject_id=5),
+            subject=SimpleNamespace(id=5, grade=7),
         )
 
         with self.assertRaises(ProgressServiceError) as ctx:
@@ -261,6 +286,37 @@ class ProgressSaveValidationTests(unittest.TestCase):
 
         self.assertEqual(ctx.exception.status_code, 422)
         self.assertEqual(ctx.exception.detail, "Текущий шаг ещё не открыт")
+
+    def test_student_cannot_save_progress_for_another_grade(self):
+        db = FakeSaveValidationSession(
+            student=SimpleNamespace(id=2, grade=7),
+            topic=SimpleNamespace(id=3, section_id=4),
+            section=SimpleNamespace(id=4, subject_id=5),
+            subject=SimpleNamespace(id=5, grade=8),
+        )
+
+        with self.assertRaises(ProgressServiceError) as ctx:
+            run(save_progress_record(self._payload(), db))
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(ctx.exception.detail, "Предмет недоступен для класса ученика")
+
+
+class ProgressRestartTests(unittest.TestCase):
+    def test_explicit_restart_returns_fresh_attempt(self):
+        row = progress_row(status="in_progress", current_step=0, max_opened_step=0)
+        db = FakeRestartSession(
+            returned_row=row,
+            student=SimpleNamespace(id=2, grade=7),
+            topic=SimpleNamespace(id=3, section_id=4),
+            section=SimpleNamespace(id=4, subject_id=5),
+            subject=SimpleNamespace(id=5, grade=7),
+        )
+
+        result = run(restart_progress_record(2, 3, db))
+
+        self.assertIs(result, row)
+        self.assertTrue(db.committed)
 
 
 if __name__ == "__main__":

@@ -55,15 +55,10 @@ export function buildActiveLessonRoute(
   blocks: Block[],
   objectives: LearningObjective[],
   diagnosticComplete: boolean,
-  objectiveMastery: Record<string, ObjectiveMastery>,
+  _objectiveMastery: Record<string, ObjectiveMastery>,
 ): ActiveLessonRoute {
   const diagnosticOriginalIndices = getDiagnosticOriginalIndices(blocks);
   const hasObjectiveRoute = objectives.length > 0 && diagnosticOriginalIndices.length > 0;
-  const passedDiagnosticIds = new Set(
-    Object.entries(objectiveMastery)
-      .filter(([, mastery]) => mastery.diagnostic_passed === true)
-      .map(([id]) => id),
-  );
 
   if (!hasObjectiveRoute) {
     return {
@@ -85,12 +80,7 @@ export function buildActiveLessonRoute(
 
   const activeOriginalIndices = blocks
     .map((block, index) => ({ block, index }))
-    .filter(({ block }) => {
-      const ids = objectiveIdsForBlock(block);
-      const stage = stageForBlock(block);
-      return stage !== 'diagnostic'
-        && (stage === 'assessment' || ids.length === 0 || !ids.every((id) => passedDiagnosticIds.has(id)));
-    })
+    .filter(({ block }) => stageForBlock(block) !== 'diagnostic')
     .map(({ index }) => index);
 
   return {
@@ -269,4 +259,13 @@ export function isDiagnosticFinished(
     savedAnswers[String(index)] !== undefined
     || Object.keys(savedAnswers).some((key) => key.startsWith(`${index}_q`))
   ));
+}
+
+export function shouldReopenCompletedProgress(params: {
+  activeBlocksLength: number;
+  isCompleted: boolean;
+  maxOpenedStep: number;
+}): boolean {
+  const { activeBlocksLength, isCompleted, maxOpenedStep } = params;
+  return isCompleted && activeBlocksLength > 0 && maxOpenedStep < activeBlocksLength - 1;
 }

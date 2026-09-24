@@ -1,27 +1,25 @@
-import { useState, useRef } from 'react';
+import { CreateCourse } from '@/features/teacherLessons/CreateCourse';
+import { GardenLessonCard } from '@/features/visualLesson/GardenLessonCard';
+import { useState } from 'react';
 import { useSubjects } from '@/lib/api';
-import { FileUp, Loader2 } from 'lucide-react';
 import { NoSubjectSelected, SectionsList, SubjectTabs } from '@/features/teacherLessons/listViews';
-import { useKtpUploadWorkflow } from '@/features/teacherLessons/uploadWorkflow';
+import { KtpImportButton } from '@/features/teacherLessons/KtpImport';
+import { subjectGrades, subjectsForGrade } from '@/features/teacherLessons/listModel';
+import { CurriculumGraphPanel } from '@/features/teacherLessons/CurriculumGraphPanel';
 
 export default function Lessons() {
   const { data: subjects, isLoading: loadingSubs } = useSubjects();
-  const [selectedSubject, setSelectedSubject] = useState<number | null>(null);
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedSubject, setSelectedSubject] = useState<number | null>(() => Number(sessionStorage.getItem('teacher-subject')) || null);
+  const [selectedGrade, setSelectedGrade] = useState<number | null>(() => Number(sessionStorage.getItem('teacher-grade')) || null);
+  const grades = subjectGrades(subjects);
+  const activeGrade = selectedGrade ?? grades[0] ?? null;
+  const visibleSubjects = subjectsForGrade(subjects, activeGrade);
 
-  const resetFileInput = () => {
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-  const {
-    error: uploadError,
-    isUploading,
-    success: uploadSuccess,
-    uploadFile,
-  } = useKtpUploadWorkflow(resetFileInput);
-
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void uploadFile(e.target.files?.[0]);
+  const selectGrade = (grade: number) => {
+    sessionStorage.setItem('teacher-grade', String(grade));
+    sessionStorage.removeItem('teacher-subject');
+    setSelectedGrade(grade);
+    setSelectedSubject(null);
   };
 
   return (
@@ -30,29 +28,45 @@ export default function Lessons() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Управление уроками</h1>
           <p className="text-muted-foreground mt-2 font-medium">Редактируйте материалы и структуру курсов</p>
-          {uploadError && <p className="text-destructive text-sm mt-2 font-bold">{uploadError}</p>}
-          {uploadSuccess && <p className="text-green-600 text-sm mt-2 font-bold">{uploadSuccess}</p>}
         </div>
-        <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleUpload} />
-        <button 
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isUploading}
-          className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground font-bold rounded-xl shadow-md shadow-primary/20 hover:bg-primary/90 transition-all disabled:opacity-70"
-        >
-          {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileUp className="w-5 h-5" />}
-          {isUploading ? 'Загрузка...' : 'Загрузить КТП (JSON)'}
-        </button>
+        <div className="flex flex-wrap gap-3"><CreateCourse onCreated={(id, grade) => {
+          setSelectedSubject(id); setSelectedGrade(grade);
+          sessionStorage.setItem('teacher-subject', String(id)); sessionStorage.setItem('teacher-grade', String(grade));
+        }} /><KtpImportButton /></div>
       </div>
+
+      <GardenLessonCard />
+      {grades.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto border-b border-border pb-3" aria-label="Класс программы">
+          <span className="mr-2 shrink-0 text-sm font-semibold text-muted-foreground">Класс</span>
+          {grades.map((grade) => (
+            <button
+              key={grade}
+              type="button"
+              onClick={() => selectGrade(grade)}
+              aria-pressed={activeGrade === grade}
+              className={`h-10 min-w-12 shrink-0 border px-4 text-sm font-bold transition-colors ${
+                activeGrade === grade
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'
+              }`}
+            >
+              {grade}
+            </button>
+          ))}
+        </div>
+      )}
 
       <SubjectTabs
         isLoading={loadingSubs}
         selectedSubject={selectedSubject}
-        subjects={subjects}
-        onSelect={setSelectedSubject}
+        subjects={visibleSubjects}
+        onSelect={id => { setSelectedSubject(id); sessionStorage.setItem('teacher-subject', String(id)); }}
       />
 
       {selectedSubject && <SectionsList subjectId={selectedSubject} />}
-      {!selectedSubject && subjects && subjects.length > 0 && (
+      {selectedSubject && <CurriculumGraphPanel subjectId={selectedSubject} />}
+      {!selectedSubject && visibleSubjects.length > 0 && (
         <NoSubjectSelected />
       )}
     </div>

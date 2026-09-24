@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { lessonStatusView, lessonTypeLabel, parseKtpJsonText } from './listModel';
+import { lessonStatusView, lessonTypeLabel, parseKtpJsonText, subjectGrades, subjectsForGrade } from './listModel';
+import type { Subject } from '@/lib/api/types';
 
 describe('teacher lesson list model', () => {
   it('formats known and unknown lesson types', () => {
     expect(lessonTypeLabel('study')).toBe('изучение нового');
-    expect(lessonTypeLabel('assessment')).toBe('контроль');
+    expect(lessonTypeLabel('assessment')).toBe('контрольная работа');
+    expect(lessonTypeLabel('review')).toBe('повторение');
+    expect(lessonTypeLabel('reflection')).toBe('разбор ошибок');
     expect(lessonTypeLabel('seminar')).toBe('seminar');
   });
 
@@ -30,5 +33,17 @@ describe('teacher lesson list model', () => {
   it('parses KTP JSON text and reports invalid JSON in user-facing wording', () => {
     expect(parseKtpJsonText('{"subject":"math"}')).toEqual({ subject: 'math' });
     expect(() => parseKtpJsonText('{bad json')).toThrow('Файл должен быть валидным JSON');
+  });
+
+  it('groups subjects by grade without mixing curricula', () => {
+    const subjects = [
+      { id: 1, name: 'Математика', grade: 8 },
+      { id: 2, name: 'Физика', grade: 7 },
+      { id: 3, name: 'Математика', grade: 7 },
+    ] as Subject[];
+
+    expect(subjectGrades(subjects)).toEqual([7, 8]);
+    expect(subjectsForGrade(subjects, 7).map((subject) => subject.id)).toEqual([2, 3]);
+    expect(subjectsForGrade(subjects, null)).toEqual([]);
   });
 });

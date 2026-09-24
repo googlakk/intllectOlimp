@@ -1,4 +1,4 @@
-import type { Topic } from '@/lib/api/types';
+import type { Subject, Topic } from '@/lib/api/types';
 
 export type LessonStatusView = {
   badgeClasses: string;
@@ -7,7 +7,9 @@ export type LessonStatusView = {
 
 export const LESSON_TYPE_LABELS: Record<string, string> = {
   study: 'изучение нового',
-  assessment: 'контроль',
+  assessment: 'контрольная работа',
+  review: 'повторение',
+  reflection: 'разбор ошибок',
   project: 'проект',
 };
 
@@ -46,4 +48,13 @@ export function parseKtpJsonText(text: string): unknown {
   } catch {
     throw new Error('Файл должен быть валидным JSON');
   }
+}
+
+export function subjectGrades(subjects: Subject[] | undefined): number[] {
+  return [...new Set((subjects ?? []).map((subject) => subject.grade))].sort((a, b) => a - b);
+}
+
+export function subjectsForGrade(subjects: Subject[] | undefined, grade: number | null): Subject[] {
+  if (grade === null) return [];
+  return (subjects ?? []).filter((subject) => subject.grade === grade);
 }

@@ -2,8 +2,10 @@ import unittest
 from copy import deepcopy
 import hashlib
 import re
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
-from models import GeneratedLesson, Section, Subject, Teacher, Topic
+from models import GeneratedLesson, Section, Student, Subject, Teacher, Topic
 from objectives import (
     calculate_objective_mastery,
     decompose_objectives,
@@ -49,6 +51,17 @@ class FakeLessonSession:
         self.teacher = teacher
         self.lesson = lesson
         self.topic = topic
+        self.student = Student(id=9, name="Ученик", grade=7)
+        self.section = Section(id=topic.section_id, subject_id=70, name="Раздел", sort_order=1, total_hours=1)
+        self.subject = Subject(
+            id=70,
+            name="Математика",
+            grade=7,
+            hours_per_week=4,
+            hours_per_year=136,
+            source_info=None,
+            instruction_language="ru",
+        )
         self.commits = 0
         self.deleted = []
         self.get_calls = []
@@ -61,7 +74,16 @@ class FakeLessonSession:
             return self.lesson
         if model is Topic and row_id == self.topic.id:
             return self.topic
+        if model is Student and row_id == self.student.id:
+            return self.student
+        if model is Section and row_id == self.section.id:
+            return self.section
+        if model is Subject and row_id == self.subject.id:
+            return self.subject
         return None
+
+    async def execute(self, _statement):
+        return SimpleNamespace(first=lambda: None)
 
     async def scalar(self, _statement):
         return self.lesson
@@ -383,6 +405,63 @@ class ObjectiveQualityTests(unittest.TestCase):
         )
         self.assertEqual(mastery[objective["id"]]["status"], "mastered")
         self.assertEqual(overall, "mastered")
+
+    def test_interactive_engine_components_can_cover_lesson_contract(self):
+        objective = decompose_objectives("Объяснять круговорот воды")[0]
+        blocks = [
+            {"component": "RetrievalCheck", "content": {
+                "objective_ids": [objective["id"]],
+                "evidence_stage": "diagnostic",
+                "type": "multiple_choice",
+                "question": "Что запускает испарение?",
+                "options": ["Солнце", "Луна", "Гром", "Снег"],
+                "correct_answer": "Солнце",
+                "explanation": "Солнечная энергия нагревает воду.",
+            }},
+            {"component": "PredictionLab", "content": {
+                "objective_ids": [objective["id"]],
+                "evidence_stage": "explanation",
+                "title": "Прогноз",
+                "question": "Что будет с водой при нагревании?",
+                "options": [{"id": "evaporates", "label": "Испарится"}],
+                "correct_prediction": "evaporates",
+                "observation_title": "Наблюдение",
+                "observations": [{"label": "Температура", "value": "выше"}],
+                "explanation": "Вода испаряется.",
+            }},
+            {"component": "ProcessBuilder", "content": {
+                "objective_ids": [objective["id"]],
+                "evidence_stage": "practice",
+                "title": "Цикл",
+                "instruction": "Соберите этапы",
+                "steps": [{"id": "a", "label": "Испарение"}, {"id": "b", "label": "Осадки"}],
+                "correct_edges": [{"from": "a", "to": "b"}],
+                "explanation": "Этапы связаны.",
+            }},
+            {"component": "SortAndClassify", "content": {
+                "objective_ids": [objective["id"]],
+                "evidence_stage": "assessment",
+                "title": "Проверка",
+                "instruction": "Распределите",
+                "groups": [{"id": "water", "label": "Вода"}],
+                "items": [{"id": "rain", "label": "Дождь", "correct_group": "water"}],
+                "explanation": "Дождь относится к воде.",
+            }},
+            {"component": "MasteryCheck", "content": {"questions": [{
+                "objective_ids": [objective["id"]],
+                "dimension": objective["id"],
+                "question": "Какой этап возвращает воду на поверхность?",
+                "type": "multiple_choice",
+                "options": ["Осадки", "Сжатие", "Плавление", "Трение"],
+                "correct_answer": "Осадки",
+                "explanation": "Осадки возвращают воду.",
+            }]}},
+        ]
+
+        report = quality_report(blocks, "Объяснять круговорот воды")
+
+        self.assertTrue(report["quality_report"]["publishable"])
+        self.assertFalse(report["quality_report"]["errors"])
 
     def test_incomplete_legacy_lesson_is_normalized_but_not_publishable(self):
         report = quality_report(
@@ -725,6 +804,10 @@ class LessonGenerateServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(lesson.published_by)
         self.assertEqual(lesson.lesson_metadata["teacher_id"], teacher.id)
         self.assertEqual(lesson.lesson_metadata["subject_family"], "mathematical")
+        self.assertEqual(lesson.lesson_metadata["topic_contract"]["volume"], "micro")
+        self.assertEqual(lesson.lesson_metadata["lesson_shape"], "procedure_mastery")
+        self.assertEqual(lesson.lesson_metadata["block_budget"]["min"], 5)
+        self.assertTrue(lesson.lesson_metadata["component_plan"])
         self.assertIn("quality_report", lesson.lesson_metadata)
 
     async def test_generate_reuses_existing_lesson_row(self):
@@ -750,7 +833,7 @@ class LessonGenerateServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(lesson.id, 20)
         self.assertEqual(db.added, [])
-        self.assertEqual(lesson.status, "draft")
+        self.assertEqual(lesson.status, "published")
         self.assertIsNone(lesson.published_by)
 
     async def test_generate_failure_is_reported_as_provider_failure(self):
@@ -823,16 +906,21 @@ class LessonManagementServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn((Topic, lesson.topic_id), db.get_calls)
 
     async def test_get_lesson_by_topic_uses_student_not_ready_message(self):
-        _lesson, db = self._context()
+        lesson, db = self._context()
         db.lesson = None
 
         with self.assertRaises(LessonServiceError) as rejected:
-            await get_lesson_by_topic(topic_id=999, role="student", db=db)
+            await get_lesson_by_topic(
+                topic_id=lesson.topic_id,
+                role="student",
+                db=db,
+                student_id=db.student.id,
+            )
 
         self.assertEqual(rejected.exception.status_code, 404)
         self.assertEqual(rejected.exception.detail, "Опубликованный урок пока не готов")
 
-    async def test_update_lesson_blocks_resets_publication_state_and_persists_quality(self):
+    async def test_update_lesson_blocks_preserves_publication_and_persists_draft_quality(self):
         lesson, db = self._context()
         new_blocks = complete_single_objective_blocks("Складывать числа")
 
@@ -840,9 +928,9 @@ class LessonManagementServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIs(updated, lesson)
         self.assertEqual(db.commits, 1)
-        self.assertEqual(updated.status, "draft")
-        self.assertIsNone(updated.published_at)
-        self.assertIsNone(updated.published_by)
+        self.assertEqual(updated.status, "published")
+        self.assertEqual(updated.published_at, "published")
+        self.assertEqual(updated.published_by, 5)
         self.assertTrue(updated.lesson_metadata["quality_report"]["publishable"])
 
     async def test_lesson_quality_reports_current_contract(self):
@@ -865,7 +953,8 @@ class LessonManagementServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(unpublished.published_by)
 
     async def test_delete_lesson_record_deletes_and_returns_api_message(self):
-        lesson, db = self._context()
+        lesson, db = self._context(status="draft")
+        db.scalar = AsyncMock(return_value=False)
 
         result = await delete_lesson_record(lesson.id, db)
 

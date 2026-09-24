@@ -8,9 +8,10 @@ from errors import ApplicationError
 
 from .extract import Extraction, extract
 from .mapper import map_to_schema
+from services.curriculum_graph import enrich_ktp_draft
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-ALLOWED_SUFFIXES = (".docx", ".pdf")
+ALLOWED_SUFFIXES = (".xlsx", ".docx", ".pdf")
 
 Extractor = Callable[[bytes, str], Extraction]
 Mapper = Callable[[Extraction], Awaitable[dict[str, Any]]]
@@ -24,7 +25,7 @@ def validate_upload(filename: str, data: bytes) -> None:
     if not filename.lower().endswith(ALLOWED_SUFFIXES):
         raise KtpParseError(
             status_code=422,
-            detail="Поддерживаются только файлы .docx и .pdf",
+            detail="Поддерживаются файлы .xlsx, .docx и .pdf",
         )
     if not data:
         raise KtpParseError(status_code=422, detail="Файл пустой")
@@ -57,7 +58,10 @@ def attach_parse_metadata(
         "topic_count": len(topics),
         "low_confidence_count": sum(1 for topic in topics if topic.get("confidence") == "low"),
         "with_objectives": sum(
-            1 for topic in topics if (topic.get("learning_objectives") or "").strip()
+            1
+            for topic in topics
+            if (topic.get("learning_objectives") or "").strip()
+            and topic.get("objective_source") != "inferred"
         ),
     }
     return draft
@@ -93,4 +97,5 @@ async def parse_ktp_draft(
     except Exception as exc:
         raise KtpParseError(status_code=502, detail=f"Сбой разбора: {exc}") from exc
 
+    draft = enrich_ktp_draft(draft)
     return attach_parse_metadata(draft, filename=filename, extraction=extraction)

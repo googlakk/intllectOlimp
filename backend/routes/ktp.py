@@ -5,9 +5,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from topic_semantics import LessonType
 from ktp.parsing import KtpParseError, parse_ktp_draft
 from ktp.persistence import KtpPersistenceError, save_ktp_draft
 from routes.http_errors import raise_http_error
+from auth_dependencies import require_roles
+from services.auth import AuthPrincipal
+from services.educator_access import require_grade_management
 
 router = APIRouter(prefix="/api/ktp", tags=["ktp"])
 
@@ -16,10 +20,11 @@ class TopicInput(BaseModel):
     ktp_number: str = ""          # у «Контрольной работы» номера в КТП нет
     name: str = Field(min_length=1)
     hours: int = Field(default=1, ge=0)
-    lesson_type: Literal["study", "assessment", "project"] = "study"
+    lesson_type: LessonType = "study"
     learning_objectives: str = ""
     skills: list[str] = Field(default_factory=list)
     resources: str = ""
+    review_required: bool = False
 
 
 class SectionInput(BaseModel):
@@ -38,7 +43,12 @@ class KtpUploadInput(BaseModel):
 
 
 @router.post("/upload")
-async def upload_ktp(payload: KtpUploadInput, db: AsyncSession = Depends(get_db)):
+async def upload_ktp(
+    payload: KtpUploadInput,
+    user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
+    db: AsyncSession = Depends(get_db),
+):
+    await require_grade_management(user, payload.grade, db)
     try:
         return await save_ktp_draft(payload, db)
     except KtpPersistenceError as exc:

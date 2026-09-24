@@ -6,6 +6,7 @@ from typing import Any
 import tempfile
 from pathlib import Path
 
+from ai.planner import build_topic_contract
 from objectives import ALLOWED_COMPONENTS, decompose_objectives
 
 MODEL = "claude-sonnet-4-6"
@@ -131,11 +132,12 @@ SYSTEM_PROMPT = """
 Каждый элемент массива имеет ровно такую оболочку:
 {"component": "ИмяКомпонента", "content": { ... }}
 
-Допустимы только следующие 15 компонентов и их точные схемы content:
+Допустимы только следующие 26 компонентов и их точные схемы content:
 
 1. ShortExplanation:
 {"title": string, "text": string, "key_concepts": string[], "callout"?: string}
-Поле text поддерживает формулы KaTeX: $формула$ внутри строки и $$формула$$ отдельным блоком.
+Поле text поддерживает Markdown и формулы KaTeX: $формула$ внутри строки и $$формула$$ отдельным блоком.
+Всегда заключай LaTeX-команды, включая \\sqrt и \\frac, в $...$ или $$...$$; не пиши sqrt как обычный текст.
 
 2. KeyConcept:
 {"term": string, "definition": string, "example": string, "non_example": string, "visual_hint"?: string}
@@ -171,16 +173,28 @@ correct_segments должны дословно совпадать с предл�
 {"title": string, "description": string, "graph_type": "line"|"bar"|"scatter", "data_points": [{"x": number, "y": number, "label"?: string}], "x_label": string, "y_label": string, "interactive_params"?: [{"name": string, "label": string, "min": number, "max": number, "step": number, "default": number, "formula_description": string}]}
 
 12. Presentation:
-{"title": string, "slides": [{"heading": string, "body": string, "visual"?: string}]}
+{"title": string, "slides": [{"id": string, "heading": string, "body": string, "learning_point": string, "avatar_script": string, "visual"?: string, "media_slot"?: {"id": string, "role": "demonstrate"|"compare"|"show_process"|"clarify", "placement": "slide_visual", "learning_purpose": string, "must_show": string[], "must_not_show": string[]}}]}
+Каждый id уникален внутри презентации (slide-1, slide-2...). learning_point — одна проверяемая
+мысль слайда. avatar_script — короткое устное дополнение именно к этому слайду: причинная связь,
+аналогия, акцент или предупреждение об ошибке; оно не должно зачитывать heading/body. media_slot
+добавляй только там, где визуализация действительно помогает понять learning_point. Не выдумывай
+URL: после генерации учитель привяжет реальный asset к этому слоту.
 
 13. Illustration:
 {"title": string, "description": string, "svg_content": string, "caption"?: string}
 svg_content — безопасный автономный inline SVG без script, event-атрибутов и внешних ресурсов.
 
-В content любого блока допускаются служебные поля objective_ids (массив строк)
-и evidence_stage ("diagnostic", "explanation", "practice" или "assessment"). Они не отображаются
-ученику. Каждый блок, кроме Reflection, должен указывать objective_ids. В MasteryCheck
+В content любого блока допускаются служебные поля objective_ids (массив строк),
+evidence_stage ("diagnostic", "explanation", "practice" или "assessment") и
+avatar_script (короткая разговорная реплика ведущего, не дублирующая весь текст). Реплика объясняет
+причину, аналогию или ход мысли простыми словами и добавляет то, чего нет на экране. Не вставляй в неё
+Markdown, символы $ и LaTeX-команды. Формулы записывай словами так, как их должен произнести учитель,
+например «квадратный корень из сорока девяти равен семи». Одна реплика — 2–4 коротких предложения.
+Эти поля не отображаются ученику. Каждый блок, кроме Reflection, должен указывать objective_ids. В MasteryCheck
 каждый вопрос также должен иметь objective_ids (или dimension равный ID цели).
+Если в запросе передан component_plan, структура урока должна следовать этому плану:
+роль, objective_ids, evidence_stage и allowed_components для каждого шага являются
+контрактом. Не делай один и тот же шаблон для маленькой и большой темы.
 
 14. MasteryCheck:
 {"questions": [{"question": string, "type": "multiple_choice"|"numeric", "options"?: string[], "correct_answer": string, "explanation": string, "dimension": string, "objective_ids": string[]}]}
@@ -191,15 +205,70 @@ MasteryCheck должен содержать столько вопросов, ч
 {"prompt": string, "scale_question": string, "scale_labels": [string, string, string, string]}
 scale_labels всегда содержит ровно 4 подписи.
 
-Следуй переданному предметному маршруту, а не одной универсальной последовательности.
-Для математических задач используй разобранные примеры; для наук — прогноз, модель,
-данные и вывод; для языков — образец и создание речи/текста; для гуманитарных предметов —
-источник, свидетельства и аргументацию; для практических предметов — показ, критерии,
-выполнение и самооценку. Цифровой тест не должен подменять физическое или творческое
-выполнение. Заверши урок Reflection и MasteryCheck с вопросом по каждой цели. В уроке должно быть
-не менее пяти оцениваемых действий с учётом отдельных вопросов MasteryCheck.
+16. SortAndClassify:
+{"title": string, "instruction": string, "groups": [{"id": string, "label": string, "hint"?: string}], "items": [{"id": string, "label": string, "correct_group": string}], "explanation": string}
+Используй для классификаций, сопоставлений и группировки понятий.
 
-Не добавляй поля вне описанных схем. Правильные ответы должны точно совпадать с одним из
+17. ProcessBuilder:
+{"title": string, "instruction": string, "steps": [{"id": string, "label": string, "description"?: string}], "correct_edges": [{"from": string, "to": string, "label"?: string}], "explanation": string}
+Используй для циклов, процессов, алгоритмов и причинных цепочек.
+
+18. ArgumentMap:
+{"title": string, "prompt": string, "nodes": [{"id": string, "label": string, "kind": "claim"|"evidence"|"reasoning"|"counterargument"}], "correct_links": [{"from": string, "to": string}], "explanation": string}
+Используй для тезиса, доказательств, контраргумента и вывода.
+
+19. BranchingScenario:
+{"title": string, "context": string, "start_node_id": string, "nodes": [{"id": string, "title": string, "text": string, "choices"?: [{"label": string, "next": string, "feedback"?: string}], "terminal"?: boolean, "success"?: boolean}], "success_feedback": string, "failure_feedback": string}
+Используй для техники безопасности, гражданского выбора, общения и лабораторных решений.
+
+20. MisconceptionDebugger:
+{"title": string, "prompt": string, "steps": [{"id": string, "text": string, "is_error"?: boolean}], "repair_steps": string[], "explanation": string}
+Ровно один step должен иметь is_error=true. repair_steps идут в правильном порядке.
+
+21. PredictionLab:
+{"title": string, "question": string, "options": [{"id": string, "label": string}], "correct_prediction": string, "observation_title": string, "observations": [{"label": string, "value": string}], "explanation": string}
+correct_prediction должен совпадать с id одного варианта.
+
+22. DataInvestigation:
+{"title": string, "description": string, "vega_lite_spec": object, "question": {"question": string, "options": [string, string, string, string], "correct_answer": string}, "explanation": string}
+vega_lite_spec должен быть простой Vega-Lite спецификацией с data.values, mark и encoding.
+
+23. PhysicsSandbox:
+{"title": string, "prompt": string, "bodies": [{"shape": "circle"|"rectangle", "x": number, "y": number, "width"?: number, "height"?: number, "radius"?: number, "is_static"?: boolean}], "params": [{"name": "gravity"|"restitution", "label": string, "min": number, "max": number, "step": number, "default": number}], "question": string, "options": [string, string, string, string], "correct_answer": string, "explanation": string}
+Используй только для простых 2D физических моделей.
+
+24. HotspotInvestigation:
+{"title": string, "instruction": string, "svg_content": string, "hotspots": [{"id": string, "label": string, "x": number, "y": number, "feedback": string, "is_correct"?: boolean}], "required_hotspots": string[], "explanation": string}
+x и y — проценты от 0 до 100. svg_content безопасный inline SVG без script, event-атрибутов и внешних ресурсов.
+
+25. CodeBlocksLab:
+{"title": string, "task": string, "toolbox_xml": string, "expected_block_types": string[], "explanation": string, "starter_xml"?: string}
+Используй для информатики и алгоритмов. toolbox_xml должен содержать только стандартные Blockly block type.
+
+26. GeneratedMedia:
+{"title": string, "description"?: string, "media_kind": "image"|"video", "url"?: string, "data_url"?: string, "poster_url"?: string, "alt_text"?: string, "caption"?: string, "pedagogical_role"?: string, "visual_intent"?: string, "success_check"?: string, "job_id"?: string, "generation_id"?: string, "prompt"?: string, "model"?: string}
+Не используй GeneratedMedia при обычной генерации урока: этот блок вставляется только после
+реального вызова OpenRouter media API из редактора. Никогда не выдумывай url, data_url или
+base64-контент.
+
+Следуй переданному предметному маршруту, а не одной универсальной последовательности.
+Для математических задач используй разобранные примеры, MisconceptionDebugger,
+SortAndClassify или ProcessBuilder; для наук — PredictionLab, DataInvestigation,
+PhysicsSandbox, HotspotInvestigation и ProcessBuilder; для языков — SortAndClassify,
+BranchingScenario и ArgumentMap; для гуманитарных предметов — источники,
+HotspotInvestigation, ArgumentMap, BranchingScenario и ProcessBuilder; для информатики —
+CodeBlocksLab, MisconceptionDebugger и ProcessBuilder; для практических предметов —
+BranchingScenario, HotspotInvestigation и самооценку. Цифровой тест не должен подменять
+физическое или творческое выполнение. Заверши урок Reflection и MasteryCheck с вопросом
+по каждой цели. В уроке должно быть не менее пяти оцениваемых действий с учётом отдельных
+вопросов MasteryCheck.
+
+Не добавляй поля вне описанных схем, кроме трёх служебных полей выше. Каждый обязательный
+Presentation должен иметь 3–6 коротких слайдов: вопрос или опора на опыт, наглядная модель,
+разобранная связь и мини-проверка понимания. У каждого слайда обязательны id, learning_point и
+avatar_script. Послайдовая реплика должна добавлять объяснение своими словами и не зачитывать
+слайд. Она не должна повторять заголовок, списки, таблицу или формулу со слайда дословно. Блочный
+avatar_script для Presentation не используй. Правильные ответы должны точно совпадать с одним из
 вариантов там, где варианты предусмотрены. Урок должен соответствовать теме, целям,
 навыкам и ресурсам из запроса пользователя.
 """.strip()
@@ -260,8 +329,11 @@ async def generate_lesson(
     skills: list[str] | None,
     resources: str | None,
     grade: int | None = None,
+    hours: int | None = None,
     lesson_type: str | None = None,
     content_language: str = "ru",
+    topic_contract: dict[str, Any] | None = None,
+    component_plan: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     from llm import TASK_LESSON, call_tool
 
@@ -271,7 +343,30 @@ async def generate_lesson(
     )
     route = SUBJECT_FAMILY_PROFILES[str(profile["family"])]["route"]
     objective_catalog = decompose_objectives(learning_objectives)
+    if topic_contract is None or component_plan is None:
+        plan = build_topic_contract(
+            topic_name=topic_name,
+            subject_name=subject_name,
+            learning_objectives=learning_objectives,
+            skills=skills,
+            resources=resources,
+            grade=grade,
+            hours=hours,
+            lesson_type=lesson_type,
+            content_language=content_language,
+        )
+        topic_contract = topic_contract or plan["topic_contract"]
+        component_plan = component_plan or plan["component_plan"]
     language_label = "кыргызском" if content_language == "ky" else "русском"
+    teaching_requirement = (
+        'Это контрольная без таймера. Используй только RetrievalCheck, IndependentProblem и MasteryCheck. '
+        'Не добавляй объяснения, подсказки, обратную связь до сдачи или Reflection. '
+        'Каждый вопрос проверяет ровно одну цель и содержит objective_ids, правильный ответ и объяснение для разбора после сдачи.'
+        if lesson_type == "assessment" else
+        'До объяснения дай диагностический RetrievalCheck на каждую цель. '
+        'Для каждой цели обязательно дай объяснение, разобранный пример, самостоятельную практику и независимую итоговую проверку. '
+        'В повторении и разборе ошибок закрепляй навыки указанных изученных тем, не придумывай новые навыки для названия занятия.'
+    )
     user_prompt = f"""
 Создай полный урок.
 Семейство предмета: {profile["family_label"]} ({profile["family"]})
@@ -287,13 +382,17 @@ async def generate_lesson(
 Структурированные цели с ID: {json.dumps(objective_catalog, ensure_ascii=False)}
 Навыки: {", ".join(skills or []) or "не указаны"}
 Ресурсы: {resources or "не указаны"}
+Контракт темы: {json.dumps(topic_contract, ensure_ascii=False)}
+План компонентов: {json.dumps(component_plan, ensure_ascii=False)}
 
 Каждый блок, кроме Reflection, ОБЯЗАН содержать objective_ids и явный evidence_stage.
 Свяжи каждый блок и каждый вопрос MasteryCheck с ID из структурированных целей.
-До объяснения дай по одному диагностическому RetrievalCheck с evidence_stage
-"diagnostic" на каждую цель. Каждый диагностический блок и каждый отдельный итоговый
-вопрос проверяет ровно одну цель. Для каждой цели обязательно дай объяснение, практику и
-независимую итоговую проверку.
+{teaching_requirement}
+Каждый диагностический блок и каждый отдельный итоговый вопрос проверяет ровно одну цель.
+Количество блоков должно попасть в block_budget из контракта. Если lesson_shape=unit_part,
+сгенерируй только первую часть темы и не пытайся вместить весь модуль. Media через
+GeneratedMedia является только опциональным усилением объяснения; урок должен быть
+полноценным и без OpenRouter media. Не заменяй обязательный Presentation картинкой или видео.
 Передай урок вызовом инструмента submit_lesson.
 """.strip()
 

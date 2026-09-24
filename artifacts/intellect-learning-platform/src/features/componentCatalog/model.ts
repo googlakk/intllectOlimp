@@ -1,6 +1,6 @@
 import type { ComponentRegistryEntry, ComponentSchema } from '@/lib/api/types';
 
-export type ComponentCatalogFilter = 'all' | 'assessment' | 'math' | 'literature';
+export type ComponentCatalogFilter = 'all' | 'assessment' | 'math' | 'literature' | 'language' | 'science' | 'humanities' | 'computing' | 'arts_practical';
 
 export const CATEGORY_LABELS: Record<string, string> = {
   explain: 'Объяснение',
@@ -29,6 +29,13 @@ export const CATEGORY_STYLES: Record<string, string> = {
 export const SUBJECT_LABELS: Record<string, string> = {
   math: 'Математика',
   literature: 'Литература',
+  language: 'Языки',
+  science: 'Естественные науки',
+  geography: 'География',
+  humanities: 'Гуманитарные',
+  computing: 'Информатика',
+  arts_practical: 'Искусство/технология',
+  physical_education: 'Физкультура',
 };
 
 export const CATALOG_FILTERS: Array<{ value: ComponentCatalogFilter; label: string }> = [
@@ -36,6 +43,11 @@ export const CATALOG_FILTERS: Array<{ value: ComponentCatalogFilter; label: stri
   { value: 'assessment', label: 'Проверка знаний' },
   { value: 'math', label: 'Математика' },
   { value: 'literature', label: 'Литература' },
+  { value: 'language', label: 'Языки' },
+  { value: 'science', label: 'Естественные науки' },
+  { value: 'humanities', label: 'Гуманитарные' },
+  { value: 'computing', label: 'Информатика' },
+  { value: 'arts_practical', label: 'Практика' },
 ];
 
 export function categoryLabel(category: string): string {
@@ -73,8 +85,7 @@ export function filterComponents(
       || component.purpose.toLowerCase().includes(normalizedQuery);
     const matchesFilter = filter === 'all'
       || (filter === 'assessment' && component.is_assessment)
-      || (filter === 'math' && component.subjects.includes('math'))
-      || (filter === 'literature' && component.subjects.includes('literature'));
+      || (filter !== 'assessment' && component.subjects.includes(filter));
     return matchesQuery && matchesFilter;
   });
 }

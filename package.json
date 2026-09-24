@@ -8,6 +8,9 @@
     "check:architecture": "pnpm --filter ./scripts run check:architecture",
     "check:agent-system": "pnpm --filter ./scripts run check:agent-system",
     "check:quality": "./check-quality.sh",
+    "perf:lesson": "cd backend && ../.venv/bin/python perf_harness.py",
+    "perf:lesson:browser": "pnpm --filter ./scripts run perf:lesson:browser",
+    "perf:lesson:browser:auth": "pnpm --filter ./scripts run perf:lesson:browser:auth",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "test:run": "pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run test:run"

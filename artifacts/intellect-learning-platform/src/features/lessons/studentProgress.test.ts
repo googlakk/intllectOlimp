@@ -6,6 +6,7 @@ import {
   calculateLessonCompletion,
   isAssessmentBlock,
   isDiagnosticFinished,
+  shouldReopenCompletedProgress,
 } from './studentProgress';
 
 const objectives: LearningObjective[] = [
@@ -41,7 +42,7 @@ describe('studentProgress route building', () => {
     expect(route.activeBlocks.map((block) => block.component)).toEqual(['RetrievalCheck', 'RetrievalCheck']);
   });
 
-  it('skips non-assessment blocks for objectives that passed diagnostics', () => {
+  it('keeps the full learning route after diagnostics instead of ending the lesson early', () => {
     const mastery: Record<string, ObjectiveMastery> = {
       o1: { status: 'in_progress', diagnostic_passed: true },
       o2: { status: 'needs_practice', diagnostic_passed: false },
@@ -49,8 +50,9 @@ describe('studentProgress route building', () => {
 
     const route = buildActiveLessonRoute(blocks, objectives, true, mastery);
 
-    expect(route.activeOriginalIndices).toEqual([3, 4, 5]);
+    expect(route.activeOriginalIndices).toEqual([2, 3, 4, 5]);
     expect(route.activeBlocks.map((block) => block.component)).toEqual([
+      'ShortExplanation',
       'GuidedPractice',
       'IndependentProblem',
       'MasteryCheck',
@@ -62,6 +64,9 @@ describe('studentProgress completion calculations', () => {
   it('classifies assessment blocks without depending on block rendering components', () => {
     expect(isAssessmentBlock({ component: 'MasteryCheck', content: {} })).toBe(true);
     expect(isAssessmentBlock({ component: 'IndependentProblem', content: {} })).toBe(true);
+    expect(isAssessmentBlock({ component: 'SortAndClassify', content: {} })).toBe(true);
+    expect(isAssessmentBlock({ component: 'BranchingScenario', content: {} })).toBe(true);
+    expect(isAssessmentBlock({ component: 'CodeBlocksLab', content: {} })).toBe(true);
     expect(isAssessmentBlock({ component: 'ShortExplanation', content: {} })).toBe(false);
   });
 
@@ -145,5 +150,23 @@ describe('studentProgress completion calculations', () => {
     expect(isDiagnosticFinished([0, 1], { 0: true, '1_q0': false })).toBe(true);
     expect(isDiagnosticFinished([0, 1], { 0: true })).toBe(false);
     expect(isDiagnosticFinished([], { 0: true })).toBe(false);
+  });
+
+  it('reopens progress that was completed before the full route was available', () => {
+    expect(shouldReopenCompletedProgress({
+      activeBlocksLength: 12,
+      isCompleted: true,
+      maxOpenedStep: 2,
+    })).toBe(true);
+    expect(shouldReopenCompletedProgress({
+      activeBlocksLength: 12,
+      isCompleted: true,
+      maxOpenedStep: 11,
+    })).toBe(false);
+    expect(shouldReopenCompletedProgress({
+      activeBlocksLength: 12,
+      isCompleted: false,
+      maxOpenedStep: 2,
+    })).toBe(false);
   });
 });

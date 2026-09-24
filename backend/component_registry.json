@@ -287,17 +287,32 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["heading", "body"],
+            "required": ["id", "heading", "body", "learning_point", "avatar_script"],
             "properties": {
+              "id": {"type": "string"},
               "heading": {"type": "string"},
               "body": {"type": "string"},
-              "visual": {"type": "string"}
+              "learning_point": {"type": "string"},
+              "avatar_script": {"type": "string"},
+              "visual": {"type": "string"},
+              "media_slot": {
+                "type": "object",
+                "required": ["id", "role", "placement", "learning_purpose"],
+                "properties": {
+                  "id": {"type": "string"},
+                  "role": {"type": "string"},
+                  "placement": {"type": "string"},
+                  "learning_purpose": {"type": "string"},
+                  "must_show": {"type": "array", "items": {"type": "string"}},
+                  "must_not_show": {"type": "array", "items": {"type": "string"}}
+                }
+              }
             }
           }
         }
       }
     },
-    "rendering_notes": "Листаемые слайды."
+    "rendering_notes": "Листаемые учебные шаги: каждый слайд синхронизирован со своей репликой аватара и опциональным адресным медиаслотом."
   },
   {
     "id": "illustration",
@@ -367,5 +382,243 @@
       }
     },
     "rendering_notes": "Шкала и свободная рефлексия."
+  },
+  {
+    "id": "sort-and-classify",
+    "code": "C31",
+    "category": "interact",
+    "subjects": ["language", "science", "humanities", "math"],
+    "purpose": "Распределение объектов по смысловым группам",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "instruction", "items", "groups", "explanation"],
+      "properties": {
+        "title": {"type": "string"},
+        "instruction": {"type": "string"},
+        "items": {"type": "array", "items": {"type": "object"}},
+        "groups": {"type": "array", "items": {"type": "object"}},
+        "explanation": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Drag-and-drop классификация."
+  },
+  {
+    "id": "process-builder",
+    "code": "C32",
+    "category": "interact",
+    "subjects": ["science", "geography", "computing", "humanities"],
+    "purpose": "Сборка процесса, цикла или причинной цепочки",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "instruction", "steps", "correct_edges", "explanation"],
+      "properties": {
+        "title": {"type": "string"},
+        "instruction": {"type": "string"},
+        "steps": {"type": "array", "items": {"type": "object"}},
+        "correct_edges": {"type": "array", "items": {"type": "object"}},
+        "explanation": {"type": "string"}
+      }
+    },
+    "rendering_notes": "React Flow схема с соединяемыми узлами."
+  },
+  {
+    "id": "argument-map",
+    "code": "C33",
+    "category": "communicate",
+    "subjects": ["humanities", "literature", "language"],
+    "purpose": "Построение карты тезиса, доказательств и вывода",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "prompt", "nodes", "correct_links", "explanation"],
+      "properties": {
+        "title": {"type": "string"},
+        "prompt": {"type": "string"},
+        "nodes": {"type": "array", "items": {"type": "object"}},
+        "correct_links": {"type": "array", "items": {"type": "object"}},
+        "explanation": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Интерактивная карта аргумента."
+  },
+  {
+    "id": "branching-scenario",
+    "code": "C34",
+    "category": "interact",
+    "subjects": ["science", "humanities", "language", "arts_practical", "physical_education"],
+    "purpose": "Ситуация выбора с последствиями",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "context", "start_node_id", "nodes", "success_feedback", "failure_feedback"],
+      "properties": {
+        "title": {"type": "string"},
+        "context": {"type": "string"},
+        "start_node_id": {"type": "string"},
+        "nodes": {"type": "array", "items": {"type": "object"}},
+        "success_feedback": {"type": "string"},
+        "failure_feedback": {"type": "string"}
+      }
+    },
+    "rendering_notes": "XState-сценарий с ветвлениями."
+  },
+  {
+    "id": "misconception-debugger",
+    "code": "C35",
+    "category": "practice",
+    "subjects": ["math", "science", "language", "computing"],
+    "purpose": "Поиск и исправление типичной ошибки",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "prompt", "steps", "repair_steps", "explanation"],
+      "properties": {
+        "title": {"type": "string"},
+        "prompt": {"type": "string"},
+        "steps": {"type": "array", "items": {"type": "object"}},
+        "repair_steps": {"type": "array", "items": {"type": "string"}},
+        "explanation": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Выбор ошибочного шага и drag-and-drop исправления."
+  },
+  {
+    "id": "prediction-lab",
+    "code": "C36",
+    "category": "interact",
+    "subjects": ["science", "math", "geography"],
+    "purpose": "Прогноз, наблюдение и объяснение результата",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "question", "options", "correct_prediction", "observation_title", "observations", "explanation"],
+      "properties": {
+        "title": {"type": "string"},
+        "question": {"type": "string"},
+        "options": {"type": "array", "items": {"type": "object"}},
+        "correct_prediction": {"type": "string"},
+        "observation_title": {"type": "string"},
+        "observations": {"type": "array", "items": {"type": "object"}},
+        "explanation": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Predict-observe-explain лаборатория."
+  },
+  {
+    "id": "data-investigation",
+    "code": "C37",
+    "category": "represent",
+    "subjects": ["science", "geography", "humanities", "math"],
+    "purpose": "Исследование данных через интерактивную диаграмму",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "description", "vega_lite_spec", "question", "explanation"],
+      "properties": {
+        "title": {"type": "string"},
+        "description": {"type": "string"},
+        "vega_lite_spec": {"type": "object"},
+        "question": {"type": "object"},
+        "explanation": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Vega-Lite визуализация с выводом ученика."
+  },
+  {
+    "id": "physics-sandbox",
+    "code": "C38",
+    "category": "interact",
+    "subjects": ["science", "math"],
+    "purpose": "2D микро-симуляция физических параметров",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "prompt", "bodies", "params", "question", "options", "correct_answer", "explanation"],
+      "properties": {
+        "title": {"type": "string"},
+        "prompt": {"type": "string"},
+        "bodies": {"type": "array", "items": {"type": "object"}},
+        "params": {"type": "array", "items": {"type": "object"}},
+        "question": {"type": "string"},
+        "options": {"type": "array", "items": {"type": "string"}},
+        "correct_answer": {"type": "string"},
+        "explanation": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Matter.js canvas-симуляция."
+  },
+  {
+    "id": "hotspot-investigation",
+    "code": "C39",
+    "category": "represent",
+    "subjects": ["science", "geography", "humanities", "arts_practical"],
+    "purpose": "Исследование схемы, карты или изображения через активные зоны",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "instruction", "svg_content", "hotspots", "required_hotspots", "explanation"],
+      "properties": {
+        "title": {"type": "string"},
+        "instruction": {"type": "string"},
+        "svg_content": {"type": "string"},
+        "hotspots": {"type": "array", "items": {"type": "object"}},
+        "required_hotspots": {"type": "array", "items": {"type": "string"}},
+        "explanation": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Безопасный SVG с кликабельными зонами."
+  },
+  {
+    "id": "code-blocks-lab",
+    "code": "C40",
+    "category": "interact",
+    "subjects": ["computing", "math"],
+    "purpose": "Сборка алгоритма из визуальных блоков",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "task", "toolbox_xml", "expected_block_types", "explanation"],
+      "properties": {
+        "title": {"type": "string"},
+        "task": {"type": "string"},
+        "toolbox_xml": {"type": "string"},
+        "expected_block_types": {"type": "array", "items": {"type": "string"}},
+        "explanation": {"type": "string"},
+        "starter_xml": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Blockly workspace с проверкой конструкций."
+  },
+  {
+    "id": "generated-media",
+    "code": "C41",
+    "category": "media",
+    "subjects": ["math", "science", "geography", "humanities", "literature", "language", "computing", "arts_practical"],
+    "purpose": "AI-сгенерированная учебная картинка или видео-визуализация",
+    "is_assessment": false,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "media_kind"],
+      "properties": {
+        "title": {"type": "string"},
+        "description": {"type": "string"},
+        "media_kind": {"type": "string", "enum": ["image", "video"]},
+        "url": {"type": "string"},
+        "data_url": {"type": "string"},
+        "poster_url": {"type": "string"},
+        "alt_text": {"type": "string"},
+        "caption": {"type": "string"},
+        "pedagogical_role": {"type": "string"},
+        "visual_intent": {"type": "string"},
+        "success_check": {"type": "string"},
+        "job_id": {"type": "string"},
+        "generation_id": {"type": "string"},
+        "prompt": {"type": "string"},
+        "model": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Локально отображает data URL изображения или URL видео, созданные через backend media API."
   }
 ]

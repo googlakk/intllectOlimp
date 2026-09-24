@@ -7,5 +7,7 @@ anthropic
 pydantic
 python-docx
 pdfplumber
+openpyxl
 python-multipart
+httpx
 pytest

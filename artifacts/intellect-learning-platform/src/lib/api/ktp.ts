@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 
-import { request } from './client';
-import type { Subject } from './types';
+import { request, requestForm } from './client';
+import type { KtpDraft, Subject } from './types';
 
 export const useUploadKtp = () =>
   useMutation({
@@ -14,3 +14,9 @@ export const uploadKtp = (data: unknown) =>
     method: 'POST',
     body: JSON.stringify(data),
   });
+
+export async function parseKtpFile(file: File): Promise<KtpDraft> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return requestForm<KtpDraft>('/ktp/parse', formData);
+}

@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { RichText } from './RichText';
 
 export interface MindMapBranch {
   label: string;
@@ -11,235 +12,194 @@ export interface MindMapProps {
   branches: MindMapBranch[];
 }
 
-const ROOT_WIDTH = 220;
-const NODE_WIDTH = 180;
-const LEAF_WIDTH = 140;
-const NODE_HEIGHT = 56;
-const LEVEL_GAP = 80;
-const SIBLING_GAP = 24;
-const PADDING = 60;
+const ROOT_WIDTH = 224;
+const BRANCH_WIDTH = 200;
+const LEAF_WIDTH = 184;
+const NODE_HEIGHT = 72;
+const LEVEL_GAP = 72;
+const LEAF_GAP = 28;
+const ROW_GAP = 30;
+const PADDING_X = 48;
+const PADDING_Y = 42;
 
-interface PositionedNode {
+export interface HorizontalMindMapNode {
   id: string;
   label: string;
   x: number;
   y: number;
   width: number;
-  isRoot?: boolean;
-  isLeaf?: boolean;
-  subtreeHeight: number;
-  children: PositionedNode[];
+  kind: 'root' | 'branch' | 'leaf';
 }
 
-interface TreeNode {
-  id: string;
-  label: string;
-  isRoot?: boolean;
-  isLeaf?: boolean;
-  children: TreeNode[];
+export interface HorizontalMindMapRow {
+  branch: HorizontalMindMapNode;
+  leaves: HorizontalMindMapNode[];
 }
 
-interface MeasuredTreeNode extends TreeNode {
+export interface HorizontalMindMapLayout {
+  root: HorizontalMindMapNode;
+  rows: HorizontalMindMapRow[];
   width: number;
-  subtreeHeight: number;
-  children: MeasuredTreeNode[];
+  height: number;
+}
+
+export function buildHorizontalMindMapLayout(
+  centralConcept: string,
+  branches: MindMapBranch[],
+): HorizontalMindMapLayout {
+  const safeBranches = branches.length > 0 ? branches : [{ label: '', children: [] }];
+  const rowPitch = NODE_HEIGHT + ROW_GAP;
+  const contentHeight = safeBranches.length * NODE_HEIGHT + Math.max(0, safeBranches.length - 1) * ROW_GAP;
+  const rootY = PADDING_Y + contentHeight / 2 - NODE_HEIGHT / 2;
+  const branchX = PADDING_X + ROOT_WIDTH + LEVEL_GAP;
+  const firstLeafX = branchX + BRANCH_WIDTH + LEVEL_GAP;
+
+  const rows = safeBranches.map((branch, branchIndex) => {
+    const y = PADDING_Y + branchIndex * rowPitch;
+    return {
+      branch: {
+        id: `branch-${branchIndex}`,
+        label: branch.label,
+        x: branchX,
+        y,
+        width: BRANCH_WIDTH,
+        kind: 'branch' as const,
+      },
+      leaves: (branch.children || []).map((label, leafIndex) => ({
+        id: `leaf-${branchIndex}-${leafIndex}`,
+        label,
+        x: firstLeafX + leafIndex * (LEAF_WIDTH + LEAF_GAP),
+        y,
+        width: LEAF_WIDTH,
+        kind: 'leaf' as const,
+      })),
+    };
+  });
+
+  const maxLeafCount = Math.max(0, ...rows.map((row) => row.leaves.length));
+  const contentRight = maxLeafCount > 0
+    ? firstLeafX + maxLeafCount * LEAF_WIDTH + Math.max(0, maxLeafCount - 1) * LEAF_GAP
+    : branchX + BRANCH_WIDTH;
+
+  return {
+    root: {
+      id: 'root',
+      label: centralConcept,
+      x: PADDING_X,
+      y: rootY,
+      width: ROOT_WIDTH,
+      kind: 'root',
+    },
+    rows: branches.length > 0 ? rows : [],
+    width: contentRight + PADDING_X,
+    height: Math.max(NODE_HEIGHT + PADDING_Y * 2, contentHeight + PADDING_Y * 2),
+  };
+}
+
+function nodeColors(kind: HorizontalMindMapNode['kind']) {
+  if (kind === 'root') {
+    return {
+      fill: 'hsl(var(--primary) / 0.1)',
+      stroke: 'hsl(var(--primary))',
+      strokeWidth: 2,
+      textClass: 'font-semibold text-foreground',
+    };
+  }
+  if (kind === 'leaf') {
+    return {
+      fill: 'hsl(var(--muted) / 0.55)',
+      stroke: 'hsl(var(--border))',
+      strokeWidth: 1,
+      textClass: 'font-normal text-muted-foreground',
+    };
+  }
+  return {
+    fill: 'hsl(var(--card))',
+    stroke: 'hsl(var(--primary) / 0.28)',
+    strokeWidth: 1.5,
+    textClass: 'font-medium text-foreground',
+  };
+}
+
+function MapNode({ node }: { node: HorizontalMindMapNode }) {
+  const colors = nodeColors(node.kind);
+  return (
+    <g transform={`translate(${node.x}, ${node.y})`} className="group cursor-default">
+      <rect
+        width={node.width}
+        height={NODE_HEIGHT}
+        rx="10"
+        fill={colors.fill}
+        stroke={colors.stroke}
+        strokeWidth={colors.strokeWidth}
+        className="transition-colors duration-200 group-hover:stroke-[hsl(var(--primary)/0.7)]"
+      />
+      <foreignObject width={node.width} height={NODE_HEIGHT}>
+        <div className={`pointer-events-none flex h-full w-full select-none items-center justify-center overflow-hidden px-4 text-center font-sans text-sm leading-snug ${colors.textClass}`}>
+          <RichText text={node.label} inline />
+        </div>
+      </foreignObject>
+      <title>{node.label}</title>
+    </g>
+  );
 }
 
 export default function MindMap({ title, central_concept, branches }: MindMapProps) {
-  const { positionedRoot, width, height } = useMemo(() => {
-    if (!central_concept) return { positionedRoot: null, width: 0, height: 0 };
-    
-    // Build tree
-    const rootTree: TreeNode = {
-      id: 'root',
-      label: central_concept,
-      isRoot: true,
-      children: branches.map((branch, i) => ({
-        id: `branch-${i}`,
-        label: branch.label,
-        children: (branch.children || []).map((leaf, j) => ({
-          id: `leaf-${i}-${j}`,
-          label: leaf,
-          isLeaf: true,
-          children: []
-        }))
-      }))
-    };
+  const layout = useMemo(
+    () => buildHorizontalMindMapLayout(central_concept, branches),
+    [central_concept, branches],
+  );
 
-    // Calculate heights
-    const calcHeights = (node: TreeNode): MeasuredTreeNode => {
-      if (node.children.length === 0) {
-        return {
-          id: node.id,
-          label: node.label,
-          isRoot: node.isRoot,
-          isLeaf: node.isLeaf,
-          children: [],
-          subtreeHeight: NODE_HEIGHT,
-          width: node.isLeaf ? LEAF_WIDTH : NODE_WIDTH,
-        };
-      }
-      
-      const children = node.children.map(calcHeights);
-      const h = children.reduce((sum, child) => sum + child.subtreeHeight, 0) + (children.length - 1) * SIBLING_GAP;
-      
-      return { 
-        ...node, 
-        children, 
-        subtreeHeight: Math.max(NODE_HEIGHT, h),
-        width: node.isRoot ? ROOT_WIDTH : NODE_WIDTH
-      };
-    };
+  if (!central_concept) return null;
 
-    const treeWithHeights = calcHeights(rootTree);
-    const totalHeight = treeWithHeights.subtreeHeight;
-    
-    // Assign positions
-    const assignPos = (node: MeasuredTreeNode, x: number, yCenter: number): PositionedNode => {
-      const children = node.children;
-      const posChildren: PositionedNode[] = [];
-      
-      if (children.length > 0) {
-        const totalChildrenHeight = children.reduce((sum, child) => sum + child.subtreeHeight, 0) + (children.length - 1) * SIBLING_GAP;
-        let currentY = yCenter - totalChildrenHeight / 2;
-        
-        for (const child of children) {
-          const childCenter = currentY + child.subtreeHeight / 2;
-          posChildren.push(assignPos(child, x + node.width + LEVEL_GAP, childCenter));
-          currentY += child.subtreeHeight + SIBLING_GAP;
-        }
-      }
-
-      return {
-        ...node,
-        x,
-        y: yCenter - NODE_HEIGHT / 2,
-        children: posChildren,
-      };
-    };
-
-    // Depth is max 2 (root -> branch -> leaf)
-    // Width = ROOT_WIDTH + LEVEL_GAP + NODE_WIDTH + LEVEL_GAP + LEAF_WIDTH
-    const totalWidth = ROOT_WIDTH + NODE_WIDTH + LEAF_WIDTH + LEVEL_GAP * 2;
-    const rootPos = assignPos(treeWithHeights, PADDING, PADDING + totalHeight / 2);
-    
-    return {
-      positionedRoot: rootPos,
-      width: totalWidth + PADDING * 2,
-      height: totalHeight + PADDING * 2,
-    };
-  }, [central_concept, branches]);
-
-  if (!positionedRoot) return null;
-
-  const renderEdges = (node: PositionedNode): React.ReactNode[] => {
-    const edges: React.ReactNode[] = [];
-    const children = node.children;
-    
-    const startX = node.x + node.width;
-    const startY = node.y + NODE_HEIGHT / 2;
-    
-    children.forEach(child => {
-      const endX = child.x;
-      const endY = child.y + NODE_HEIGHT / 2;
-      
-      const controlPointX = startX + LEVEL_GAP / 2;
-      const path = `M ${startX} ${startY} C ${controlPointX} ${startY}, ${controlPointX} ${endY}, ${endX} ${endY}`;
-      
-      edges.push(
-        <path
-          key={`edge-${node.id}-${child.id}`}
-          d={path}
-          fill="none"
-          stroke="hsl(var(--primary) / 0.3)"
-          strokeWidth={node.isRoot ? "3" : "1.5"}
-          className="transition-all duration-300"
-        />
-      );
-      
-      edges.push(...renderEdges(child));
-    });
-    
-    return edges;
-  };
-
-  const renderNodes = (node: PositionedNode): React.ReactNode[] => {
-    const nodes: React.ReactNode[] = [];
-    
-    let bgClass = "hsl(var(--card))";
-    let strokeClass = "hsl(var(--primary) / 0.2)";
-    let textClass = "hsl(var(--foreground))";
-    let fontWeight = "500";
-    
-    if (node.isRoot) {
-      bgClass = "hsl(var(--primary) / 0.1)";
-      strokeClass = "hsl(var(--primary))";
-      textClass = "hsl(var(--foreground))";
-      fontWeight = "600";
-    } else if (node.isLeaf) {
-      bgClass = "hsl(var(--muted) / 0.5)";
-      strokeClass = "transparent";
-      textClass = "hsl(var(--muted-foreground))";
-      fontWeight = "400";
-    }
-
-    nodes.push(
-      <g key={`node-${node.id}`} transform={`translate(${node.x}, ${node.y})`} className="group cursor-default">
-        <rect
-          width={node.width}
-          height={NODE_HEIGHT}
-          rx={node.isLeaf ? "8" : "12"}
-          fill={bgClass}
-          stroke={strokeClass}
-          strokeWidth={node.isRoot ? "2" : "1"}
-          className={!node.isLeaf ? "group-hover:stroke-[hsl(var(--primary)/0.6)] transition-all duration-300 drop-shadow-sm" : ""}
-        />
-        <text
-          x={node.width / 2}
-          y={NODE_HEIGHT / 2}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fill={textClass}
-          fontSize={node.isRoot ? "16" : node.isLeaf ? "13" : "14"}
-          fontWeight={fontWeight}
-          className="pointer-events-none select-none font-sans"
-        >
-          {node.label.length > (node.isRoot ? 25 : 20) ? node.label.substring(0, (node.isRoot ? 23 : 18)) + '...' : node.label}
-        </text>
-        <title>{node.label}</title>
-      </g>
-    );
-    
-    node.children.forEach(child => {
-      nodes.push(...renderNodes(child));
-    });
-    
-    return nodes;
-  };
+  const rootStartX = layout.root.x + layout.root.width;
+  const rootStartY = layout.root.y + NODE_HEIGHT / 2;
 
   return (
-    <div className="my-8 border rounded-2xl bg-muted/10 overflow-hidden shadow-inner relative">
-      <div className="p-4 border-b bg-background/50 backdrop-blur-sm relative z-20">
-        <h3 className="font-semibold text-lg text-foreground">{title}</h3>
-      </div>
-      
-      <div className="absolute left-0 top-14 bottom-0 w-8 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
-      <div className="absolute right-0 top-14 bottom-0 w-8 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
-      
-      <div className="overflow-x-auto custom-scrollbar w-full relative z-0">
-        <svg 
-          viewBox={`0 0 ${width} ${height}`}
+    <section className="my-6 overflow-hidden rounded-lg border border-border bg-muted/10 shadow-sm" data-layout-direction="horizontal">
+      <header className="border-b border-border bg-card px-4 py-3">
+        <h3 className="text-base font-semibold text-foreground"><RichText text={title} inline /></h3>
+      </header>
+
+      <div className="relative w-full overflow-x-auto overscroll-x-contain" tabIndex={0} aria-label="Горизонтальная карта связей">
+        <svg
+          width={layout.width}
+          height={layout.height}
+          viewBox={`0 0 ${layout.width} ${layout.height}`}
           role="img"
           aria-label={`${title}: ${central_concept}`}
-          className="block h-auto w-full min-w-[640px]"
-          style={{ aspectRatio: `${width} / ${height}` }}
+          className="block min-w-full"
         >
-          <g>
-            {renderEdges(positionedRoot)}
-            {renderNodes(positionedRoot)}
+          <g fill="none" stroke="hsl(var(--primary) / 0.34)" strokeLinecap="round">
+            {layout.rows.map(({ branch, leaves }) => {
+              const branchCenterY = branch.y + NODE_HEIGHT / 2;
+              const rootControlX = rootStartX + LEVEL_GAP / 2;
+              const lastLeaf = leaves.at(-1);
+              return (
+                <React.Fragment key={`connections-${branch.id}`}>
+                  <path
+                    d={`M ${rootStartX} ${rootStartY} C ${rootControlX} ${rootStartY}, ${rootControlX} ${branchCenterY}, ${branch.x} ${branchCenterY}`}
+                    strokeWidth="2.5"
+                  />
+                  {lastLeaf && (
+                    <path
+                      d={`M ${branch.x + branch.width} ${branchCenterY} H ${lastLeaf.x}`}
+                      strokeWidth="1.75"
+                    />
+                  )}
+                </React.Fragment>
+              );
+            })}
           </g>
+
+          <MapNode node={layout.root} />
+          {layout.rows.flatMap(({ branch, leaves }) => [
+            <MapNode key={branch.id} node={branch} />,
+            ...leaves.map((leaf) => <MapNode key={leaf.id} node={leaf} />),
+          ])}
         </svg>
       </div>
-    </div>
+      <p className="sr-only">Карта читается слева направо: главное понятие, ветвь и связанные с ней идеи.</p>
+    </section>
   );
 }

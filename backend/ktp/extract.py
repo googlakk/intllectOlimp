@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class Extraction:
-    source_kind: str                      # "docx" | "pdf"
+    source_kind: str                      # "xlsx" | "docx" | "pdf"
     header_text: str                      # заголовок документа: предмет, класс, часы
     tables: list[list[list[str]]] = field(default_factory=list)
 
@@ -87,6 +87,37 @@ def extract_pdf(data: bytes) -> Extraction:
     return Extraction("pdf", "\n".join(header_lines), merged)
 
 
+def extract_xlsx(data: bytes) -> Extraction:
+    """Extract visible cell values from every non-empty worksheet."""
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    tables: list[list[list[str]]] = []
+    header_lines: list[str] = []
+    try:
+        for worksheet in workbook.worksheets:
+            raw_rows = [
+                [_clean(cell) for cell in row]
+                for row in worksheet.iter_rows(values_only=True)
+            ]
+            while raw_rows and not any(raw_rows[-1]):
+                raw_rows.pop()
+            if not raw_rows:
+                continue
+
+            width = max((len(row) for row in raw_rows), default=0)
+            rows = [row + [""] * (width - len(row)) for row in raw_rows]
+            tables.append(rows)
+            header_lines.append(f"Лист: {worksheet.title}")
+            for row in rows[:10]:
+                text = " | ".join(cell for cell in row if cell)
+                if text:
+                    header_lines.append(text)
+    finally:
+        workbook.close()
+    return Extraction("xlsx", "\n".join(header_lines[:30]), tables)
+
+
 def _merge_page_splits(tables: list[list[list[str]]]) -> list[list[list[str]]]:
     """PDF режет одну таблицу по страницам. Соседние куски с одинаковым числом
     колонок — это продолжение, а не новая таблица. Склеиваем их, иначе ячейка,
@@ -127,8 +158,10 @@ def _join_continuation_rows(table: list[list[str]], header_rows: int = 3) -> lis
 
 def extract(data: bytes, filename: str) -> Extraction:
     name = filename.lower()
+    if name.endswith(".xlsx"):
+        return extract_xlsx(data)
     if name.endswith(".docx"):
         return extract_docx(data)
     if name.endswith(".pdf"):
         return extract_pdf(data)
-    raise ValueError(f"Неподдерживаемый формат файла: {filename}. Нужен .docx или .pdf")
+    raise ValueError(f"Неподдерживаемый формат файла: {filename}. Нужен .xlsx, .docx или .pdf")

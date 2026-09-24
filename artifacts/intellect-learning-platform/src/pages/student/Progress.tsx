@@ -1,3 +1,4 @@
+import { LearningHistory } from '@/features/progress/LearningHistory';
 import { Trophy, Target, BookOpen, Brain, Loader2 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useGetStudentProgress } from '@/lib/api';
@@ -5,7 +6,7 @@ import { buildProgressOverview } from '@/features/progress/overview';
 
 export default function Progress() {
   const { user } = useAuth();
-  const { data: progress = [], isLoading } = useGetStudentProgress(user?.id || 0, !!user?.id);
+  const { data: progress = [], isLoading, isError, refetch } = useGetStudentProgress(user?.id || 0, !!user?.id);
   const overview = buildProgressOverview(progress);
   const stats = [
     { label: 'Завершено уроков', value: String(overview.completedLessons), icon: BookOpen, color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
@@ -21,6 +22,7 @@ export default function Progress() {
         <p className="text-muted-foreground mt-2 font-medium">Статистика вашего обучения и достижения</p>
       </div>
 
+      {isError && <p role="alert">Не удалось загрузить прогресс. <button onClick={() => refetch()} className="text-primary underline">Повторить</button></p>}
       {isLoading ? (
         <div data-testid="progress-loading" className="flex items-center justify-center rounded-3xl border border-border bg-card py-16 text-muted-foreground"><Loader2 className="mr-3 h-6 w-6 animate-spin" />Загружаем реальные результаты…</div>
       ) : <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
@@ -35,6 +37,7 @@ export default function Progress() {
         ))}
       </div>}
 
+      {!isLoading && !isError && <LearningHistory progress={progress} studentId={user?.id || 0} />}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
         <div className="bg-card p-6 md:p-10 rounded-[2rem] border border-border shadow-sm">
           <h3 className="text-xl font-bold text-foreground mb-8 flex items-center gap-3">

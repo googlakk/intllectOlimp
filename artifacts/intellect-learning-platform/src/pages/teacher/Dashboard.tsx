@@ -1,6 +1,9 @@
+import { useState } from 'react';
+import { StudentLearningReport } from '@/features/dashboard/StudentLearningReport';
 import { Users, BookOpen, Layers, Activity, Search } from 'lucide-react';
 import { useDashboardOverview, useDashboardStudents } from '@/lib/api';
 import { buildDashboardMetrics, scoreBadgeClass, type DashboardMetricKey } from '@/features/dashboard/overview';
+import { KtpImportPanel } from '@/features/teacherLessons/KtpImport';
 
 const metricIcons: Record<DashboardMetricKey, typeof Users> = {
   students: Users,
@@ -10,10 +13,12 @@ const metricIcons: Record<DashboardMetricKey, typeof Users> = {
 };
 
 export default function Dashboard() {
+  const [selectedStudent, setSelectedStudent] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
   const { data: overviewData } = useDashboardOverview();
   const { data: studentData } = useDashboardStudents();
   const metrics = buildDashboardMetrics(overviewData);
-  const students = studentData ?? [];
+  const students = (studentData ?? []).filter(student => student.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -39,13 +44,17 @@ export default function Dashboard() {
         })}
       </div>
 
+      <KtpImportPanel />
+      {selectedStudent !== null && <StudentLearningReport studentId={selectedStudent} onClose={() => setSelectedStudent(null)} />}
+
       <div className="bg-card rounded-[2rem] border border-border shadow-sm overflow-hidden">
         <div className="p-6 md:p-8 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
           <h2 className="text-xl font-bold text-foreground">Успеваемость учеников</h2>
           <div className="relative w-full sm:w-80">
             <Search className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input 
-              type="text" 
+              type="text"
+              aria-label="Поиск ученика" value={search} onChange={event => setSearch(event.target.value)} 
               placeholder="Поиск по имени..." 
               className="w-full pl-11 pr-4 py-2.5 bg-muted/50 border border-border rounded-xl text-sm focus:outline-none focus:border-primary/50 focus:bg-card transition-colors font-medium"
             />
@@ -74,7 +83,7 @@ export default function Dashboard() {
                     </span>
                   </td>
                   <td className="px-8 py-5 text-right">
-                    <button className="text-primary hover:text-primary/80 font-bold transition-colors">Подробнее</button>
+                    <button onClick={() => setSelectedStudent(student.id)} className="text-primary hover:text-primary/80 font-bold transition-colors">Подробнее</button>
                   </td>
                 </tr>
               ))}

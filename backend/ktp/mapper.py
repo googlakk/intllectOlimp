@@ -20,6 +20,7 @@ from .assemble import ColumnMap, assemble
 from .columns import detect_columns, to_column_maps
 from .extract import Extraction
 from .validate import verify_maps
+from .template import is_standard_template, map_standard_template
 
 FIELD_NAMES = {
     "number": "ktp_number",
@@ -127,5 +128,7 @@ def build_draft(
 
 async def map_to_schema(extraction: Extraction) -> dict[str, Any]:
     """Разбирает извлечённый документ в черновик плана."""
+    if is_standard_template(extraction):
+        return map_standard_template(extraction)
     payload = await detect_columns(extraction)
     return build_draft(extraction, payload)

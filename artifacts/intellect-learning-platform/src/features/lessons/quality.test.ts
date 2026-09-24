@@ -70,9 +70,9 @@ describe('lesson quality helpers', () => {
     expect(state.hasObjectiveContract).toBe(true);
     expect(state.canPublish).toBe(false);
     expect(state.blockingIssues).toEqual([
-      'Автоматическая проверка считает урок непригодным к публикации',
+      'Перед публикацией исправьте отмеченные недочёты',
       'Нет проверки',
-      'Не покрыта цель: o2 (practice, assessment)',
+      'Не покрыта цель: o2 (практика, проверка)',
     ]);
     expect(state.warningMessages).toEqual(['Слишком длинный текст']);
   });

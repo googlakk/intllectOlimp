@@ -1,14 +1,36 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { request, requestNullable } from './client';
-import type { Block, GeneratedLesson } from './types';
+import { readPersistentRequestCache, request, requestCached, requestNullable } from './client';
+import type { Block, GeneratedLesson, StudentLessonManifest } from './types';
+
+const LESSON_READ_CACHE_MS = 5 * 60 * 1000;
+
+export const lessonQueryKey = (
+  topicId: number,
+  role?: 'student' | 'teacher',
+  studentId?: number,
+) => ['lesson', topicId, role, studentId] as const;
+
+export const lessonManifestQueryKey = (topicId: number, studentId?: number) =>
+  ['lesson-manifest', topicId, studentId] as const;
 
 export async function getLessonByTopic(
   topicId: number,
   role?: 'student' | 'teacher',
+  studentId?: number,
 ): Promise<GeneratedLesson | null> {
-  return requestNullable<GeneratedLesson>(`/lessons/${topicId}${role ? `?role=${role}` : ''}`);
+  const params = new URLSearchParams();
+  if (role) params.set('role', role);
+  if (studentId) params.set('student_id', String(studentId));
+  const query = params.size ? `?${params.toString()}` : '';
+  return requestNullable<GeneratedLesson>(`/lessons/${topicId}${query}`);
 }
+
+const lessonManifestPath = (topicId: number) => `/lessons/${topicId}/manifest`;
+
+export const getStudentLessonManifest = (topicId: number) =>
+  requestCached<StudentLessonManifest>(lessonManifestPath(topicId), LESSON_READ_CACHE_MS);
 
 export const generateLesson = (topicId: number, teacherId: number) =>
   request<GeneratedLesson>('/lessons/generate', {
@@ -31,12 +53,42 @@ export const publishLesson = (lessonId: number, teacherId: number, acknowledgeWa
 export const unpublishLesson = (lessonId: number) =>
   request<GeneratedLesson>(`/lessons/${lessonId}/unpublish`, { method: 'PUT' });
 
-export const useGetLesson = (topicId: number, role?: 'student' | 'teacher', enabled = true) =>
+export const useGetLesson = (
+  topicId: number,
+  role?: 'student' | 'teacher',
+  enabled = true,
+  studentId?: number,
+) =>
   useQuery({
-    queryKey: ['lesson', topicId, role],
-    queryFn: () => getLessonByTopic(topicId, role),
+    queryKey: lessonQueryKey(topicId, role, studentId),
+    queryFn: () => getLessonByTopic(topicId, role, studentId),
     enabled: enabled && topicId > 0,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   });
+
+export const useStudentLessonManifest = (
+  topicId: number,
+  studentId?: number,
+  enabled = true,
+) => {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: lessonManifestQueryKey(topicId, studentId),
+    queryFn: () => getStudentLessonManifest(topicId),
+    enabled: enabled && topicId > 0 && Boolean(studentId),
+    initialData: () => readPersistentRequestCache<StudentLessonManifest>(lessonManifestPath(topicId))?.data,
+    initialDataUpdatedAt: () => readPersistentRequestCache<StudentLessonManifest>(lessonManifestPath(topicId))?.updatedAt,
+    staleTime: LESSON_READ_CACHE_MS,
+    gcTime: 30 * 60 * 1000,
+  });
+  useEffect(() => {
+    if (!query.data) return;
+    queryClient.setQueryData(lessonQueryKey(topicId, 'student', studentId), query.data.lesson);
+    queryClient.setQueryData(['progress', studentId, topicId], query.data.progress);
+  }, [query.data, queryClient, studentId, topicId]);
+  return query;
+};
 
 export const useGenerateLesson = () =>
   useMutation({
@@ -67,3 +119,7 @@ export const useLessonStatus = (topicId: number, enabled = true) =>
     queryFn: () => getLessonByTopic(topicId, 'teacher'),
     enabled: enabled && topicId > 0,
   });
+
+export const useCreateLessonDraft = () => useMutation({
+  mutationFn: (data: { topic_id: number; teacher_id: number }) => request<GeneratedLesson>('/lessons/draft', { method: 'POST', body: JSON.stringify(data) }),
+});

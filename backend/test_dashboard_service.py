@@ -20,7 +20,7 @@ class DashboardOverviewTests(unittest.TestCase):
                 "subjects": 3,
                 "topics": 8,
                 "published_lessons": 5,
-                "average_progress": 37.5,
+                "average_progress": 3.1,
             },
         )
 
@@ -61,3 +61,19 @@ class StudentSummaryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LearningReportTests(unittest.IsolatedAsyncioTestCase):
+    async def test_report_denies_students_outside_teacher_scope(self):
+        from unittest.mock import AsyncMock, patch
+        from services.dashboard import get_student_learning_report
+        from errors import ApplicationError
+        db = SimpleNamespace(get=AsyncMock())
+        with patch('services.dashboard._visible_student_ids', AsyncMock(return_value=[1])):
+            with self.assertRaises(ApplicationError):
+                await get_student_learning_report(2, db, user=SimpleNamespace(role='teacher'))
+        db.get.assert_not_awaited()
+
+    def test_multiple_students_cannot_exceed_one_hundred_percent(self):
+        self.assertEqual(build_dashboard_overview(students=2, subjects=1, topics=3, published_lessons=3, completed_lessons=6)['average_progress'], 100)
+        self.assertEqual(build_dashboard_overview(students=2, subjects=1, topics=3, published_lessons=3, completed_lessons=2)['average_progress'], 33.3)

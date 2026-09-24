@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .extract import Extraction
+from topic_semantics import infer_lesson_type, ambiguous_lesson_name
 
 
 ASSESSMENT_WORDS = (
@@ -97,12 +98,7 @@ def _hours(value: str) -> int:
 
 
 def _lesson_type(name: str) -> str:
-    lowered = name.casefold()
-    if any(word in lowered for word in ASSESSMENT_WORDS):
-        return "assessment"
-    if any(word in lowered for word in PROJECT_WORDS):
-        return "project"
-    return "study"
+    return infer_lesson_type(name)
 
 
 def _split_skills(row: list[str], columns: list[int]) -> list[str]:
@@ -185,12 +181,15 @@ def _consume_row(
             "они собраны в раздел без названия."
         )
 
+    if ambiguous_lesson_name(name):
+        warnings.append(f"Проверьте тип занятия «{name}».")
     order += 1
     current["topics"].append({
         "ktp_number": number,
         "name": name,
         "hours": _hours(_cell(row, mapping.hours)) if mapping.hours is not None else 1,
         "lesson_type": _lesson_type(name),
+        "review_required": ambiguous_lesson_name(name),
         "learning_objectives": _cell(row, mapping.objectives),
         "skills": _split_skills(row, mapping.skills),
         "resources": _cell(row, mapping.resources),

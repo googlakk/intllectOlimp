@@ -6,11 +6,14 @@
   "scripts": {
     "check:architecture": "node ./src/check-architecture.mjs",
     "check:agent-system": "node ./src/check-agent-system.mjs",
+    "perf:lesson:browser": "node ./src/lesson-perf-smoke.mjs",
+    "perf:lesson:browser:auth": "node ./src/run-authenticated-lesson-perf.mjs",
     "hello": "tsx ./src/hello.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "playwright": "^1.63.0",
     "tsx": "catalog:"
   }
 }

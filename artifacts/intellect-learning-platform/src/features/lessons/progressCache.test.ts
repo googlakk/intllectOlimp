@@ -12,6 +12,7 @@ describe('lesson progress cache policy', () => {
       ['dashboard-overview'],
       ['dashboard-students'],
       ['subjects'],
+      ['curriculum-map'],
     ]);
   });
 });

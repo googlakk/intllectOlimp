@@ -1,30 +1,7 @@
-import React from 'react';
-import TeX from '@matejmazur/react-katex';
-
-export const InlineMath = ({ math }: { math: string }) => <TeX math={math} />;
-export const BlockMath = ({ math }: { math: string }) => <TeX math={math} block />;
+import { RichText } from './RichText';
 
 export function parseMathText(text: string) {
-  if (!text) return null;
-  
-  const blockRegex = /(\$\$[\s\S]*?\$\$)/g;
-  const blocks = text.split(blockRegex);
-  
-  return blocks.map((block, i) => {
-    if (block.startsWith('$$') && block.endsWith('$$')) {
-      return <BlockMath key={`block-${i}`} math={block.slice(2, -2)} />;
-    }
-    
-    const inlineRegex = /(\$[\s\S]*?\$)/g;
-    const inlines = block.split(inlineRegex);
-    
-    return inlines.map((inline, j) => {
-      if (inline.startsWith('$') && inline.endsWith('$')) {
-        return <InlineMath key={`inline-${i}-${j}`} math={inline.slice(1, -1)} />;
-      }
-      return <React.Fragment key={`text-${i}-${j}`}>{inline}</React.Fragment>;
-    });
-  });
+  return <RichText text={text} inline />;
 }
 
 export interface ShortExplanationProps {
@@ -38,9 +15,7 @@ export default function ShortExplanation({ title, text, key_concepts, callout }:
   return (
     <div className="my-6">
       <h3 className="text-xl font-semibold mb-4 text-foreground">{title}</h3>
-      <div className="text-foreground leading-relaxed mb-6 whitespace-pre-wrap text-base">
-        {parseMathText(text)}
-      </div>
+      <RichText text={text} className="mb-6 text-base leading-relaxed text-foreground" />
       
       {key_concepts && key_concepts.length > 0 && (
         <div className="mb-6">

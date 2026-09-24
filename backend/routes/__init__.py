@@ -1,3 +1,3 @@
-from . import auth, components, dashboard, ktp, lessons, progress, subjects
+from . import accounts, auth, components, curriculum, dashboard, ktp, lessons, progress, subjects
 
-__all__ = ["auth", "components", "dashboard", "ktp", "lessons", "progress", "subjects"]
+__all__ = ["accounts", "auth", "components", "curriculum", "dashboard", "ktp", "lessons", "progress", "subjects"]

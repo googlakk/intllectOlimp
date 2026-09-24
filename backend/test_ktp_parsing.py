@@ -48,10 +48,10 @@ class KtpParsingServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_rejects_unsupported_file_type(self):
         with self.assertRaises(KtpParseError) as rejected:
-            await parse_ktp_draft(filename="plan.xlsx", data=b"x")
+            await parse_ktp_draft(filename="plan.csv", data=b"x")
 
         self.assertEqual(rejected.exception.status_code, 422)
-        self.assertIn(".docx", rejected.exception.detail)
+        self.assertIn(".xlsx", rejected.exception.detail)
 
     async def test_rejects_empty_file(self):
         with self.assertRaises(KtpParseError) as rejected:

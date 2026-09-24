@@ -1,101 +1,101 @@
-import { useState, useEffect } from 'react';
-import { useLoginUsers, useLogin } from '@/lib/api';
-import { useAuth } from '@/components/auth/AuthContext';
+import { useEffect, useState } from 'react';
+import { ArrowRight, Eye, EyeOff, Loader2, LockKeyhole, UserRound } from 'lucide-react';
 import { useLocation } from 'wouter';
-import { Loader2, User as UserIcon, GraduationCap, ArrowRight } from 'lucide-react';
+
+import { useAuth } from '@/components/auth/AuthContext';
+import { takeAuthNotice } from '@/lib/authSession';
+
+function homeFor(role: 'admin' | 'teacher' | 'student') {
+  if (role === 'student') return '/learn';
+  if (role === 'admin') return '/admin/accounts';
+  return '/dashboard';
+}
 
 export default function Login() {
-  const { user, login } = useAuth();
+  const { user, isLoading, login } = useAuth();
   const [, setLocation] = useLocation();
-  const [role, setRole] = useState<'student' | 'teacher'>('student');
-  
-  const { data: users, isLoading } = useLoginUsers();
-  const loginMutation = useLogin();
+  const [loginName, setLoginName] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState(() => takeAuthNotice());
 
   useEffect(() => {
-    if (user) {
-      setLocation(user.role === 'student' ? '/learn' : '/dashboard');
-    }
+    if (user) setLocation(user.must_change_password ? '/change-password' : homeFor(user.role));
   }, [user, setLocation]);
 
-  const handleLogin = (name: string) => {
-    loginMutation.mutate(
-      { role, name },
-      {
-        onSuccess: (u) => {
-          login(u);
-        }
-      }
-    );
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError('');
+    setPending(true);
+    try {
+      const signedIn = await login(loginName, password);
+      setLocation(signedIn.must_change_password ? '/change-password' : homeFor(signedIn.role));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Не удалось войти.');
+    } finally {
+      setPending(false);
+    }
   };
 
-  if (user) return null;
+  if (user || isLoading) return null;
 
   return (
-    <div className="min-h-[100dvh] w-full flex items-center justify-center bg-muted/30 p-4">
-      <div className="w-full max-w-md bg-card rounded-3xl shadow-xl border border-border overflow-hidden">
-        <div className="p-8 text-center bg-gradient-to-b from-primary/5 to-transparent border-b border-border/50">
-           <div className="w-16 h-16 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center text-3xl font-bold mx-auto mb-5 shadow-lg shadow-primary/30">
-              И
-           </div>
-           <h1 className="text-2xl font-bold text-foreground mb-2">Добро пожаловать</h1>
-           <p className="text-muted-foreground text-sm font-medium">Платформа для подготовки к олимпиадам</p>
-        </div>
-        
-        <div className="p-6 md:p-8">
-          <div className="flex p-1 bg-muted rounded-xl mb-6">
-            <button 
-              onClick={() => setRole('student')}
-              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${role === 'student' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              Ученик
-            </button>
-            <button 
-              onClick={() => setRole('teacher')}
-              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${role === 'teacher' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              Преподаватель
-            </button>
-          </div>
-
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <Loader2 className="w-8 h-8 animate-spin mb-4 text-primary/50" />
-              <p className="text-sm font-medium">Загрузка пользователей...</p>
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-              {(role === 'student' ? users?.students : users?.teachers)?.map((u) => (
-                <button
-                  key={u.id}
-                  disabled={loginMutation.isPending}
-                  onClick={() => handleLogin(u.name)}
-                  className="w-full flex items-center justify-between p-4 rounded-xl border border-transparent hover:border-primary/20 bg-muted/30 hover:bg-primary/5 transition-all text-left group disabled:opacity-50"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-card shadow-sm border border-border flex items-center justify-center text-muted-foreground group-hover:text-primary transition-colors">
-                      {role === 'student' ? <GraduationCap className="w-5 h-5" /> : <UserIcon className="w-5 h-5" />}
-                    </div>
-                    <div>
-                      <div className="font-semibold text-foreground">{u.name}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {role === 'student' ? `${u.grade} класс` : 'Доступ к платформе'}
-                      </div>
-                    </div>
-                  </div>
-                  <ArrowRight className="w-5 h-5 text-muted-foreground opacity-0 -translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-primary" />
-                </button>
-              ))}
-              
-              {(role === 'student' ? users?.students : users?.teachers)?.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  Пользователи не найдены.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+    <main className="grid min-h-[100dvh] place-items-center bg-muted/30 p-4">
+      <section className="w-full max-w-sm overflow-hidden rounded-lg border bg-card shadow-lg">
+        <header className="border-b px-7 py-7 text-center">
+          <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-lg bg-primary text-2xl font-bold text-primary-foreground">И</div>
+          <h1 className="text-2xl font-bold text-foreground">Вход в Интеллект</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Используйте данные, выданные школой</p>
+        </header>
+        <form onSubmit={submit} className="space-y-5 p-7">
+          <label className="block space-y-2 text-sm font-semibold text-foreground">
+            <span>Логин</span>
+            <span className="relative block">
+              <UserRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={loginName}
+                onChange={(event) => setLoginName(event.target.value)}
+                autoComplete="username"
+                required
+                minLength={3}
+                className="h-11 w-full rounded-md border bg-background pl-10 pr-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              />
+            </span>
+          </label>
+          <label className="block space-y-2 text-sm font-semibold text-foreground">
+            <span>Пароль</span>
+            <span className="relative block">
+              <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                required
+                className="h-11 w-full rounded-md border bg-background pl-10 pr-10 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((value) => !value)}
+                aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center text-muted-foreground hover:text-foreground"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </span>
+          </label>
+          {error && <p role="alert" className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+          <button
+            type="submit"
+            disabled={pending}
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-md bg-primary font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+          >
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+            Войти
+          </button>
+        </form>
+      </section>
+    </main>
   );
 }

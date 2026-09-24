@@ -55,7 +55,8 @@ describe('component catalog model', () => {
     expect(categoryStyle('assess')).toContain('rose');
     expect(categoryStyle('custom')).toContain('bg-muted');
     expect(subjectLabel('literature')).toBe('Литература');
-    expect(subjectLabel('science')).toBe('science');
+    expect(subjectLabel('science')).toBe('Естественные науки');
+    expect(subjectLabel('unknown')).toBe('unknown');
   });
 
   it('formats schema primitive, enum and array types', () => {

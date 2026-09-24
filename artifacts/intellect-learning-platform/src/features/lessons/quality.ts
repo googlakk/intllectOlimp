@@ -1,12 +1,19 @@
 import type { Block, GeneratedLesson, LearningObjective, QualityReport } from '@/lib/api/types';
 import { isObjectiveAssessmentBlock } from '@/lib/lessonBlocks';
 
+const STAGE_LABELS: Record<string, string> = { explanation: 'объяснение', practice: 'практика', assessment: 'проверка', diagnostic: 'стартовая проверка' };
+
 const EXPLANATION_COMPONENTS = [
   'ShortExplanation',
   'KeyConcept',
   'WorkedExample',
   'Presentation',
   'Illustration',
+  'GeneratedMedia',
+  'MindMap',
+  'Timeline',
+  'PredictionLab',
+  'HotspotInvestigation',
 ];
 
 const PRACTICE_COMPONENTS = [
@@ -15,6 +22,15 @@ const PRACTICE_COMPONENTS = [
   'RetrievalCheck',
   'TextEvidencePicker',
   'ArgumentBuilder',
+  'InteractiveGraph',
+  'SortAndClassify',
+  'ProcessBuilder',
+  'ArgumentMap',
+  'BranchingScenario',
+  'MisconceptionDebugger',
+  'DataInvestigation',
+  'PhysicsSandbox',
+  'CodeBlocksLab',
 ];
 
 export type ObjectiveCoverage = {
@@ -93,12 +109,12 @@ export function buildBlockingIssues(
   blockCount: number,
 ): string[] {
   return [
-    ...(qualityReport?.publishable === false ? ['Автоматическая проверка считает урок непригодным к публикации'] : []),
+    ...(qualityReport?.publishable === false ? ['Перед публикацией исправьте отмеченные недочёты'] : []),
     ...groupedMessages(qualityReport?.errors || []),
     ...(qualityReport?.gaps || []).map((gap) => (
       typeof gap === 'string'
         ? `Не покрыта цель: ${gap}`
-        : `Не покрыта цель: ${gap.objective || gap.objective_id || 'неизвестная цель'} (${(gap.missing || []).join(', ')})`
+        : `Не покрыта цель: ${gap.objective || gap.objective_id || 'неизвестная цель'} (${(gap.missing || []).map(stage => STAGE_LABELS[stage] ?? stage).join(', ')})`
     )),
     ...(!hasObjectiveContract && blockCount > 0 ? ['Старый урок нужно проверить или перегенерировать перед публикацией'] : []),
     ...(hasObjectiveContract && !qualityReport ? ['Для нового урока отсутствует отчёт проверки качества'] : []),

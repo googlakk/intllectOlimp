@@ -6,6 +6,16 @@ const ASSESSMENT_COMPONENTS = new Set([
   'RetrievalCheck',
   'TextEvidencePicker',
   'ArgumentBuilder',
+  'SortAndClassify',
+  'ProcessBuilder',
+  'ArgumentMap',
+  'BranchingScenario',
+  'MisconceptionDebugger',
+  'PredictionLab',
+  'DataInvestigation',
+  'PhysicsSandbox',
+  'HotspotInvestigation',
+  'CodeBlocksLab',
   'MasteryCheck',
 ]);
 
@@ -14,6 +24,16 @@ const OBJECTIVE_ASSESSMENT_COMPONENTS = new Set([
   'RetrievalCheck',
   'TextEvidencePicker',
   'ArgumentBuilder',
+  'SortAndClassify',
+  'ProcessBuilder',
+  'ArgumentMap',
+  'BranchingScenario',
+  'MisconceptionDebugger',
+  'PredictionLab',
+  'DataInvestigation',
+  'PhysicsSandbox',
+  'HotspotInvestigation',
+  'CodeBlocksLab',
   'MasteryCheck',
 ]);
 

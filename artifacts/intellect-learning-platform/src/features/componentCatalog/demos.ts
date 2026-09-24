@@ -262,4 +262,231 @@ export const componentDemos: Record<string, ComponentDemo> = {
       },
     },
   },
+  'sort-and-classify': {
+    usage: 'Когда нужно понять группу признаков: части речи, типы реакций, виды источников.',
+    interaction: 'Перетащите элементы в правильные группы и проверьте классификацию.',
+    block: {
+      component: 'SortAndClassify',
+      content: {
+        title: 'Классификация природных объектов',
+        instruction: 'Распределите объекты по оболочкам Земли.',
+        groups: [
+          { id: 'hydro', label: 'Гидросфера' },
+          { id: 'litho', label: 'Литосфера' },
+        ],
+        items: [
+          { id: 'river', label: 'Река', correct_group: 'hydro' },
+          { id: 'lake', label: 'Озеро', correct_group: 'hydro' },
+          { id: 'mountain', label: 'Гора', correct_group: 'litho' },
+          { id: 'plate', label: 'Плита', correct_group: 'litho' },
+        ],
+        explanation: 'Вода относится к гидросфере, твёрдая оболочка и формы рельефа — к литосфере.',
+      },
+    },
+  },
+  'process-builder': {
+    usage: 'Для причинных цепочек, циклов, алгоритмов и последовательностей процессов.',
+    interaction: 'Соедините узлы стрелками в правильном порядке.',
+    block: {
+      component: 'ProcessBuilder',
+      content: {
+        title: 'Круговорот воды',
+        instruction: 'Соедините этапы круговорота воды.',
+        steps: [
+          { id: 'evaporation', label: 'Испарение' },
+          { id: 'condensation', label: 'Конденсация' },
+          { id: 'precipitation', label: 'Осадки' },
+          { id: 'runoff', label: 'Сток' },
+        ],
+        correct_edges: [
+          { from: 'evaporation', to: 'condensation' },
+          { from: 'condensation', to: 'precipitation' },
+          { from: 'precipitation', to: 'runoff' },
+        ],
+        explanation: 'Вода испаряется, превращается в облака, выпадает осадками и возвращается стоком.',
+      },
+    },
+  },
+  'argument-map': {
+    usage: 'Для истории, литературы и общества, когда важно связать тезис и доказательства.',
+    interaction: 'Соедините доказательства с тезисом и объяснением.',
+    block: {
+      component: 'ArgumentMap',
+      content: {
+        title: 'Карта аргумента',
+        prompt: 'Докажите, что герой действует ответственно.',
+        nodes: [
+          { id: 'claim', kind: 'claim', label: 'Герой действует ответственно' },
+          { id: 'e1', kind: 'evidence', label: 'Он предупреждает других об опасности' },
+          { id: 'e2', kind: 'evidence', label: 'Он исправляет свою ошибку' },
+          { id: 'reason', kind: 'reasoning', label: 'Оба поступка показывают заботу о последствиях' },
+        ],
+        correct_links: [
+          { from: 'e1', to: 'claim' },
+          { from: 'e2', to: 'claim' },
+          { from: 'reason', to: 'claim' },
+        ],
+        explanation: 'Аргумент сильный, когда каждое доказательство прямо поддерживает тезис.',
+      },
+    },
+  },
+  'branching-scenario': {
+    usage: 'Для лабораторий, гражданских решений, коммуникации и техники безопасности.',
+    interaction: 'Выбирайте действия и наблюдайте последствия сценария.',
+    block: {
+      component: 'BranchingScenario',
+      content: {
+        title: 'Безопасный опыт',
+        context: 'Вы заметили неизвестный раствор на лабораторном столе.',
+        start_node_id: 'start',
+        nodes: [
+          { id: 'start', title: 'Первое действие', text: 'Что нужно сделать?', choices: [
+            { label: 'Понюхать раствор', next: 'bad', feedback: 'Это опасно: пары могут быть вредными.' },
+            { label: 'Сообщить учителю и проверить маркировку', next: 'good', feedback: 'Правильно: сначала безопасность и идентификация.' },
+          ] },
+          { id: 'good', title: 'Безопасный выбор', text: 'Опыт можно продолжать только после инструктажа.', terminal: true, success: true },
+          { id: 'bad', title: 'Опасный выбор', text: 'Нарушена техника безопасности.', terminal: true, success: false },
+        ],
+        success_feedback: 'Вы выбрали безопасную стратегию.',
+        failure_feedback: 'В лаборатории нельзя проверять неизвестные вещества органами чувств.',
+      },
+    },
+  },
+  'misconception-debugger': {
+    usage: 'Для работы с типичными ошибками в решении, коде, грамматике или опыте.',
+    interaction: 'Выберите ошибочный шаг и соберите правильное исправление.',
+    block: {
+      component: 'MisconceptionDebugger',
+      content: {
+        title: 'Найдите ошибку',
+        prompt: 'Ученик решает: 2x + 5 = 13.',
+        steps: [
+          { id: 's1', text: '2x + 5 = 13' },
+          { id: 's2', text: '2x = 13 + 5', is_error: true },
+          { id: 's3', text: '2x = 18' },
+          { id: 's4', text: 'x = 9' },
+        ],
+        repair_steps: ['Вычесть 5 из обеих частей', 'Получить 2x = 8', 'Разделить обе части на 2', 'Получить x = 4'],
+        explanation: 'При переносе +5 нужно вычитать 5, а не прибавлять.',
+      },
+    },
+  },
+  'prediction-lab': {
+    usage: 'Для объяснения через прогноз, наблюдение и вывод.',
+    interaction: 'Сначала сделайте прогноз, затем сравните его с наблюдением.',
+    block: {
+      component: 'PredictionLab',
+      content: {
+        title: 'Что будет с температурой?',
+        question: 'Если увеличить высоту над уровнем моря, температура воздуха обычно...',
+        options: [
+          { id: 'rise', label: 'повышается' },
+          { id: 'fall', label: 'понижается' },
+          { id: 'same', label: 'не меняется' },
+        ],
+        correct_prediction: 'fall',
+        observation_title: 'Наблюдение',
+        observations: [
+          { label: '0 м', value: '+24°C' },
+          { label: '1000 м', value: '+18°C' },
+          { label: '2000 м', value: '+12°C' },
+        ],
+        explanation: 'С высотой воздух обычно охлаждается, поэтому температура уменьшается.',
+      },
+    },
+  },
+  'data-investigation': {
+    usage: 'Для анализа графиков, таблиц и закономерностей.',
+    interaction: 'Изучите диаграмму и выберите верный вывод.',
+    block: {
+      component: 'DataInvestigation',
+      content: {
+        title: 'Рост растения',
+        description: 'Сравните рост растения по дням наблюдения.',
+        vega_lite_spec: {
+          $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+          data: { values: [{ day: 1, height: 2 }, { day: 2, height: 4 }, { day: 3, height: 7 }, { day: 4, height: 11 }] },
+          mark: 'line',
+          encoding: { x: { field: 'day', type: 'ordinal' }, y: { field: 'height', type: 'quantitative' } },
+        },
+        question: {
+          question: 'Какой вывод лучше всего описывает данные?',
+          options: ['Рост замедляется', 'Рост ускоряется', 'Высота не меняется', 'Данных недостаточно'],
+          correct_answer: 'Рост ускоряется',
+        },
+        explanation: 'Разница между днями увеличивается: +2, +3, +4.',
+      },
+    },
+  },
+  'physics-sandbox': {
+    usage: 'Для объяснения физической зависимости через управляемую модель.',
+    interaction: 'Измените параметры, перезапустите модель и ответьте на вопрос.',
+    block: {
+      component: 'PhysicsSandbox',
+      content: {
+        title: 'Падение тела',
+        prompt: 'Понаблюдайте, как гравитация влияет на движение шарика.',
+        bodies: [
+          { shape: 'circle', x: 120, y: 60, radius: 24 },
+          { shape: 'rectangle', x: 360, y: 330, width: 660, height: 28, is_static: true },
+        ],
+        params: [
+          { name: 'gravity', label: 'Гравитация', min: 0.2, max: 2, step: 0.1, default: 1 },
+          { name: 'restitution', label: 'Упругость', min: 0, max: 1, step: 0.1, default: 0.5 },
+        ],
+        question: 'Что произойдёт при увеличении гравитации?',
+        options: ['Шарик падает быстрее', 'Шарик исчезает', 'Шарик становится легче', 'Движение не меняется'],
+        correct_answer: 'Шарик падает быстрее',
+        explanation: 'Большая гравитация увеличивает ускорение падения.',
+      },
+    },
+  },
+  'hotspot-investigation': {
+    usage: 'Для исследования схемы, карты, прибора, клетки или изображения.',
+    interaction: 'Нажмите нужные зоны и проверьте выбор.',
+    block: {
+      component: 'HotspotInvestigation',
+      content: {
+        title: 'Части клетки',
+        instruction: 'Выберите структуры, которые участвуют в управлении клеткой и выработке энергии.',
+        svg_content: '<svg viewBox="0 0 500 260" xmlns="http://www.w3.org/2000/svg"><rect width="500" height="260" rx="24" fill="#f8fafc"/><ellipse cx="250" cy="130" rx="190" ry="85" fill="#dcfce7" stroke="#16a34a" stroke-width="4"/><circle cx="220" cy="125" r="42" fill="#bfdbfe" stroke="#2563eb" stroke-width="4"/><ellipse cx="330" cy="145" rx="42" ry="18" fill="#fed7aa" stroke="#ea580c" stroke-width="4"/><ellipse cx="145" cy="105" rx="35" ry="16" fill="#ddd6fe" stroke="#7c3aed" stroke-width="4"/></svg>',
+        hotspots: [
+          { id: 'nucleus', label: 'Ядро', x: 44, y: 48, feedback: 'Ядро хранит наследственную информацию.', is_correct: true },
+          { id: 'mitochondria', label: 'Митохондрия', x: 66, y: 56, feedback: 'Митохондрии связаны с энергией клетки.', is_correct: true },
+          { id: 'vacuole', label: 'Вакуоль', x: 29, y: 40, feedback: 'Вакуоль хранит вещества.' },
+        ],
+        required_hotspots: ['nucleus', 'mitochondria'],
+        explanation: 'Ядро управляет клеткой, митохондрии участвуют в получении энергии.',
+      },
+    },
+  },
+  'code-blocks-lab': {
+    usage: 'Для информатики и алгоритмического мышления.',
+    interaction: 'Соберите алгоритм из Blockly-блоков и проверьте нужные конструкции.',
+    block: {
+      component: 'CodeBlocksLab',
+      content: {
+        title: 'Алгоритм с повторением',
+        task: 'Соберите алгоритм, который использует цикл и вывод значения.',
+        toolbox_xml: '<xml><block type="controls_repeat_ext"></block><block type="math_number"></block><block type="text_print"></block><block type="text"></block></xml>',
+        expected_block_types: ['controls_repeat_ext', 'text_print'],
+        explanation: 'В алгоритме есть повторение и действие вывода.',
+      },
+    },
+  },
+  'generated-media': {
+    usage: 'Когда теме нужна наглядная AI-картинка или короткая видео-визуализация: строение клетки, атом, цикл воды, ход эксперимента.',
+    interaction: 'Изучите изображение или запустите видео, затем обсудите, какие элементы помогают понять процесс.',
+    block: {
+      component: 'GeneratedMedia',
+      content: {
+        title: 'Визуализация строения клетки',
+        description: 'Пример медиа-блока, который учитель создаёт через OpenRouter и вставляет в урок.',
+        media_kind: 'image',
+        data_url: 'data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgNTIwIDI4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNTIwIiBoZWlnaHQ9IjI4MCIgcng9IjI0IiBmaWxsPSIjZjhmYWZjIi8+PGVsbGlwc2UgY3g9IjI2MCIgY3k9IjE0MCIgcng9IjIwMCIgcnk9IjkwIiBmaWxsPSIjZGNmY2U3IiBzdHJva2U9IiMxNmEzNGEiIHN0cm9rZS13aWR0aD0iNiIvPjxjaXJjbGUgY3g9IjIyMCIgY3k9IjEzNSIgcj0iNDYiIGZpbGw9IiNiZmRiZmUiIHN0cm9rZT0iIzI1NjNlYiIgc3Ryb2tlLXdpZHRoPSI1Ii8+PGVsbGlwc2UgY3g9IjM0MCIgY3k9IjE1NSIgcng9IjQ0IiByeT0iMjAiIGZpbGw9IiNmZWQ3YWEiIHN0cm9rZT0iI2VhNTgwYyIgc3Ryb2tlLXdpZHRoPSI1Ii8+PHRleHQgeD0iMjIwIiB5PSIxNDIiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtc2l6ZT0iMTYiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmaWxsPSIjMWUzYThhIj7Qr9C00YDQvjwvdGV4dD48dGV4dCB4PSIzNDAiIHk9IjE2MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSIxNCIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZpbGw9IiM5YTM0MTIiPtCc0LjRgtC+0YXRjTwvdGV4dD48L3N2Zz4=',
+        alt_text: 'Схема клетки с подписями',
+        caption: 'OpenRouter media API возвращает изображение, а приложение хранит его как блок урока.',
+      },
+    },
+  },
 };

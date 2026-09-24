@@ -2,6 +2,7 @@ import os
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from dotenv import load_dotenv
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -24,7 +25,12 @@ if sslmode and sslmode != "disable":
     query["ssl"] = "require"
 DATABASE_URL = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
-engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
+engine = create_async_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_recycle=int(os.getenv("DATABASE_POOL_RECYCLE_SEC", "1800")),
+    pool_timeout=int(os.getenv("DATABASE_POOL_TIMEOUT_SEC", "10")),
+)
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
@@ -35,3 +41,8 @@ class Base(DeclarativeBase):
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
+
+
+async def warm_database_pool() -> None:
+    async with engine.connect() as connection:
+        await connection.execute(text("select 1"))

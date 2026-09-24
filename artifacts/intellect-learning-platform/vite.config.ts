@@ -16,10 +16,45 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 const basePath = process.env.BASE_PATH ?? '/';
+const apiProxy = {
+  '/api': {
+    target: 'http://127.0.0.1:5000',
+    changeOrigin: true,
+  },
+};
+const immutableAssetCache = 'public, max-age=31536000, immutable';
+const htmlShellCache = 'no-cache';
+const staticCacheHeaders = () => ({
+  name: 'intellect-static-cache-headers',
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      setStaticCacheHeader(req.url || '', res);
+      next();
+    });
+  },
+  configurePreviewServer(server) {
+    server.middlewares.use((req, res, next) => {
+      setStaticCacheHeader(req.url || '', res);
+      next();
+    });
+  },
+});
+
+function setStaticCacheHeader(url: string, res: { setHeader: (name: string, value: string) => void }) {
+  const path = url.split('?')[0] || '/';
+  if (path.startsWith('/assets/')) {
+    res.setHeader('Cache-Control', immutableAssetCache);
+    return;
+  }
+  if (path === '/' || path.endsWith('.html') || !path.includes('.')) {
+    res.setHeader('Cache-Control', htmlShellCache);
+  }
+}
 
 export default defineConfig({
   base: basePath,
   plugins: [
+    staticCacheHeaders(),
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),
@@ -59,12 +94,7 @@ export default defineConfig({
     strictPort: true,
     host: '0.0.0.0',
     allowedHosts: true,
-    proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:5000',
-        changeOrigin: true,
-      },
-    },
+    proxy: apiProxy,
     fs: {
       strict: true,
     },
@@ -73,5 +103,6 @@ export default defineConfig({
     port,
     host: '0.0.0.0',
     allowedHosts: true,
+    proxy: apiProxy,
   },
 });

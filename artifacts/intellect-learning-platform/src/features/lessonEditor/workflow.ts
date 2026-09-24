@@ -5,11 +5,14 @@ import {
   usePublishLesson,
   useUnpublishLesson,
   type GeneratedLesson,
+  catalogInvalidationKeys,
 } from '@/lib/api';
 
 export function lessonEditorInvalidationKeys(topicId: number) {
   return [
-    ['lesson', topicId, 'teacher'] as const,
+    ...catalogInvalidationKeys,
+    ['lesson', topicId] as const,
+    ['lesson-manifest', topicId] as const,
     ['lesson-status', topicId] as const,
   ];
 }
@@ -29,6 +32,7 @@ export function useLessonEditorWorkflow(topicId: number, lesson: GeneratedLesson
 
   const generateLesson = () => {
     if (!user) return;
+    if (lesson?.blocks.length && !window.confirm('Заменить материалы черновика? Ваши правки в черновике будут заменены после успешной генерации. Опубликованный урок останется доступен ученикам.')) return;
     generateLessonMutation.mutate(
       { topic_id: topicId, teacher_id: user.id },
       { onSuccess: invalidateLessonQueries },
@@ -38,7 +42,7 @@ export function useLessonEditorWorkflow(topicId: number, lesson: GeneratedLesson
   const togglePublication = (warningsAcknowledged: boolean) => {
     if (!lesson || !user) return;
 
-    if (lesson.status === 'published') {
+    if (lesson.status === 'published' && !lesson.has_unpublished_changes) {
       unpublishLessonMutation.mutate(lesson.id, { onSuccess: invalidateLessonQueries });
       return;
     }

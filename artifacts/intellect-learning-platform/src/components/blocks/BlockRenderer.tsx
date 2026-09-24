@@ -6,28 +6,56 @@ type BlockComponentProps = Record<string, unknown> & {
   onAnswer?: (isCorrect: boolean) => void;
 };
 type BlockComponent = React.ComponentType<BlockComponentProps>;
+type BlockModule = { default: React.ComponentType<unknown> };
+type BlockImporter = () => Promise<BlockModule>;
 
-function lazyBlock(importer: () => Promise<{ default: React.ComponentType<unknown> }>) {
+function lazyBlock(importer: BlockImporter) {
   return React.lazy(importer) as React.LazyExoticComponent<BlockComponent>;
 }
 
-export const componentMap: Record<string, React.LazyExoticComponent<BlockComponent>> = {
-  ShortExplanation: lazyBlock(() => import('./ShortExplanation')),
-  KeyConcept: lazyBlock(() => import('./KeyConcept')),
-  WorkedExample: lazyBlock(() => import('./WorkedExample')),
-  GuidedPractice: lazyBlock(() => import('./GuidedPractice')),
-  IndependentProblem: lazyBlock(() => import('./IndependentProblem')),
-  RetrievalCheck: lazyBlock(() => import('./RetrievalCheck')),
-  MindMap: lazyBlock(() => import('./MindMap')),
-  Timeline: lazyBlock(() => import('./Timeline')),
-  InteractiveGraph: lazyBlock(() => import('./InteractiveGraph')),
-  TextEvidencePicker: lazyBlock(() => import('./TextEvidencePicker')),
-  ArgumentBuilder: lazyBlock(() => import('./ArgumentBuilder')),
-  Illustration: lazyBlock(() => import('./Illustration')),
-  Presentation: lazyBlock(() => import('./Presentation')),
-  MasteryCheck: lazyBlock(() => import('./MasteryCheck')),
-  Reflection: lazyBlock(() => import('./Reflection')),
+export const blockLoaders: Record<string, BlockImporter> = {
+  ShortExplanation: () => import('./ShortExplanation'),
+  KeyConcept: () => import('./KeyConcept'),
+  WorkedExample: () => import('./WorkedExample'),
+  GuidedPractice: () => import('./GuidedPractice'),
+  IndependentProblem: () => import('./IndependentProblem'),
+  RetrievalCheck: () => import('./RetrievalCheck'),
+  MindMap: () => import('./MindMap'),
+  Timeline: () => import('./Timeline'),
+  InteractiveGraph: () => import('./InteractiveGraph'),
+  TextEvidencePicker: () => import('./TextEvidencePicker'),
+  ArgumentBuilder: () => import('./ArgumentBuilder'),
+  Illustration: () => import('./Illustration'),
+  Presentation: () => import('./Presentation'),
+  MasteryCheck: () => import('./MasteryCheck'),
+  Reflection: () => import('./Reflection'),
+  SortAndClassify: () => import('./SortAndClassify'),
+  ProcessBuilder: () => import('./ProcessBuilder'),
+  ArgumentMap: () => import('./ArgumentMap'),
+  BranchingScenario: () => import('./BranchingScenario'),
+  MisconceptionDebugger: () => import('./MisconceptionDebugger'),
+  PredictionLab: () => import('./PredictionLab'),
+  DataInvestigation: () => import('./DataInvestigation'),
+  PhysicsSandbox: () => import('./PhysicsSandbox'),
+  HotspotInvestigation: () => import('./HotspotInvestigation'),
+  CodeBlocksLab: () => import('./CodeBlocksLab'),
+  GeneratedMedia: () => import('./GeneratedMedia'),
 };
+const preloadCache = new Map<string, Promise<BlockModule>>();
+
+export const componentMap: Record<string, React.LazyExoticComponent<BlockComponent>> = Object.fromEntries(
+  Object.entries(blockLoaders).map(([name, importer]) => [name, lazyBlock(importer)]),
+) as Record<string, React.LazyExoticComponent<BlockComponent>>;
+
+export function preloadBlockComponent(componentName: string | undefined) {
+  if (!componentName) return undefined;
+  const importer = blockLoaders[componentName];
+  if (!importer) return undefined;
+  if (!preloadCache.has(componentName)) {
+    preloadCache.set(componentName, importer());
+  }
+  return preloadCache.get(componentName);
+}
 
 export interface BlockRendererProps {
   blocks: Block[];
