@@ -417,5 +417,12 @@ class RetryLoopTests(unittest.TestCase):
         self.assertEqual(len(prompts), 2)
 
 
+class NumericAnswerPromptTests(unittest.TestCase):
+    def test_prompt_asks_for_number_and_unit_separately(self):
+        from ai.generator import SYSTEM_PROMPT
+        self.assertIn('"answer_unit"?: string', SYSTEM_PROMPT)
+        self.assertIn("в correct_answer\nтолько число без единиц", SYSTEM_PROMPT)
+
+
 if __name__ == "__main__":
     unittest.main()

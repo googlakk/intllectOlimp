@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { parseMathText } from './ShortExplanation';
 import { TaskCondition } from './BlockMedia';
+import { checkAnswer } from '@/features/interactiveEngines/scoring';
 import { CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -10,30 +11,27 @@ export interface GuidedPracticeProps {
   input_type: "text" | "numeric" | "expression" | "number" | "multiple_choice";
   correct_answer: string | string[];
   explanation: string;
+  answer_unit?: string;
+  accepted_units?: string[];
+  tolerance?: number;
   media?: unknown;
   onAnswer?: (isCorrect: boolean) => void;
 }
 
-export default function GuidedPractice({ question, hints, input_type, correct_answer, explanation, media, onAnswer }: GuidedPracticeProps) {
+export default function GuidedPractice({ question, hints, input_type, correct_answer, explanation, answer_unit, accepted_units, tolerance, media, onAnswer }: GuidedPracticeProps) {
   const [value, setValue] = useState('');
-  const [status, setStatus] = useState<'idle' | 'correct' | 'incorrect'>('idle');
+  const [status, setStatus] = useState<'idle' | 'correct' | 'incorrect' | 'wrong_unit'>('idle');
   const [hintIndex, setHintIndex] = useState(0);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!value.trim()) return;
 
-    let isCorrect = false;
-    const normalizedValue = value.trim().toLowerCase().replace(/\s+/g, ' ');
-    
-    if (Array.isArray(correct_answer)) {
-      isCorrect = correct_answer.some(ans => ans.trim().toLowerCase().replace(/\s+/g, ' ') === normalizedValue);
-    } else {
-      isCorrect = normalizedValue === correct_answer.trim().toLowerCase().replace(/\s+/g, ' ');
-    }
-    
-    setStatus(isCorrect ? 'correct' : 'incorrect');
-    onAnswer?.(isCorrect);
+    const numeric = input_type === 'numeric' || input_type === 'number' || Boolean(answer_unit);
+    const result = checkAnswer(value, { correct: correct_answer, numeric, unit: answer_unit, acceptedUnits: accepted_units, tolerance });
+    setStatus(result);
+    // Верное число с неверной единицей — не ошибка ученика по сути: просим проверить единицы.
+    if (result !== 'wrong_unit') onAnswer?.(result === 'correct');
   };
 
   const showNextHint = () => {
@@ -57,18 +55,18 @@ export default function GuidedPractice({ question, hints, input_type, correct_an
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <input
-            type={input_type === 'numeric' || input_type === 'number' ? 'number' : 'text'}
+            type="text"
             value={value}
             onChange={(e) => {
               setValue(e.target.value);
               if (status !== 'idle') setStatus('idle');
             }}
             disabled={isLocked}
-            placeholder={input_type === 'numeric' || input_type === 'number' ? "Введите число..." : "Введите ваш ответ..."}
+            placeholder={input_type === 'numeric' || input_type === 'number' ? 'Введите число...' : 'Введите ваш ответ...'}
             className="flex-1 px-4 py-2.5 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 transition-all"
             aria-label="Ваш ответ"
-            step="any"
           />
+          {answer_unit && <span className="shrink-0 text-sm font-semibold text-muted-foreground">в {answer_unit}</span>}
           <button
             type="submit"
             disabled={isLocked || !value.trim()}
@@ -96,6 +94,18 @@ export default function GuidedPractice({ question, hints, input_type, correct_an
             </motion.div>
           )}
           
+          {status === 'wrong_unit' && (
+            <motion.div
+              role="status"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2 text-amber-700 dark:text-amber-300 text-sm font-medium bg-amber-500/10 border border-amber-500/30 p-3.5 rounded-lg"
+            >
+              <HelpCircle className="w-5 h-5 shrink-0" />
+              <span>Число верное — проверь единицы измерения{answer_unit ? ` (ответ нужен в ${answer_unit})` : ''} или введи только число.</span>
+            </motion.div>
+          )}
+
           {status === 'incorrect' && (
             <motion.div 
               initial={{ opacity: 0, y: -10 }}

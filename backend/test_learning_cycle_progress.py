@@ -105,3 +105,39 @@ def test_numeric_grading_is_finite_and_accepts_decimal_comma():
     answers, score = grade_assessment([{'component':'MasteryCheck','content':{'questions':[
         {'correct_answer':'2'}, {'correct_answer':'4'}]}}], {'0_q0':'2', '0_q1':'3'})
     assert answers == {'0_q0':True, '0_q1':False} and score == 50
+
+
+def test_server_answer_check_matches_the_shared_cases():
+    import json
+    from pathlib import Path
+    from services.assessment import check_answer
+    cases = json.loads((Path(__file__).parent / "fixtures" / "answer_check_cases.json").read_text(encoding="utf-8"))["cases"]
+    for case in cases:
+        spec = dict(case["spec"])
+        expected = spec.pop("correct")
+        spec["accepted_units"] = spec.pop("acceptedUnits", None)
+        assert check_answer(case["answer"], expected, **spec) == case["expected"], case["note"]
+
+
+def test_assessment_grading_uses_units_from_content():
+    blocks = [{"component": "IndependentProblem", "content": {"type": "numeric", "correct_answer": "8.9", "answer_unit": "г/см³"}}]
+    answers, score = grade_assessment(blocks, {"0": "8,9 г/см³"})
+    assert answers == {"0": True} and score == 100
+    answers, _ = grade_assessment(blocks, {"0": "8,9 кг"})
+    assert answers == {"0": False}
+
+
+def test_multiple_choice_is_graded_exactly():
+    blocks = [{"component": "RetrievalCheck", "content": {"type": "multiple_choice", "options": ["1917", "1918", "1905", "1924"], "correct_answer": "1917"}}]
+    assert grade_assessment(blocks, {"0": "1918"})[0] == {"0": False}
+    assert grade_assessment(blocks, {"0": "1917"})[0] == {"0": True}
+
+
+def test_mastery_numeric_rule_matches_the_browser():
+    # Браузер считает числовым вопрос типа numeric/number или с answer_unit — сервер тоже.
+    blocks = [{"component": "MasteryCheck", "content": {"questions": [
+        {"type": "number", "correct_answer": "8.9"},
+        {"type": "multiple_choice", "correct_answer": "1917", "options": ["1917", "1918", "1905", "1924"]},
+    ]}}]
+    answers, _ = grade_assessment(blocks, {"0_q0": "8,9", "0_q1": "1918"})
+    assert answers == {"0_q0": True, "0_q1": False}

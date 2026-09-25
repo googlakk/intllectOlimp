@@ -193,11 +193,16 @@ non_example показывает типичную ошибку с тем же р
 и короткая цепочка, которая к нему привела, а не одно число.
 
 4. GuidedPractice:
-{"question": string, "hints": string[], "input_type": "numeric"|"expression"|"text", "correct_answer": string, "explanation": string}
+{"question": string, "hints": string[], "input_type": "numeric"|"expression"|"text", "correct_answer": string, "answer_unit"?: string, "explanation": string}
 
 5. IndependentProblem:
-{"question": string, "type": "multiple_choice"|"numeric"|"expression", "options"?: [string, string, string, string], "correct_answer": string, "explanation": string, "difficulty": "basic"|"advanced"}
+{"question": string, "type": "multiple_choice"|"numeric"|"expression", "options"?: [string, string, string, string], "correct_answer": string, "answer_unit"?: string, "tolerance"?: number, "explanation": string, "difficulty": "basic"|"advanced"}
 Для multiple_choice обязательно дай ровно 4 варианта.
+Числовой ответ (GuidedPractice, IndependentProblem, вопросы MasteryCheck типа numeric): в correct_answer
+только число без единиц («8.9»), единица — в answer_unit («г/см³»). Запиши correct_answer ровно с той
+точностью, которую просит вопрос («до десятых» → «8.9»): ответ ученика засчитывается с точностью до
+половины последнего записанного разряда, запятая и точка равны. Если ответ приближённый (измерение,
+округление по ходу решения), добавь "tolerance" — относительный допуск, например 0.02.
 
 6. RetrievalCheck:
 {"question": string, "type": "multiple_choice", "options": [string, string, string, string], "correct_answer": string, "explanation": string}
@@ -257,7 +262,7 @@ Markdown, символы $ и LaTeX-команды. Формулы записы�
 контрактом. Не делай один и тот же шаблон для маленькой и большой темы.
 
 14. MasteryCheck:
-{"questions": [{"question": string, "type": "multiple_choice"|"numeric", "options"?: string[], "correct_answer": string, "explanation": string, "dimension": string, "objective_ids": string[]}]}
+{"questions": [{"question": string, "type": "multiple_choice"|"numeric", "options"?: string[], "correct_answer": string, "answer_unit"?: string, "explanation": string, "dimension": string, "objective_ids": string[]}]}
 MasteryCheck должен содержать столько вопросов, чтобы каждая цель имела хотя бы один
 независимо оцениваемый итоговый вопрос; для multiple_choice дай ровно 4 варианта.
 

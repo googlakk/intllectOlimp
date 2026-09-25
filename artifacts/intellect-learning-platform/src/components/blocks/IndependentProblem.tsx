@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { parseMathText } from './ShortExplanation';
 import { TaskCondition } from './BlockMedia';
+import { checkAnswer } from '@/features/interactiveEngines/scoring';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -10,30 +11,30 @@ export interface IndependentProblemProps {
   options?: string[];
   correct_answer: string | string[];
   explanation: string;
+  answer_unit?: string;
+  accepted_units?: string[];
+  tolerance?: number;
   media?: unknown;
   difficulty: "basic" | "advanced" | "easy" | "medium" | "hard";
   onAnswer?: (isCorrect: boolean) => void;
 }
 
-export default function IndependentProblem({ question, type, options, correct_answer, explanation, difficulty, media, onAnswer }: IndependentProblemProps) {
+export default function IndependentProblem({ question, type, options, correct_answer, explanation, difficulty, answer_unit, accepted_units, tolerance, media, onAnswer }: IndependentProblemProps) {
   const [value, setValue] = useState('');
-  const [status, setStatus] = useState<'idle' | 'correct' | 'incorrect'>('idle');
+  const [status, setStatus] = useState<'idle' | 'correct' | 'incorrect' | 'wrong_unit'>('idle');
   const [attempts, setAttempts] = useState(0);
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!value.trim()) return;
 
-    let isCorrect = false;
-    const normalizedValue = value.trim().toLowerCase().replace(/\s+/g, ' ');
-    
-    if (Array.isArray(correct_answer)) {
-      isCorrect = correct_answer.some(ans => ans.trim().toLowerCase().replace(/\s+/g, ' ') === normalizedValue);
-    } else {
-      isCorrect = normalizedValue === correct_answer.trim().toLowerCase().replace(/\s+/g, ' ');
-    }
-    
-    setStatus(isCorrect ? 'correct' : 'incorrect');
+    // Варианты ответа сравниваются точно; как число — только числовые вопросы.
+    const numeric = type !== 'multiple_choice' && (type === 'numeric' || type === 'number' || Boolean(answer_unit));
+    const result = checkAnswer(value, { correct: correct_answer, numeric, unit: answer_unit, acceptedUnits: accepted_units, tolerance });
+    setStatus(result);
+    // Верное число с неверной единицей не тратит попытку: просим проверить единицы.
+    if (result === 'wrong_unit') return;
+    const isCorrect = result === 'correct';
     if (!isCorrect) {
       setAttempts(a => a + 1);
     }
@@ -103,19 +104,19 @@ export default function IndependentProblem({ question, type, options, correct_an
         ) : (
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <input
-              type={type === 'numeric' || type === 'number' ? 'number' : 'text'}
+              type="text"
               value={value}
               onChange={(e) => {
                 setValue(e.target.value);
-                if (status === 'incorrect' && attempts < 3) {
+                if ((status === 'incorrect' && attempts < 3) || status === 'wrong_unit') {
                    setStatus('idle');
                 }
               }}
               disabled={isLocked}
               placeholder="Ваш ответ..."
               className="flex-1 px-4 py-2.5 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 transition-all"
-              step="any"
             />
+            {answer_unit && <span className="shrink-0 text-sm font-semibold text-muted-foreground">в {answer_unit}</span>}
           </div>
         )}
 
@@ -153,6 +154,17 @@ export default function IndependentProblem({ question, type, options, correct_an
             </motion.div>
           )}
           
+          {status === 'wrong_unit' && (
+            <motion.div
+              role="status"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-sm font-medium text-amber-700 dark:text-amber-300"
+            >
+              Число верное — проверь единицы измерения{answer_unit ? ` (ответ нужен в ${answer_unit})` : ''} или введи только число. Попытка не потрачена.
+            </motion.div>
+          )}
+
           {status === 'incorrect' && (
             <motion.div 
               initial={{ opacity: 0, y: -10 }}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, XCircle, Trophy } from 'lucide-react';
 import { parseMathText } from './ShortExplanation';
+import { checkAnswer } from '@/features/interactiveEngines/scoring';
 
 export interface MasteryCheckQuestion {
   question: string;
@@ -10,6 +11,9 @@ export interface MasteryCheckQuestion {
   correct_answer: string;
   explanation: string;
   dimension: string;
+  answer_unit?: string;
+  accepted_units?: string[];
+  tolerance?: number;
 }
 
 export interface MasteryCheckProps {
@@ -22,6 +26,7 @@ export default function MasteryCheck({ questions, onAnswer }: MasteryCheckProps)
   const [answers, setAnswers] = useState<Record<number, boolean>>({});
   const [showExplanation, setShowExplanation] = useState(false);
   const [currentValue, setCurrentValue] = useState('');
+  const [unitHint, setUnitHint] = useState(false);
   
   if (!questions || questions.length === 0) return null;
 
@@ -45,12 +50,25 @@ export default function MasteryCheck({ questions, onAnswer }: MasteryCheckProps)
   const handleSubmit = (value: string) => {
     if (showExplanation) return;
     
-    let isCorrect = false;
-    const normVal = value.trim().toLowerCase().replace(/\s+/g, ' ');
-    const normCorrect = currentQ.correct_answer.trim().toLowerCase().replace(/\s+/g, ' ');
-    
-    isCorrect = normVal === normCorrect;
-    
+    // Варианты ответа — точное совпадение; как число сравниваются только числовые вопросы.
+    const numeric = currentQ.type !== 'multiple_choice' && (['numeric', 'number'].includes(currentQ.type) || Boolean(currentQ.answer_unit));
+    const result = currentQ.type === 'multiple_choice'
+      ? (value === currentQ.correct_answer ? 'correct' : 'incorrect')
+      : checkAnswer(value, {
+        correct: currentQ.correct_answer,
+        numeric,
+        unit: currentQ.answer_unit,
+        acceptedUnits: currentQ.accepted_units,
+        tolerance: currentQ.tolerance,
+      });
+    // Верное число с неверной единицей: просим проверить единицы, ответ не засчитываем как ошибку.
+    if (result === 'wrong_unit') {
+      setUnitHint(true);
+      return;
+    }
+    setUnitHint(false);
+    const isCorrect = result === 'correct';
+
     setAnswers(prev => ({ ...prev, [currentIndex]: isCorrect }));
     setShowExplanation(true);
     onAnswer?.(isCorrect, { questionIndex: currentIndex, isFinished: false });
@@ -58,6 +76,7 @@ export default function MasteryCheck({ questions, onAnswer }: MasteryCheckProps)
 
   const handleNext = () => {
     setCurrentValue('');
+    setUnitHint(false);
     setShowExplanation(false);
     
     if (currentIndex === questions.length - 1) {
@@ -138,13 +157,14 @@ export default function MasteryCheck({ questions, onAnswer }: MasteryCheckProps)
           ) : (
             <div className="flex flex-col sm:flex-row gap-3">
               <input
-                type="number"
+                type="text"
                 value={currentValue}
-                onChange={(e) => setCurrentValue(e.target.value)}
+                onChange={(e) => { setCurrentValue(e.target.value); setUnitHint(false); }}
                 disabled={showExplanation}
                 placeholder="Введите число..."
                 className="flex-1 px-5 py-4 border rounded-xl bg-background text-lg focus:outline-none focus:ring-2 focus:ring-primary shadow-sm disabled:opacity-50"
               />
+              {currentQ.answer_unit && <span className="self-start shrink-0 text-sm font-semibold text-muted-foreground sm:self-center">в {currentQ.answer_unit}</span>}
               <button
                 onClick={() => handleSubmit(currentValue)}
                 disabled={showExplanation || !currentValue.trim()}
@@ -153,6 +173,11 @@ export default function MasteryCheck({ questions, onAnswer }: MasteryCheckProps)
                 Ответить
               </button>
             </div>
+          )}
+          {unitHint && (
+            <p role="status" className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-300">
+              Число верное — проверь единицы измерения{currentQ.answer_unit ? ` (ответ нужен в ${currentQ.answer_unit})` : ''} или введи только число.
+            </p>
           )}
         </div>
 
