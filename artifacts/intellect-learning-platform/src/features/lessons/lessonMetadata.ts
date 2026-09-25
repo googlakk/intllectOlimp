@@ -1,4 +1,5 @@
 import type { GeneratedLesson, LearningObjective, TopicContract } from '@/lib/api/types';
+import { readLessonTextbook, studentTextbookRef } from '@/features/textbooks/lessonSource';
 
 export function lessonObjectives(lesson: GeneratedLesson | null | undefined): LearningObjective[] {
   const configured = lesson?.lesson_metadata?.objectives;
@@ -9,6 +10,8 @@ export function lessonHeaderText(lesson: GeneratedLesson | null | undefined) {
   return {
     learningObjective: String(lesson?.lesson_metadata?.learning_objectives || ''),
     topicTitle: String(lesson?.lesson_metadata?.topic_name || 'Урок'),
+    // Ученик видит только ссылку на параграф и страницы, не текст книги.
+    textbookRef: studentTextbookRef(readLessonTextbook(lesson?.lesson_metadata)),
   };
 }
 

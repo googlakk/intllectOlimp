@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { blockSourceLabel } from '@/features/textbooks/lessonSource';
 import {
   DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors,
   type DragEndEvent,
@@ -227,7 +228,10 @@ function SortableBlock({ item, index, expanded, disabled, onToggle, onAdd, onEdi
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-bold text-muted-foreground">{index + 1}</span>
         <button type="button" onClick={onToggle} className="min-w-0 flex-1 py-3 text-left">
           <span className="block truncate text-sm font-bold text-foreground">{blockTitle(item.block)}</span>
-          <span className="block truncate text-xs text-muted-foreground">{componentLabel(item.block.component)}</span>
+          <span className="block truncate text-xs text-muted-foreground">
+            {componentLabel(item.block.component)}
+            {blockSourceLabel(item.block.content) && <span className="text-emerald-700"> · {blockSourceLabel(item.block.content)}</span>}
+          </span>
         </button>
         <button type="button" onClick={onToggle} aria-label="Предпросмотр" title="Предпросмотр" className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">{expanded ? <ChevronUp className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
         {onMedia && <button type="button" disabled={disabled} onClick={onMedia} aria-label="Создать AI-медиа для блока" title="Создать AI-медиа" className="flex h-9 w-9 items-center justify-center rounded-md text-primary hover:bg-primary/10"><WandSparkles className="h-4 w-4" /></button>}

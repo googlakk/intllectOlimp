@@ -186,7 +186,7 @@ export function RegularLesson() {
     await restartProgress.mutateAsync({ studentId: user.id, topicId });
     await refetch();
   };
-  const { learningObjective, topicTitle } = lessonHeaderText(lesson);
+  const { learningObjective, topicTitle, textbookRef } = lessonHeaderText(lesson);
   const intro = useMemo(() => buildLessonIntro(lesson), [lesson]);
   // Титул только на самом старте: урок не начат, ответов нет, шаг первый.
   const lessonNotStarted = !isCompleted && !diagnosticComplete && currentStep === 0 && maxOpenedStep === 0 && Object.keys(answers).length === 0;
@@ -214,6 +214,7 @@ export function RegularLesson() {
         isLoading={isLoading}
         loadError={error}
         learningObjective={learningObjective}
+        textbookRef={textbookRef}
         lessonDocument={lesson?.lesson_document} lessonVersionId={lesson?.active_version_id}
         maxOpenedStep={maxOpenedStep}
         objectiveMastery={objectiveMastery}

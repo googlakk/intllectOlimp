@@ -508,10 +508,15 @@ def _part_label(steps: list[dict[str, Any]], objectives: list[dict[str, Any]]) -
 class _BlocksRequest:
     """Один запрос урока (или его части) к модели с повтором при неразборчивом ответе."""
 
-    def __init__(self, *, call_tool: Any, task: str, route: "Route | None") -> None:
+    def __init__(self, *, call_tool: Any, task: str, route: "Route | None", textbook_block: str | None = None) -> None:
         self.call_tool = call_tool
         self.task = task
         self.route = route
+        # Учебник — кэшируемым системным блоком: при генерации по частям не оплачивается заново.
+        self.system_options: dict[str, Any] = (
+            {"system": "", "system_blocks": [{"text": SYSTEM_PROMPT, "cache": True}, {"text": textbook_block, "cache": True}]}
+            if textbook_block else {"system": SYSTEM_PROMPT}
+        )
 
     async def blocks(self, user_prompt: str) -> list[dict[str, Any]]:
         last_error: Exception | None = None
@@ -520,7 +525,7 @@ class _BlocksRequest:
         for attempt in range(2):
             result = await self.call_tool(
                 self.task,
-                system=SYSTEM_PROMPT,
+                **self.system_options,
                 user=retry_prompt,
                 tool=LESSON_TOOL,
                 max_tokens=MAX_TOKENS,
@@ -619,7 +624,9 @@ async def generate_lesson(
     topic_contract: dict[str, Any] | None = None,
     component_plan: list[dict[str, Any]] | None = None,
     model_route: "Route | None" = None,
+    textbook: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
+    from ai.textbook_grounding import textbook_system_block
     from llm import TASK_LESSON, call_tool
 
     profile = classify_subject(subject_name)
@@ -689,7 +696,10 @@ GeneratedMedia является только опциональным усиле
 Передай урок вызовом инструмента submit_lesson.
 """.strip()
 
-    request = _BlocksRequest(call_tool=call_tool, task=TASK_LESSON, route=model_route)
+    request = _BlocksRequest(
+        call_tool=call_tool, task=TASK_LESSON, route=model_route,
+        textbook_block=textbook_system_block(textbook) if textbook else None,
+    )
     parts = split_component_plan(component_plan)
     if len(parts) > 1 and should_generate_in_parts(topic_contract, len(objective_catalog), len(component_plan)):
         return await _generate_in_parts(request, user_prompt, parts, objective_catalog)

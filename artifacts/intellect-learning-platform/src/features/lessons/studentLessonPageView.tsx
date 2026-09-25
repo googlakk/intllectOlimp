@@ -35,6 +35,8 @@ type StudentLessonPageViewProps = {
   isLoading: boolean;
   loadError: Error | null;
   learningObjective: string;
+  /** «§ 12, стр. 45–49» — параграф учебника, по которому построен урок. */
+  textbookRef?: string | null;
   lessonDocument?: LessonDocument;
   lessonVersionId?: number | null;
   maxOpenedStep: number;
@@ -83,6 +85,7 @@ export function StudentLessonPageView({
   isLoading,
   loadError,
   learningObjective,
+  textbookRef,
   lessonDocument,
   lessonVersionId,
   maxOpenedStep,
@@ -210,8 +213,12 @@ export function StudentLessonPageView({
         </Link>
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-base font-bold text-foreground md:text-lg">{topicTitle}</h1>
-          {learningObjective && (
-            <p className="hidden truncate text-xs text-muted-foreground sm:block">Цель: {learningObjective}</p>
+          {(learningObjective || textbookRef) && (
+            <p className="hidden truncate text-xs text-muted-foreground sm:block">
+              {learningObjective && `Цель: ${learningObjective}`}
+              {learningObjective && textbookRef && ' · '}
+              {textbookRef && `Учебник: ${textbookRef}`}
+            </p>
           )}
         </div>
         <div className="hidden items-center gap-2 text-xs font-semibold text-muted-foreground md:flex">

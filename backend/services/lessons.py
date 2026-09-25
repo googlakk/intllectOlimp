@@ -832,8 +832,12 @@ async def generate_lesson_draft(
         )]))
 
     from ai.generator import MODEL, classify_subject, generate_lesson, select_archetype
+    from ai.textbook_grounding import lesson_textbook_metadata
+    from services.textbook_context import load_textbook_context
 
     generator = lesson_generator or generate_lesson
+    # Подтверждённые параграфы учебника — основа урока; нет их — урок как раньше, с пометкой.
+    textbook = await load_textbook_context(db, topic)
     plan = build_topic_contract(
         topic_name=topic.name,
         subject_name=subject.name,
@@ -860,6 +864,7 @@ async def generate_lesson_draft(
             component_plan=plan["component_plan"],
             # Старые генераторы (и тестовые подмены) аргумент не знают.
             **({"model_route": model_route} if model_route else {}),
+            **({"textbook": textbook} if textbook else {}),
         )
     except Exception as exc:
         raise LessonServiceError(
@@ -896,6 +901,8 @@ async def generate_lesson_draft(
     )
     used_route = model_route or resolve_route(TASK_LESSON)
     lesson.lesson_metadata = {
+        # Какая книга и какие параграфы легли в основу урока (без текста книги); None — урок без учебника.
+        "textbook": lesson_textbook_metadata(textbook),
         "subject_name": subject.name,
         "subject_grade": subject.grade,
         "content_language": subject.instruction_language,

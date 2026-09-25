@@ -16,8 +16,9 @@ describe('lesson metadata helpers', () => {
     expect(lessonHeaderText(lesson)).toEqual({
       learningObjective: 'Solve equations',
       topicTitle: 'Linear equations',
+      textbookRef: null,
     });
-    expect(lessonHeaderText(null)).toEqual({ learningObjective: '', topicTitle: 'Урок' });
+    expect(lessonHeaderText(null)).toEqual({ learningObjective: '', topicTitle: 'Урок', textbookRef: null });
   });
 
   it('returns configured objectives only when metadata contains an array', () => {

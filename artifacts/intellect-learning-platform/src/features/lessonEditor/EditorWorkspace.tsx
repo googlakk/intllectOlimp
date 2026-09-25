@@ -10,6 +10,7 @@ import TopicForm from '@/features/teacherLessons/TopicForm';
 import LessonPlanningSummary from './LessonPlanningSummary';
 import AvatarConfigurationPanel from './AvatarConfigurationPanel';
 import LessonBlockBuilder from './LessonBlockBuilder';
+import { primarySectionLabel, readLessonTextbook } from '@/features/textbooks/lessonSource';
 import ModelPicker, { useModelChoice } from './ModelPicker';
 import { LessonIllustrationsPanel, useLessonIllustrations } from './IllustrationsPanel';
 
@@ -58,6 +59,7 @@ export default function EditorWorkspace({ topicId }: { topicId: number }) {
           if (!user) return;
           try { await createDraft.mutateAsync({ topic_id: topicId, teacher_id: user.id }); await Promise.all(lessonEditorInvalidationKeys(topicId).map(queryKey => client.invalidateQueries({ queryKey }))); } catch { /* Error is displayed above. */ }
         }} className="rounded-lg border px-5 py-3 font-bold">{createDraft.isPending ? 'Создаём…' : 'Добавить материалы вручную'}</button>}</div>
+        {lesson && blocks.length > 0 && <LessonTextbookNote metadata={lesson.lesson_metadata} />}
         {lesson && <LessonBlockBuilder lesson={lesson} topicId={topicId} onUnsavedChange={setUnsaved} />}
         {lesson && <details className="mt-6 rounded-lg border p-4"><summary className="cursor-pointer text-sm font-semibold">Дополнительные настройки: медиа, аватар и структура</summary><LessonPlanningSummary lesson={lesson} /><AvatarConfigurationPanel lesson={lesson} /></details>}
         {blocks.length > 0 && <button type="button" disabled={unsaved} onClick={() => setStep(3)} className="mt-6 rounded-lg bg-primary px-5 py-3 font-bold text-primary-foreground">Проверить и опубликовать →</button>}
@@ -74,6 +76,20 @@ export default function EditorWorkspace({ topicId }: { topicId: number }) {
       </section>}
     </>}
   </div>;
+}
+
+/** По какому учебнику построен черновик — или предупреждение, что без учебника. */
+function LessonTextbookNote({ metadata }: { metadata: Record<string, unknown> | null | undefined }) {
+  const textbook = readLessonTextbook(metadata);
+  const section = primarySectionLabel(textbook);
+  if (textbook && section) {
+    return <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+      Черновик построен по учебнику «{textbook.title}»: {section}. У блоков указано, на какую страницу или задачу они опираются.
+    </p>;
+  }
+  return <p className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+    Урок создан без учебника — проверьте факты, определения и задачи. Чтобы урок опирался на книгу, привяжите тему к параграфу: <Link href="/dashboard/textbooks" className="font-semibold underline">Учебники → Темы КТП</Link>.
+  </p>;
 }
 
 function generationModelLabel(value: unknown, options: { id: string; label: string }[] | undefined): string {
