@@ -94,8 +94,9 @@ class SplitPlanTests(unittest.TestCase):
     def test_parts_keep_every_step_in_order(self):
         plan = self.plan("Вычислять степени. Сравнивать степени. Применять свойства степеней.")
         parts = split_component_plan(plan)
-        self.assertEqual(len(parts), 4)
+        self.assertEqual(len(parts), 5)
         self.assertEqual([step for part in parts for step in part], plan)
+        self.assertTrue(all(len(part) <= 3 for part in parts))
 
     def test_warm_up_opens_the_first_part(self):
         parts = split_component_plan(self.plan("Вычислять степени. Сравнивать степени. Применять свойства степеней."))
@@ -115,7 +116,8 @@ class SplitPlanTests(unittest.TestCase):
             )["component_plan"]
             parts = split_component_plan(plan)
             self.assertEqual([step for part in parts for step in part], plan, lesson_type)
-        self.assertEqual(split_component_plan(self.plan(None)), [self.plan(None)])
+        plan = self.plan(None)
+        self.assertEqual([step for part in split_component_plan(plan) for step in part], plan)
 
     def test_common_step_in_the_middle_keeps_plan_whole(self):
         plan = [
@@ -125,9 +127,28 @@ class SplitPlanTests(unittest.TestCase):
         ]
         self.assertEqual(split_component_plan(plan), [plan])
 
-    def test_single_objective_is_one_part(self):
-        plan = self.plan("Вычислять степени.")
-        self.assertEqual(split_component_plan(plan), [plan])
+    def test_single_large_objective_is_still_split(self):
+        # Тема по географии: одна цель, 3 часа — урок не влезал в один ответ.
+        plan = self.plan("Характеризовать природу Юго-Западного Тенир-Тоо и сравнивать его провинции.")
+        parts = split_component_plan(plan)
+        self.assertEqual([[step["role"] for step in part] for part in parts],
+                         [["diagnose", "explain"], ["model", "practice"], ["apply", "assess", "reflect"]])
+
+    def test_balanced_chunks(self):
+        from ai.planner import _balanced_chunks
+        self.assertEqual([len(chunk) for chunk in _balanced_chunks(list(range(4)), 3)], [2, 2])
+        self.assertEqual([len(chunk) for chunk in _balanced_chunks(list(range(5)), 3)], [3, 2])
+        self.assertEqual([len(chunk) for chunk in _balanced_chunks([0], 3)], [1])
+
+    def test_review_keeps_per_objective_practice_in_place(self):
+        plan = build_topic_contract(
+            topic_name="Степени", subject_name="Алгебра",
+            learning_objectives="Вычислять степени. Сравнивать степени. Применять свойства степеней.",
+            skills=[], resources=None, grade=7, hours=2, lesson_type="review",
+        )["component_plan"]
+        parts = split_component_plan(plan)
+        self.assertGreater(len(parts), 1)
+        self.assertEqual([step for part in parts for step in part], plan)
 
 
 class ContractQualityTests(unittest.TestCase):

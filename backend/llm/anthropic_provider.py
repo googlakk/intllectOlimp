@@ -70,6 +70,12 @@ class AnthropicProvider:
         tool_block = next(
             (b for b in message.content if getattr(b, "type", "") == "tool_use"), None
         )
+        # Обрыв на лимите посреди вызова инструмента тоже приходит блоком
+        # tool_use, но с неполными данными — это обрыв, а не готовый ответ.
+        if message.stop_reason == "max_tokens":
+            return ToolResult(
+                stop_reason=STOP_MAX_TOKENS, text=text, provider=self.name, model=model, usage=usage,
+            )
         if tool_block is not None:
             return ToolResult(
                 data=dict(tool_block.input),

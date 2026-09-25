@@ -230,31 +230,55 @@ def build_component_plan(shape: LessonShape, objectives: list[dict[str, Any]], f
     return plan
 
 
+# Больше трёх шагов в одной части — и тяжёлая цель (презентация до 10 слайдов,
+# пример, практика) снова упирается в лимит ответа модели.
+PART_MAX_STEPS = 3
+# Самостоятельная задача, итоговая проверка и рефлексия в конце плана
+# закрывают урок — последней частью, даже если цель у урока одна.
+FINAL_ROLES = {"apply", "assess", "reflect"}
+
+
 def split_component_plan(component_plan: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
     """Делит план урока на части для генерации по частям.
 
-    Шаги одной цели идут в часть этой цели (разминка — вместе с первой целью),
-    общие шаги по нескольким целям и рефлексия — в последнюю часть. Порядок
-    шагов сохраняется. Если цель одна, часть тоже одна: делить нечего.
+    Шаги одной цели идут в части этой цели (разминка — вместе с первой целью),
+    длинная цель режется на порции до PART_MAX_STEPS шагов; общие шаги по
+    нескольким целям и рефлексия — в последнюю часть. Порядок сохраняется.
+    Так делится и урок с одной большой целью.
     """
+    # Завершающие шаги в самом конце плана — последняя часть.
+    tail = len(component_plan)
+    while tail > 0 and component_plan[tail - 1].get("role") in FINAL_ROLES:
+        tail -= 1
     by_objective: dict[str, list[dict[str, Any]]] = {}
     common: list[dict[str, Any]] = []
-    for step in component_plan:
+    for step in component_plan[:tail]:
         ids = step.get("objective_ids") or []
         if len(ids) == 1:
             by_objective.setdefault(ids[0], []).append(step)
         else:
             common.append(step)
-    if len(by_objective) <= 1:
-        return [list(component_plan)] if component_plan else []
-    parts = list(by_objective.values())
+    common.extend(component_plan[tail:])
+    parts = [chunk for steps in by_objective.values() for chunk in _balanced_chunks(steps, PART_MAX_STEPS)]
     if common:
         parts.append(common)
     # Части склеиваются по порядку. Если общий шаг стоит посреди плана, такая
     # раскладка переставила бы шаги — тогда не делим.
-    if [step for part in parts for step in part] != list(component_plan):
-        return [list(component_plan)]
+    if len(parts) <= 1 or [step for part in parts for step in part] != list(component_plan):
+        return [list(component_plan)] if component_plan else []
     return parts
+
+
+def _balanced_chunks(steps: list[dict[str, Any]], size: int) -> list[list[dict[str, Any]]]:
+    """Режет список на ровные порции не больше size: 4 шага → 2 + 2, а не 3 + 1."""
+    count = -(-len(steps) // size)
+    base, extra = divmod(len(steps), count)
+    chunks, start = [], 0
+    for index in range(count):
+        end = start + base + (1 if index < extra else 0)
+        chunks.append(steps[start:end])
+        start = end
+    return chunks
 
 
 def build_topic_contract(

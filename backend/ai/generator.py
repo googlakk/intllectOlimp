@@ -494,6 +494,8 @@ def _part_prompt(
 
 
 def _part_label(steps: list[dict[str, Any]], objectives: list[dict[str, Any]]) -> str:
+    if any(step.get("role") in {"assess", "reflect"} for step in steps):
+        return "итоговая проверка и рефлексия"
     ids = {objective_id for step in steps for objective_id in step.get("objective_ids") or []}
     if len(ids) == 1:
         objective_id = next(iter(ids))
@@ -553,9 +555,10 @@ class _BlocksRequest:
         # не гадать вслепую, и называем поставщика и модель.
         dump = Path(tempfile.gettempdir()) / "lesson-raw.txt"
         try:
+            data = json.dumps(result.data, ensure_ascii=False)[:20000] if result.data else ""
             dump.write_text(
                 f"provider={result.provider} model={result.model} "
-                f"stop={result.stop_reason}\n\n{result.text}",
+                f"stop={result.stop_reason}\n\ntext:\n{result.text}\n\ntool input:\n{data}",
                 encoding="utf-8",
             )
             where = f" Сырой ответ: {dump}"
@@ -577,7 +580,10 @@ async def _generate_in_parts(
 
     Если часть не удалась, падает весь урок — половину урока не сохраняем.
     """
-    objective_ids = [str(item.get("id")) for item in objectives]
+    # ID целей берём из плана: при пустых целях там obj-general, а каталог пуст.
+    objective_ids = list(dict.fromkeys(
+        str(objective_id) for steps in parts for step in steps for objective_id in step.get("objective_ids") or []
+    ))
     lesson = GeneratedBlocks()
     for index, steps in enumerate(parts):
         try:

@@ -150,6 +150,12 @@ class OpenRouterProvider:
         served = body.get("model") or model
 
         calls = message.get("tool_calls") or []
+        # Обрыв по лимиту — всегда обрыв, даже если оборванный JSON случайно
+        # разобрался: данные в нём неполные.
+        if finish == "length":
+            return ToolResult(
+                stop_reason=STOP_MAX_TOKENS, text=text, provider=self.name, model=served, usage=usage,
+            )
         if calls and isinstance(calls[0], dict):
             arguments = ((calls[0].get("function") or {}).get("arguments"))
             data = parse_arguments(arguments)
@@ -158,13 +164,7 @@ class OpenRouterProvider:
                     data=data, stop_reason=STOP_TOOL, text=text,
                     provider=self.name, model=served, usage=usage,
                 )
-            # Аргументы не разобрались. Чаще всего это обрыв по лимиту —
-            # тогда так и говорим, иначе честно сообщаем про битый JSON.
-            if finish == "length":
-                return ToolResult(
-                    stop_reason=STOP_MAX_TOKENS, text=str(arguments)[:2000],
-                    provider=self.name, model=served, usage=usage,
-                )
+            # Аргументы не разобрались, а обрыва не было — честно сообщаем про битый JSON.
             return ToolResult(
                 stop_reason=STOP_OTHER, text=str(arguments)[:2000],
                 provider=self.name, model=served, usage=usage,

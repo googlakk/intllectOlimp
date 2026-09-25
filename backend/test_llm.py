@@ -175,6 +175,16 @@ class OpenRouterTests(unittest.TestCase):
         self.assertTrue(result.truncated)
         self.assertFalse(result.ok)
 
+    def test_length_with_parseable_arguments_is_still_truncation(self):
+        def handler(request):
+            return Response(200, json={"choices": [{
+                "finish_reason": "length",
+                "message": {"tool_calls": [{"function": {"arguments": '{"blocks": []}'}}]},
+            }]})
+        result = self._call(handler)
+        self.assertTrue(result.truncated)
+        self.assertFalse(result.ok)
+
     def test_broken_arguments_without_length_are_not_called_truncation(self):
         def handler(request):
             return Response(200, json={"choices": [{
@@ -275,6 +285,29 @@ class AnthropicProviderTests(unittest.TestCase):
         ))
         self.assertEqual(result.stop_reason, STOP_MAX_TOKENS)
         self.assertTrue(result.truncated)
+
+    def test_tool_use_cut_by_max_tokens_is_truncation_not_data(self):
+        # Повод: урок по географии — модель упёрлась в лимит посреди вызова
+        # инструмента, blocks пришли неполными, и ошибка выглядела как
+        # «дважды вернула урок в неожиданном виде» вместо перехода на части.
+        client = _FakeAnthropic(_AnthropicMessage(
+            [_AnthropicBlock("tool_use", input={})], stop_reason="max_tokens",
+        ))
+        result = run(AnthropicProvider(client=client).call_tool(
+            system="s", user="u", tool=TOOL, model="m", max_tokens=100,
+        ))
+        self.assertTrue(result.truncated)
+        self.assertFalse(result.ok)
+
+    def test_complete_tool_use_still_returns_data(self):
+        client = _FakeAnthropic(_AnthropicMessage(
+            [_AnthropicBlock("tool_use", input={"name": 1})], stop_reason="tool_use",
+        ))
+        result = run(AnthropicProvider(client=client).call_tool(
+            system="s", user="u", tool=TOOL, model="m", max_tokens=100,
+        ))
+        self.assertTrue(result.ok)
+        self.assertEqual(result.data, {"name": 1})
 
     def test_both_providers_return_the_same_shape(self):
         # Ради этого весь слой и существует: вызывающий код одинаков.
