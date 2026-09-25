@@ -132,9 +132,11 @@ echo "[4/4] Бэкенд на http://localhost:5000 ..."
 BACKEND_PID=$!
 trap 'kill $BACKEND_PID 2>/dev/null || true' EXIT INT TERM
 
-for i in $(seq 1 30); do
+# При старте бэкенд подключается к Supabase и применяет совместимые изменения
+# схемы — это бывает дольше 30 секунд, и скрипт выходил, не запустив фронтенд.
+for i in $(seq 1 90); do
   if curl -sf http://127.0.0.1:5000/api/healthz >/dev/null 2>&1; then echo "      бэкенд отвечает"; break; fi
-  if [ "$i" = 30 ]; then echo "ОШИБКА: бэкенд не поднялся за 30 секунд"; exit 1; fi
+  if [ "$i" = 90 ]; then echo "ОШИБКА: бэкенд не поднялся за 90 секунд"; exit 1; fi
   sleep 1
 done
 
