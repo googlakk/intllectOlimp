@@ -326,7 +326,7 @@ function LessonStepCard({
     : {};
 
   return (
-    <div key={`block-${currentStep}-${retryKeys[currentStep] || 0}`} className="w-full min-w-0 rounded-lg border border-border/50 bg-card p-4 shadow-sm sm:p-5 lg:p-6">
+    <div key={`block-${currentStep}-${retryKeys[currentStep] || 0}`} className="w-full min-w-0">
       <Suspense fallback={<LessonBlockFallback />}>
         <Component {...block.content} {...injectProps} {...synchronizationProps} />
       </Suspense>
