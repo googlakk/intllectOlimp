@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type React from 'react';
 import { componentMap, preloadBlockComponent } from '@/components/blocks/BlockRenderer';
+import { BlockMedia } from '@/components/blocks/BlockMedia';
 import type { Block, LessonDocument } from '@/lib/api/types';
 import { isAssessmentBlock, type AttemptsByStep, type LessonAnswers } from './studentProgress';
 import { avatarCueForBeat, lessonPositionForBlock } from './lessonExperience';
@@ -329,6 +330,7 @@ function LessonStepCard({
 
   return (
     <div key={`block-${currentStep}-${retryKeys[currentStep] || 0}`} className="w-full min-w-0">
+      <BlockMedia block={block} />
       <Suspense fallback={<LessonBlockFallback />}>
         <Component {...block.content} {...injectProps} {...synchronizationProps} />
       </Suspense>

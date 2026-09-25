@@ -1,3 +1,4 @@
+import { INLINE_MEDIA_COMPONENTS } from '@/components/blocks/BlockMedia';
 import type { Block } from '@/lib/api/types';
 
 export type MediaPlacementTarget = {
@@ -69,6 +70,24 @@ export function placeGeneratedMedia(
     return nextBlocks;
   }
 
+  // Картинка к понятию, задаче, опыту или ситуации живёт внутри блока,
+  // а не отдельным шагом «Визуализация к шагу».
+  if (media.kind === 'image' && INLINE_MEDIA_COMPONENTS.has(sourceBlock.component)) {
+    const currentSlot = sourceBlock.content.media_slot && typeof sourceBlock.content.media_slot === 'object'
+      ? sourceBlock.content.media_slot as Record<string, unknown>
+      : {};
+    const mediaSlotId = target.mediaSlotId || (typeof currentSlot.id === 'string' ? currentSlot.id : `media-block-${target.blockIndex + 1}`);
+    nextBlocks[target.blockIndex] = {
+      ...sourceBlock,
+      content: {
+        ...sourceBlock.content,
+        media_slot: { ...currentSlot, id: mediaSlotId, placement: 'block_visual' },
+        media: { ...media, media_slot_id: mediaSlotId, pedagogical_role: target.pedagogicalRole || 'clarify' },
+      },
+    };
+    return nextBlocks;
+  }
+
   const anchorId = `block-${target.blockIndex + 1}`;
   const anchoredBlock: Block = {
     component: 'GeneratedMedia',
@@ -114,6 +133,13 @@ export function replaceGeneratedMediaJob(
 ): Block[] {
   let changed = false;
   const nextBlocks = blocks.map((block) => {
+    const inlineMedia = block.content.media && typeof block.content.media === 'object'
+      ? block.content.media as Record<string, unknown>
+      : undefined;
+    if (inlineMedia?.job_id === jobId) {
+      changed = true;
+      return { ...block, content: { ...block.content, media: { ...inlineMedia, ...media } } };
+    }
     if (block.component === 'GeneratedMedia' && block.content.job_id === jobId) {
       changed = true;
       return { ...block, content: { ...block.content, ...media } };

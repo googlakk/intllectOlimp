@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react';
 import type { Block } from '@/lib/api/types';
 import { isAssessmentBlock } from '@/lib/lessonBlocks';
+import { BlockMedia } from './BlockMedia';
 
 type BlockComponentProps = Record<string, unknown> & {
   onAnswer?: (isCorrect: boolean) => void;
@@ -87,6 +88,7 @@ export default function BlockRenderer({ blocks, onAnswer }: BlockRendererProps) 
 
         return (
           <div key={key}>
+            <BlockMedia block={block} />
             <Suspense fallback={<BlockLoadingFallback />}>
               <Component {...block.content} {...injectProps} />
             </Suspense>

@@ -27,16 +27,29 @@ describe('AI media placement', () => {
     expect((slides[1].media_slot as Record<string, unknown>).learning_purpose).toBe('Понять признак делимости на 3');
   });
 
-  it('places non-slide media immediately after its anchored block', () => {
+  it('puts an image inside a concept or task block instead of a separate step', () => {
     const blocks: Block[] = [
       { component: 'ShortExplanation', content: { title: 'Идея' } },
+      { component: 'GuidedPractice', content: { question: 'Попробуй', media_slot: { id: 'task-1', must_show: ['кубик'] } } },
+    ];
+    const result = placeGeneratedMedia(blocks, { blockIndex: 1, heading: 'Попробуй' }, media, 'Тема');
+
+    expect(result.map((block) => block.component)).toEqual(['ShortExplanation', 'GuidedPractice']);
+    expect((result[1].content.media as Record<string, unknown>).url).toBe(media.url);
+    expect((result[1].content.media as Record<string, unknown>).media_slot_id).toBe('task-1');
+    expect((result[1].content.media_slot as Record<string, unknown>).must_show).toEqual(['кубик']);
+  });
+
+  it('keeps videos and other components as a separate step after the block', () => {
+    const blocks: Block[] = [
+      { component: 'MindMap', content: { title: 'Идея' } },
       { component: 'GuidedPractice', content: { question: 'Попробуй' } },
     ];
     const result = placeGeneratedMedia(blocks, {
       blockIndex: 0, sceneId: 'scene-1', beatId: 'scene-1', heading: 'Идея',
     }, media, 'Тема');
 
-    expect(result.map((block) => block.component)).toEqual(['ShortExplanation', 'GeneratedMedia', 'GuidedPractice']);
+    expect(result.map((block) => block.component)).toEqual(['MindMap', 'GeneratedMedia', 'GuidedPractice']);
     expect((result[1].content.anchor as Record<string, unknown>).scene_id).toBe('scene-1');
   });
 
