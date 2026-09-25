@@ -104,10 +104,6 @@ class TextFallbackTests(unittest.TestCase):
             _parse_blocks(raw)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class IntroTests(unittest.TestCase):
     def test_tool_accepts_optional_intro(self):
         schema = LESSON_TOOL["input_schema"]
@@ -128,3 +124,39 @@ class IntroTests(unittest.TestCase):
         blocks.intro = {"title": "Т", "hook": "Х"}
         self.assertEqual(blocks, [GOOD_BLOCK])
         self.assertEqual(blocks.intro["title"], "Т")
+
+
+class ShowPathTests(unittest.TestCase):
+    """Объяснение показывает путь к результату: $3^2 = 3 \\cdot 3 = 9$, а не сразу «9»."""
+
+    def test_system_prompt_has_rule_and_reference_example(self):
+        from ai.generator import SYSTEM_PROMPT
+        self.assertIn("покажи путь, а не только результат", SYSTEM_PROMPT)
+        self.assertIn("$3^2 = 3 \\cdot 3$", SYSTEM_PROMPT)
+        self.assertIn("3–6 шагов, каждый шаг — одно действие", SYSTEM_PROMPT)
+
+    def test_every_subject_family_says_how_to_show_the_path(self):
+        from ai.generator import SUBJECT_FAMILY_PROFILES
+        for family, profile in SUBJECT_FAMILY_PROFILES.items():
+            self.assertTrue(str(profile.get("show_path", "")).strip(), family)
+
+    def test_lesson_request_carries_the_subject_path(self):
+        import asyncio
+        from unittest.mock import patch
+        from ai.generator import SUBJECT_FAMILY_PROFILES, generate_lesson
+        from llm import ToolResult
+        from llm.base import STOP_TOOL
+
+        prompts = []
+
+        async def fake_call_tool(task, **kwargs):
+            prompts.append(kwargs["user"])
+            return ToolResult(data={"blocks": [GOOD_BLOCK]}, stop_reason=STOP_TOOL)
+
+        with patch("llm.call_tool", fake_call_tool):
+            asyncio.run(generate_lesson("Степень с натуральным показателем", "Алгебра", "Вычислять степени", None, None, grade=7))
+        self.assertIn("Как показывать ход мысли: " + SUBJECT_FAMILY_PROFILES["mathematical"]["show_path"], prompts[0])
+
+
+if __name__ == "__main__":
+    unittest.main()
