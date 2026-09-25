@@ -17,80 +17,81 @@ PROCESS_WORDS = {
     "реакц", "развит", "ход событий", "преобраз", "опыт", "эксперимент",
 }
 
+# Медиа усиливает блок, а не дублирует его: сцена, крупный план или
+# реконструкция без текста. Точные схемы, формулы и числа урок рисует сам.
 SUBJECT_PROFILES: tuple[tuple[tuple[str, ...], dict[str, str]], ...] = (
     (("литератур", "язык", "русск", "кыргыз"), {
         "family": "humanities",
         "intent": "source_context",
-        "image_form": "editorial literary illustration, motif map, character relationship map, or historical context scene",
-        "video_form": "restrained animated literary timeline or narrated contextual sequence without depicting invented facts",
-        "style": "school literature edition, expressive but historically grounded, readable Russian labels",
-        "avoid": "invented quotations, inaccurate character appearance, decorative book mockups, modern objects in a historical scene",
+        "image_form": "editorial literary illustration of a key moment, setting or mood of the work",
+        "video_form": "quiet atmospheric scene from the world of the work, without depicting invented plot facts",
+        "style": "book-illustration feel, expressive but faithful to the text and its era",
+        "avoid": "invented quotations, inaccurate character appearance, book mockups, modern objects in a historical scene",
     }),
     (("истори", "обществ", "право"), {
         "family": "social_science",
         "intent": "cause_effect",
-        "image_form": "historical source map, causal diagram, annotated artefact, or chronological scene",
-        "video_form": "clear chronological animation showing causes, turning point, and consequences",
-        "style": "museum education graphic, source-aware, neutral and historically accurate",
-        "avoid": "anachronisms, political persuasion, invented flags or quotations, heroic propaganda",
+        "image_form": "artistic reconstruction of a place, everyday scene or turning point of the period",
+        "video_form": "slow reconstruction of a historical setting or event unfolding, restrained and period-accurate",
+        "style": "museum-quality reconstruction, neutral, period-accurate clothing, architecture and tools",
+        "avoid": "anachronisms, political persuasion, invented flags or symbols, heroic propaganda",
     }),
     (("биолог", "хими", "естеств"), {
         "family": "natural_science",
         "intent": "structure",
-        "image_form": "scientifically accurate labeled cutaway, comparison, or process diagram",
-        "video_form": "short scientific animation showing change over time at the correct scale",
-        "style": "modern school atlas, accurate proportions, restrained color coding, readable Russian labels",
-        "avoid": "incorrect anatomy, mixed scales, impossible laboratory setup, decorative molecules",
+        "image_form": "close-up or cutaway that reveals the hidden structure, organism or reaction at the right scale",
+        "video_form": "short close-up of a living process or reaction changing over time at the correct scale",
+        "style": "naturalistic, accurate proportions and colours, soft studio light",
+        "avoid": "incorrect anatomy, mixed scales, impossible laboratory setups, decorative molecules",
     }),
     (("физик", "астроном"), {
         "family": "physics",
         "intent": "quantity",
-        "image_form": "physical model with vectors, forces, measured quantities, and a real-world reference",
-        "video_form": "stable-frame motion demonstration with visible cause, trajectory, and measured change",
-        "style": "clean physics textbook diagram with consistent vectors and units",
-        "avoid": "physically impossible motion, inconsistent vectors, missing units, cinematic camera movement",
+        "image_form": "real-world scene or simple experiment where the physical effect is visible",
+        "video_form": "stable-frame demonstration in which the physical effect visibly happens",
+        "style": "clear, physically plausible scene with honest relative scale and materials",
+        "avoid": "physically impossible motion, floating objects, cinematic camera movement",
     }),
     (("географ",), {
         "family": "geography",
         "intent": "cause_effect",
-        "image_form": "annotated map, cross-section, spatial comparison, or geographic process diagram",
-        "video_form": "map-based animation showing spatial change, flow, or geographic process over time",
-        "style": "school geographic atlas, accurate orientation, legend, scale, and Russian labels",
-        "avoid": "distorted borders, missing legend, decorative globe, geographically impossible placement",
+        "image_form": "landscape, aerial view or cross-section of terrain where the geographic process can be seen",
+        "video_form": "aerial or landscape shot where a geographic process visibly unfolds",
+        "style": "naturalistic landscape, accurate relief, climate and vegetation for the region",
+        "avoid": "distorted geography, decorative globes, impossible landscapes",
     }),
     (("информат", "программ"), {
         "family": "computing",
         "intent": "process",
-        "image_form": "algorithm trace, data-flow diagram, interface state sequence, or memory model",
-        "video_form": "step-by-step algorithm trace with highlighted state changes",
-        "style": "clear computing diagram, monospaced code fragments, accessible color coding",
-        "avoid": "unreadable code, fake interfaces, syntax errors, unexplained output",
+        "image_form": "concrete physical metaphor of the algorithm or data idea (objects being sorted, routed, stored)",
+        "video_form": "physical metaphor of the algorithm running step by step with objects",
+        "style": "clean tactile objects, clear arrangement, calm colours",
+        "avoid": "fake code or interfaces, screens with writing, unexplained symbols",
     }),
     (("математ", "алгебр", "геометр"), {
         "family": "mathematics",
         "intent": "quantity",
-        "image_form": "mathematical visual model, number line, geometric construction, or graph tied to the reasoning",
-        "video_form": "step-by-step mathematical transformation with one change highlighted at a time",
-        "style": "precise school mathematics diagram, correct notation, high contrast, minimal decoration",
-        "avoid": "incorrect notation, answer-only poster, ornamental formulas, inconsistent scale",
+        "image_form": "concrete objects or geometric shapes that embody the idea (tiles, blocks, lengths, areas)",
+        "video_form": "objects or shapes transforming step by step so the mathematical idea becomes visible",
+        "style": "precise shapes, honest proportions, minimal decoration",
+        "avoid": "notation, ornamental formulas, inconsistent scale, answer-only posters",
     }),
 )
 
 DEFAULT_PROFILE = {
     "family": "general",
     "intent": "structure",
-    "image_form": "labeled explanatory model or comparison grounded in the lesson text",
-    "video_form": "short explanatory sequence showing one meaningful change over time",
-    "style": "clean academic school visual with readable Russian labels and one central idea",
-    "avoid": "decorative filler, unrelated stock imagery, dense paragraphs, unsupported facts",
+    "image_form": "single illustrative scene or close-up grounded in the lesson fragment",
+    "video_form": "short illustrative shot showing one meaningful change over time",
+    "style": "calm, clear illustration with one central idea",
+    "avoid": "decorative filler, unrelated stock imagery, unsupported facts",
 }
 
 LESSON_VISUAL_SYSTEM = (
-    "Use one coherent visual language across the whole lesson: 16:9 composition, warm white or very light gray "
-    "background, deep navy text, indigo as the primary accent, teal or amber only for semantic contrast, "
-    "consistent line weight, generous empty space, and the same label hierarchy. The result must look like a "
-    "part of one modern school presentation, not an isolated poster. No gradients, logos, decorative frames, "
-    "photorealistic stock-photo styling, or dense paragraphs inside the visual."
+    "Use one coherent visual language across the whole lesson: 16:9 composition, tactile clay-and-paper editorial "
+    "3D illustration, warm soft light, cream, sage, ochre and deep teal palette, rich but uncluttered detail, "
+    "generous breathing space. Every image must look like part of the same illustrated story. No text, labels, "
+    "numbers, logos, frames, gradients or stock-photo styling."
 )
 
 
@@ -154,11 +155,11 @@ def _recommendation(
         "source_context": context[:1400],
         "visual_intent": intent,
         "visual_form": visual_form,
-        "pedagogical_role": "contextual explanation support",
+        "pedagogical_role": "visual reinforcement of the block",
         "style": f"{profile['style']}. {LESSON_VISUAL_SYSTEM}",
         "visual_system": LESSON_VISUAL_SYSTEM,
-        "must_include": [item for item in (heading, learning_goal) if item][:4],
-        "avoid": [profile["avoid"], "unrelated visual metaphors", "text copied from the lesson as a poster"],
+        "must_include": [],
+        "avoid": [profile["avoid"], "unrelated visual metaphors", "any text, labels or numbers in the image"],
         "success_check": f"ученик может по визуализации объяснить: {learning_goal or heading}",
         "placement": "slide_visual" if slide_index is not None else "after_block",
         "component": component,

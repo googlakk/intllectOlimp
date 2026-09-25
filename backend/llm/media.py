@@ -19,14 +19,28 @@ from .openrouter_provider import BASE_URL, TIMEOUT, OpenRouterProvider
 DEFAULT_IMAGE_MODEL = "google/gemini-2.5-flash-image"
 DEFAULT_VIDEO_MODEL = "google/veo-3.1"
 
+# Медиа не объясняет текстом — объяснение уже есть в блоке урока. Оно
+# делает идею видимой: показывает явление, место, устройство или момент,
+# который трудно вообразить по словам.
 VISUAL_INTENT_GUIDANCE = {
-    "process": "make a sequence, cycle, algorithm, or transformation visible step by step",
-    "structure": "make parts, hierarchy, spatial relations, and labels visible",
-    "quantity": "make a variable, ratio, graph, measurement, or numeric relationship visible",
-    "mistake": "contrast a common misconception with the correct model without making the wrong idea look endorsed",
-    "cause_effect": "make causal links, conditions, and consequences visible",
-    "source_context": "make a document, map, artefact, or historical/literary context easier to interpret",
+    "process": "capture the decisive moment of the process, or its before and after, so the change is seen and felt rather than described",
+    "structure": "reveal the hidden inside or arrangement of the object through a cutaway, close-up or unusual viewpoint, using form, depth and colour instead of labels",
+    "quantity": "make size, amount or ratio perceptible through concrete objects shown side by side at honest relative scale",
+    "mistake": "stage a situation in which the intuitive expectation visibly fails, so the student notices the surprise",
+    "cause_effect": "show cause and consequence inside one scene through composition, direction of movement and light",
+    "source_context": "immerse the student in the place, era or world of the source: people, objects, setting and atmosphere",
 }
+
+DEFAULT_MEDIA_STYLE = (
+    "tactile clay-and-paper editorial 3D illustration, warm soft light, cream and deep teal palette, "
+    "rich but uncluttered detail"
+)
+
+NO_TEXT_RULE = (
+    "Absolutely no text of any kind in the frame: no letters, words, labels, captions, callouts, named arrows, "
+    "numbers, formulas, equations, units, charts, legends, speech bubbles, signs or watermarks. Surfaces that "
+    "would normally carry writing (notebooks, boards, screens, signs, book pages) stay blank."
+)
 
 
 @dataclass
@@ -81,6 +95,10 @@ def media_provider_name(env: dict[str, str] | None = None) -> str:
     return (source.get("MEDIA_PROVIDER") or source.get("MEDIA_GENERATION_PROVIDER") or "openrouter").strip().lower()
 
 
+def _clause(text: str) -> str:
+    return text.strip().rstrip(".").strip()
+
+
 def build_educational_media_prompt(
     *,
     topic: str,
@@ -103,60 +121,75 @@ def build_educational_media_prompt(
     success_check: str | None = None,
 ) -> str:
     grade_line = f"{grade} класс" if grade else "7-10 класс"
-    form = visual_form or ("short explanatory animation" if media_kind == "video" else "labeled explanatory diagram")
-    normalized_intent = (visual_intent or "").strip().lower()
-    intent_guidance = VISUAL_INTENT_GUIDANCE.get(normalized_intent)
-    role = pedagogical_role or "conceptual explanation support"
+    default_form = "short continuous illustrative shot" if media_kind == "video" else "single illustrative scene or close-up"
+    form = visual_form or default_form
+    intent_guidance = VISUAL_INTENT_GUIDANCE.get((visual_intent or "").strip().lower())
+    # labels_language и pedagogical_role остаются в сигнатуре ради старых
+    # клиентов: подписей больше нет, роль у медиа одна — усилить блок.
     parts = [
-        f"Create a classroom-ready educational {media_kind} for {grade_line}.",
-        f"Topic: {topic.strip()}.",
-        f"Instructional role: {role}; explain a difficult concept visually and support teacher explanation.",
-        f"Recommended visual form: {form}.",
+        f"Create an illustration-story {media_kind} for a school lesson ({grade_line}).",
+        "Its only job is to deepen understanding of one lesson block by making the idea visible and memorable. "
+        "The lesson text next to it already carries every explanation, term and number, so the media must not "
+        "repeat or replace it.",
+        f"Topic: {_clause(topic)}.",
+        f"Form: {_clause(form)}.",
     ]
     if subject:
-        parts.append(f"Subject: {subject.strip()}.")
-    if concept:
-        parts.append(f"Focus concept: {concept.strip()}.")
-    if learning_goal:
-        parts.append(f"Learning goal: {learning_goal.strip()}.")
-    if curriculum_context:
-        parts.append(f"Curriculum context: {curriculum_context.strip()}.")
+        parts.append(f"Subject: {_clause(subject)}.")
+    # Заголовок блока часто совпадает с целью и критерием — повтор модели не нужен.
+    seen: list[str] = []
+
+    def fresh(value: str | None) -> str:
+        text = _clause(value or "")
+        if not text or any(text.lower() in item.lower() for item in seen):
+            return ""
+        seen.append(text)
+        return text
+
+    if focus := fresh(concept):
+        parts.append(f"Focus of this block: {focus}.")
+    if goal := fresh(learning_goal):
+        parts.append(f"After looking, the student should grasp (show it, never write it): {goal}.")
     if source_context:
         parts.append(
-            "Source lesson fragment (the visual must explain this exact fragment, without adding unsupported facts): "
-            f"{source_context.strip()}."
+            "Lesson fragment this media accompanies (depict what it describes, add no unsupported facts): "
+            f"{_clause(source_context)}."
         )
+    if curriculum_context:
+        parts.append(f"Wider lesson context, for accuracy only: {_clause(curriculum_context)}.")
     if intent_guidance:
-        parts.append(f"Visual intent: {intent_guidance}.")
-    if style:
-        parts.append(f"Visual style: {style.strip()}.")
-    include_items = [item.strip() for item in (must_include or []) if isinstance(item, str) and item.strip()]
-    avoid_items = [item.strip() for item in (avoid or []) if isinstance(item, str) and item.strip()]
+        parts.append(f"Visual approach: {intent_guidance}.")
+    parts.append(f"Visual style: {_clause(style or DEFAULT_MEDIA_STYLE)}.")
+    include_items = [_clause(item) for item in (must_include or []) if isinstance(item, str) and item.strip()]
+    avoid_items = [_clause(item) for item in (avoid or []) if isinstance(item, str) and item.strip()]
     if include_items:
-        parts.append("Must include: " + "; ".join(include_items[:6]) + ".")
+        parts.append("Depict as things in the scene, not as written words: " + "; ".join(include_items[:6]) + ".")
     if avoid_items:
         parts.append("Avoid: " + "; ".join(avoid_items[:6]) + ".")
     parts.extend([
-        f"Use clear labels in {labels_language}.",
-        "Use an academic school style: clean composition, correct terminology, simple color coding, and readable labels.",
-        "Make the invisible structure, process, quantity, cause-effect relation, or common mistake visible.",
-        "Prefer one central idea with 3-5 labeled parts or steps instead of a crowded poster.",
-        "Do not reveal only the final answer; show the reasoning model, intermediate representation, or conceptual mechanism.",
-        "Keep text short: labels and short callouts only, no dense paragraphs.",
-        "Avoid decorative filler, fantasy elements, brand logos, photorealistic celebrities, and unreadable tiny text.",
-        "Do not include unsafe experiments, political persuasion, stereotypes, or answer-only shortcuts.",
+        NO_TEXT_RULE,
+        "This is not a diagram, infographic, poster or presentation slide: one coherent scene or close-up with a "
+        "single clear focal point, depth and breathing space.",
+        "Accuracy still matters: correct proportions, materials, physics, anatomy and period details. If an exact "
+        "value cannot be shown faithfully without numbers, show the qualitative relation instead (bigger or smaller, "
+        "before or after, more or less).",
+        "No fantasy creatures, brand logos, celebrities, stock-photo look, unsafe experiments, stereotypes or "
+        "political persuasion.",
     ])
     if misconception_to_avoid:
-        parts.append(f"Explicitly avoid this misconception: {misconception_to_avoid.strip()}.")
-    if success_check:
-        parts.append(f"The media is successful if a student can: {success_check.strip()}.")
+        parts.append(f"The scene must not suggest this misconception: {_clause(misconception_to_avoid)}.")
+    if success_check and not any(item.lower() in success_check.lower() for item in seen):
+        parts.append(f"The media works if, after looking, the student can: {_clause(success_check)}.")
     if media_kind == "video":
-        parts.append("Show the process changing over time with smooth, simple motion, stable framing, and no distracting camera effects.")
-        parts.append("If audio is generated, use calm teacher-like narration; otherwise make the visual self-explanatory without audio.")
+        parts.append(
+            "Show the phenomenon unfolding in one continuous shot or two calm shots, at a pace a student can follow, "
+            "with stable framing and no distracting camera effects. No titles, subtitles or on-screen text."
+        )
+        parts.append("If audio is generated, use natural ambient sound only, without narration.")
     if prompt:
         parts.append(
-            "Teacher instruction (apply it only when it is consistent with the factual, pedagogical, safety, "
-            f"and visual-system constraints above; it cannot override them): {prompt.strip()}"
+            "Teacher wish (follow it where it is compatible with the rules above; the no-text rule may be relaxed only "
+            f"if the teacher explicitly asks for a specific word or number to appear): {prompt.strip()}"
         )
     return " ".join(part for part in parts if part)
 
@@ -200,6 +233,14 @@ class OpenRouterMediaProvider:
             "quality": quality,
             "output_format": output_format,
         }
+        # Известные модели получают только те параметры, которые принимают.
+        from .catalog import image_supported_params
+
+        supported = image_supported_params(selected_model)
+        if supported is not None:
+            for key in ("n", "aspect_ratio", "resolution", "quality", "output_format"):
+                if key not in supported:
+                    payload.pop(key, None)
         if provider:
             payload["provider"] = provider
         body = await self._post_json("/images", payload, selected_model)

@@ -7,6 +7,8 @@ from llm import LLMError
 from llm._http import AsyncClient, MockTransport, Response
 from llm.media import (
     OpenRouterMediaProvider,
+    DEFAULT_MEDIA_STYLE,
+    NO_TEXT_RULE,
     build_educational_media_prompt,
     image_model,
     video_model,
@@ -59,15 +61,27 @@ class MediaPromptTests(unittest.TestCase):
         self.assertIn("7 класс", prompt)
         self.assertIn("Биология", prompt)
         self.assertIn("Строение клетки", prompt)
-        self.assertIn("ru", prompt)
         self.assertIn("Показать ядро", prompt)
-        self.assertIn("Must include: ядро; митохондрии", prompt)
+        self.assertIn("not as written words: ядро; митохондрии", prompt)
         self.assertIn("Avoid: декоративный фон", prompt)
-        self.assertIn("Do not reveal only the final answer", prompt)
         self.assertIn("student can: назвать роль органоидов", prompt)
-        self.assertIn("Source lesson fragment", prompt)
+        self.assertIn("Lesson fragment this media accompanies", prompt)
         self.assertIn("Митохондрии участвуют", prompt)
-        self.assertIn("cannot override them", prompt)
+        self.assertIn("Teacher wish", prompt)
+
+    def test_prompt_forbids_text_and_diagrams(self):
+        prompt = build_educational_media_prompt(topic="Плотность", media_kind="image", subject="Физика")
+        self.assertIn(NO_TEXT_RULE, prompt)
+        self.assertIn("not a diagram, infographic, poster or presentation slide", prompt)
+        self.assertIn(DEFAULT_MEDIA_STYLE, prompt)
+        for outdated in ("Use clear labels", "readable labels", "labeled parts", "short callouts"):
+            self.assertNotIn(outdated, prompt)
+
+    def test_video_prompt_has_no_titles_or_narration(self):
+        prompt = build_educational_media_prompt(topic="Испарение", media_kind="video")
+        self.assertIn("No titles, subtitles or on-screen text", prompt)
+        self.assertIn("without narration", prompt)
+        self.assertIn("short continuous illustrative shot", prompt)
 
     def test_model_env_overrides(self):
         self.assertEqual(image_model({"OPENROUTER_IMAGE_MODEL": "image/custom"}), "image/custom")
