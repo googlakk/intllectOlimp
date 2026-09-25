@@ -28,12 +28,12 @@ export default function GeneratedMedia({
   poster_url,
   alt_text,
   caption,
-  pedagogical_role,
-  visual_intent,
-  success_check,
-  prompt,
-  model,
 }: GeneratedMediaProps) {
+  const shownTitle = title.replace(/^Визуализация к шагу:\s*/i, '');
+  // Генератор часто повторяет заголовок в описании и подписи — показываем один раз.
+  const same = (value?: string) => !value || value.trim().toLowerCase() === shownTitle.trim().toLowerCase();
+  const shownDescription = same(description) ? '' : description;
+  const shownCaption = same(caption) || caption === description ? '' : caption;
   const source = data_url || url || '';
   const [videoRequested, setVideoRequested] = useState(false);
   const protectedMedia = useProtectedMediaUrl(source, {
@@ -45,11 +45,11 @@ export default function GeneratedMedia({
       <div className="border-b bg-muted/10 p-6">
         <div className="mb-2 flex items-center gap-2">
           {media_kind === 'image' ? <ImageIcon className="h-5 w-5 text-primary" /> : <PlayCircle className="h-5 w-5 text-primary" />}
-          <h3 className="text-xl font-semibold text-foreground">{title}</h3>
+          <h3 className="text-xl font-semibold text-foreground">{shownTitle}</h3>
         </div>
-        {description && (
+        {shownDescription && (
           <div className="text-sm leading-relaxed text-muted-foreground">
-            {parseMathText(description)}
+            {parseMathText(shownDescription)}
           </div>
         )}
       </div>
@@ -59,7 +59,7 @@ export default function GeneratedMedia({
           media_kind === 'image' ? (
             <img
               src={mediaUrl || undefined}
-              alt={alt_text || title}
+              alt={alt_text || shownTitle}
               className="mx-auto aspect-video max-h-[520px] w-full rounded-lg bg-muted/20 object-contain"
               loading="lazy"
               decoding="async"
@@ -69,7 +69,7 @@ export default function GeneratedMedia({
               type="button"
               onClick={() => setVideoRequested(true)}
               className="group relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-lg bg-black text-background"
-              aria-label={`Смотреть видео: ${title}`}
+              aria-label={`Смотреть видео: ${shownTitle}`}
             >
               {poster_url ? (
                 <img
@@ -107,18 +107,10 @@ export default function GeneratedMedia({
         )}
       </div>
 
-      {(caption || pedagogical_role || visual_intent || success_check || model || prompt) && (
-        <div className="space-y-1 border-t bg-muted/20 p-4 text-sm text-muted-foreground">
-          {caption && <div className="text-center italic">{parseMathText(caption)}</div>}
-          {(pedagogical_role || visual_intent || success_check) && (
-            <div className="text-xs">
-              {pedagogical_role && <span>Роль: {pedagogical_role}. </span>}
-              {visual_intent && <span>Intent: {visual_intent}. </span>}
-              {success_check && <span>Проверка: {success_check}</span>}
-            </div>
-          )}
-          {model && <div className="text-xs">Модель: {model}</div>}
-          {prompt && <details className="text-xs"><summary className="cursor-pointer font-semibold">Prompt</summary><p className="mt-2 whitespace-pre-wrap">{prompt}</p></details>}
+      {/* Роль, промпт и модель — служебные данные для учителя, ученику их не показываем. */}
+      {shownCaption && (
+        <div className="border-t bg-muted/20 p-4 text-center text-sm italic text-muted-foreground">
+          {parseMathText(shownCaption)}
         </div>
       )}
     </div>
