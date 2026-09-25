@@ -234,18 +234,27 @@ function FitToViewport({ children, resetKey }: { children: ReactNode; resetKey: 
     setScaledHeight(0);
     const animationFrame = window.requestAnimationFrame(measure);
     let viewportFrame = 0;
+    // Масштаб меняет вёрстку, поэтому меняем его в следующем кадре, а не в колбэке:
+    // иначе ResizeObserver зацикливается и браузер сыплет ошибками.
     const viewportObserver = new ResizeObserver(() => {
       window.cancelAnimationFrame(viewportFrame);
-      setScale(1);
-      viewportFrame = window.requestAnimationFrame(measure);
+      viewportFrame = window.requestAnimationFrame(() => {
+        setScale(1);
+        viewportFrame = window.requestAnimationFrame(measure);
+      });
     });
-    const contentObserver = new ResizeObserver(measure);
+    let contentFrame = 0;
+    const contentObserver = new ResizeObserver(() => {
+      window.cancelAnimationFrame(contentFrame);
+      contentFrame = window.requestAnimationFrame(measure);
+    });
     if (viewportRef.current) viewportObserver.observe(viewportRef.current);
     if (measuredContentRef.current) contentObserver.observe(measuredContentRef.current);
 
     return () => {
       window.cancelAnimationFrame(animationFrame);
       window.cancelAnimationFrame(viewportFrame);
+      window.cancelAnimationFrame(contentFrame);
       viewportObserver.disconnect();
       contentObserver.disconnect();
     };

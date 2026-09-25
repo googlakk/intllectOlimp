@@ -122,9 +122,19 @@ function Board({ layout, expected, checkLabel, explanation, onAnswer }: LinkBoar
   useEffect(() => {
     const element = container.current;
     if (!element) return;
-    const observer = new ResizeObserver(([entry]) => setColumns(columnsForWidth(entry.contentRect.width)));
+    // Перестраиваем доску в следующем кадре: смена колонок меняет высоту, и
+    // правка прямо в колбэке зацикливает ResizeObserver (ошибка в консоли).
+    let frame = 0;
+    const observer = new ResizeObserver(([entry]) => {
+      const width = entry.contentRect.width;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setColumns(columnsForWidth(width)));
+    });
     observer.observe(element);
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   }, []);
 
   useEffect(() => {
