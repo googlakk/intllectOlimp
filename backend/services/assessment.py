@@ -85,6 +85,11 @@ def _allowed_error(value: Decimal, decimals: int, tolerance: Any) -> Decimal:
     return Decimal("0.5") * Decimal(10) ** -decimals + Decimal("1e-9")
 
 
+def allowed_error(value: Decimal, decimals: int, tolerance: Any = None) -> Decimal:
+    """Допуск при сравнении числа с правильным ответом (нужен и тьютору)."""
+    return _allowed_error(value, decimals, tolerance)
+
+
 def _same_text(left: Any, right: Any) -> bool:
     def clean(value: Any) -> str:
         return " ".join(_as_text(value).strip().casefold().split())
