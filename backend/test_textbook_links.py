@@ -3,7 +3,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from services.textbook_links import set_topic_links, suggest_links
+from services.textbook_links import confirm_suggested, set_topic_links, suggest_links
 from services.textbooks import TextbookServiceError
 from textbooks.matching import SectionInfo
 from textbooks.models import TopicTextbookLink
@@ -112,6 +112,17 @@ class SetLinksTests(unittest.TestCase):
         with first, second:
             with self.assertRaises(TextbookServiceError):
                 run(set_topic_links(1, 7, [99], Db([11, 12], []), user=USER))
+
+
+class ConfirmTests(unittest.TestCase):
+    def test_bulk_confirm_only_topics_of_this_subject(self):
+        link = TopicTextbookLink(topic_id=1, section_id=11, status="suggested")
+        db = Db([link])
+        with patch("services.textbook_links._book_with_subject", AsyncMock(return_value=BOOK)), \
+             patch("services.textbook_links._subject_topics", AsyncMock(return_value=[topic(1, "А"), topic(2, "Б")])):
+            result = run(confirm_suggested(1, [1, 99], db, user=USER))
+        self.assertEqual(result, {"topics": 1, "links": 1})
+        self.assertEqual((link.status, link.confirmed_by_profile_id), ("confirmed", 9))
 
 
 if __name__ == "__main__":

@@ -134,3 +134,6 @@ export const setTopicTextbookLinks = (id: number, topicId: number, sectionIds: n
 
 export const setTextbookSubject = (id: number, subjectId: number) =>
   request<Textbook>(`/textbooks/${id}/subject`, { method: 'PUT', body: JSON.stringify({ subject_id: subjectId }) });
+
+export const confirmSuggestedLinks = (id: number, topicIds: number[]) =>
+  request<{ topics: number; links: number }>(`/textbooks/${id}/links/confirm`, { method: 'POST', body: JSON.stringify({ topic_ids: topicIds }) });

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth_dependencies import require_roles
 from database import get_db
 from services.auth import AuthPrincipal
-from services.textbook_links import links_overview, set_topic_links, suggest_links
+from services.textbook_links import confirm_suggested, links_overview, set_topic_links, suggest_links
 from services.textbooks import create_textbook, delete_unuploaded_textbook, get_section, get_textbook, list_textbooks, process_textbook, set_textbook_subject, update_page
 
 router = APIRouter(prefix="/api/textbooks", tags=["textbooks"])
@@ -97,3 +97,13 @@ class SubjectInput(BaseModel):
 async def subject(textbook_id: int, payload: SubjectInput, user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
                   db: AsyncSession = Depends(get_db)):
     return await set_textbook_subject(textbook_id, payload.subject_id, db, user=user)
+
+
+class ConfirmInput(BaseModel):
+    topic_ids: list[int] = Field(max_length=500)
+
+
+@router.post("/{textbook_id}/links/confirm")
+async def confirm(textbook_id: int, payload: ConfirmInput, user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
+                  db: AsyncSession = Depends(get_db)):
+    return await confirm_suggested(textbook_id, payload.topic_ids, db, user=user)

@@ -180,3 +180,22 @@ async def set_topic_links(textbook_id: int, topic_id: int, section_ids: list[int
         db.add(link)
     await _guarded(db, db.commit())
     return {"topic_id": topic_id, "section_ids": chosen}
+
+
+async def confirm_suggested(textbook_id: int, topic_ids: list[int], db: AsyncSession, *, user: AuthPrincipal) -> dict[str, int]:
+    """Массовое подтверждение: предложенные параграфы выбранных тем становятся подтверждёнными."""
+    book = await _book_with_subject(textbook_id, db, user)
+    subject_topics = {topic.id for topic in await _subject_topics(db, book.subject_id)}
+    wanted = [topic_id for topic_id in dict.fromkeys(topic_ids) if topic_id in subject_topics]
+    book_sections = select(TextbookSection.id).where(TextbookSection.textbook_id == book.id)
+    links = (await _guarded(db, db.scalars(
+        select(TopicTextbookLink).where(
+            TopicTextbookLink.topic_id.in_(wanted), TopicTextbookLink.section_id.in_(book_sections),
+            TopicTextbookLink.status == "suggested",
+        )
+    ))).all()
+    now = datetime.now(timezone.utc)
+    for link in links:
+        link.status, link.confirmed_at, link.confirmed_by_profile_id = "confirmed", now, user.profile_id
+    await _guarded(db, db.commit())
+    return {"topics": len({link.topic_id for link in links}), "links": len(links)}

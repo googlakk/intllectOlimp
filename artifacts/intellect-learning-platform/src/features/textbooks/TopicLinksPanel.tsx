@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Check, Sparkles, X } from 'lucide-react';
-import { setTopicTextbookLinks, suggestTextbookLinks, useTextbookLinks } from '@/lib/api';
+import { confirmSuggestedLinks, setTopicTextbookLinks, suggestTextbookLinks, useTextbookLinks } from '@/lib/api';
 import { linkSummary, topicLinkState, type LinkState } from './linkState';
 
 const STATE_LABELS: Record<LinkState, string> = {
@@ -19,6 +19,7 @@ export function TopicLinksPanel({ textbookId, hasSubject, hasSections }: { textb
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [onlyMissing, setOnlyMissing] = useState(false);
+  const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
 
   if (!hasSubject) return <p className="text-sm text-muted-foreground">Укажите для учебника предмет из КТП — тогда темы можно привязать к параграфам.</p>;
   if (isLoading) return <p>Загружаем темы…</p>;
@@ -43,6 +44,19 @@ export function TopicLinksPanel({ textbookId, hasSubject, hasSections }: { textb
   });
 
   const summary = linkSummary(data.topics);
+  const suggestedIds = data.topics.filter((topic) => topicLinkState(topic) === 'suggested').map((topic) => topic.id);
+  const chosen = suggestedIds.filter((topicId) => selected.has(topicId));
+  const allChosen = suggestedIds.length > 0 && chosen.length === suggestedIds.length;
+  const toggle = (topicId: number) => setSelected((current) => {
+    const next = new Set(current);
+    if (next.has(topicId)) next.delete(topicId); else next.add(topicId);
+    return next;
+  });
+  const confirmChosen = () => act(async () => {
+    const result = await confirmSuggestedLinks(textbookId, chosen);
+    setSelected(new Set());
+    setMessage(`Подтверждено тем: ${result.topics}.`);
+  });
   const topics = onlyMissing ? data.topics.filter((topic) => topicLinkState(topic) === 'suggested' || topicLinkState(topic) === 'none') : data.topics;
   return (
     <section className="space-y-3" aria-label="Темы КТП и параграфы">
@@ -60,17 +74,36 @@ export function TopicLinksPanel({ textbookId, hasSubject, hasSections }: { textb
       </div>
       {message && <p role="status" className="text-sm">{message}</p>}
       <p className="text-xs text-muted-foreground">Уроки строятся только по подтверждённым параграфам. Предложения не затирают уже сделанный выбор.</p>
+      {suggestedIds.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm">
+          <label className="flex items-center gap-2 font-semibold">
+            <input type="checkbox" checked={allChosen} onChange={() => setSelected(allChosen ? new Set() : new Set(suggestedIds))} />
+            Выбрать все предложенные ({suggestedIds.length})
+          </label>
+          <span className="text-muted-foreground">Снимите галочки у тем, где предложение не подходит.</span>
+          <button type="button" onClick={confirmChosen} disabled={busy || chosen.length === 0}
+            className="ml-auto inline-flex min-h-[40px] items-center gap-1 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-50">
+            <Check className="h-4 w-4" aria-hidden /> Подтвердить выбранные ({chosen.length})
+          </button>
+        </div>
+      )}
       <div className="overflow-x-auto rounded-2xl border border-border bg-card">
         <table className="w-full text-sm">
           <thead className="text-left text-xs text-muted-foreground">
-            <tr><th className="px-4 py-2">Тема КТП</th><th className="px-2">Учебник</th><th className="px-2">Действия</th></tr>
+            <tr><th className="w-10 px-3 py-2"><span className="sr-only">Выбор</span></th><th className="px-2 py-2">Тема КТП</th><th className="px-2">Учебник</th><th className="px-2">Действия</th></tr>
           </thead>
           <tbody>
             {topics.map((topic) => {
               const state = topicLinkState(topic);
               return (
                 <tr key={topic.id} className="border-t border-border align-top">
-                  <td className="px-4 py-2">{topic.ktp_number ? `${topic.ktp_number}. ` : ''}{topic.name}</td>
+                  <td className="px-3 py-2">
+                    {state === 'suggested' && (
+                      <input type="checkbox" checked={selected.has(topic.id)} onChange={() => toggle(topic.id)}
+                        aria-label={`Выбрать тему ${topic.name}`} className="h-4 w-4" />
+                    )}
+                  </td>
+                  <td className="px-2 py-2">{topic.ktp_number ? `${topic.ktp_number}. ` : ''}{topic.name}</td>
                   <td className="px-2 py-2">
                     <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${STATE_TONES[state]}`}>{STATE_LABELS[state]}</span>
                     {topic.links.map((link) => (
