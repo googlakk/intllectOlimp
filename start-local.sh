@@ -34,7 +34,10 @@ fi
 pnpm install --silent
 # Платформенный бинарник rollup иногда не доезжает — известная проблема
 # с необязательными зависимостями. Проверяем и лечим переустановкой.
-if ! ls node_modules/.pnpm 2>/dev/null | grep -q '@rollup+rollup-darwin'; then
+# Ищем папку напрямую: «ls | grep -q» под pipefail ложно падает — grep
+# выходит на первом совпадении, ls получает SIGPIPE, и проверка «не находит»
+# уже установленный пакет.
+if ! compgen -G 'node_modules/.pnpm/@rollup+rollup-darwin-*' >/dev/null; then
   echo
   echo "ОШИБКА: не установлен платформенный бинарник rollup для macOS."
   echo "Ничего не удаляю — решайте сами. Обычно помогает:"
