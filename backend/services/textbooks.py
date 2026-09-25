@@ -141,7 +141,10 @@ class SqlTextbookStore:
             )).all()
         }
         for values in pages:
-            page = existing.get(values["page_index"]) or TextbookPage(textbook_id=textbook_id, page_index=values["page_index"])
+            current = existing.get(values["page_index"])
+            if current is not None and current.source == "edited":
+                continue  # учитель исправил страницу, пока шло распознавание, — его правка важнее
+            page = current or TextbookPage(textbook_id=textbook_id, page_index=values["page_index"])
             for key, value in values.items():
                 setattr(page, key, value)
             self.db.add(page)
@@ -195,13 +198,16 @@ class IngestDeps:
     log: list[str] = field(default_factory=list)
 
 
-async def ingest_textbook(textbook_id: int, deps: IngestDeps) -> str:
-    """Весь путь книги. Возвращает итоговый статус; при ошибке — failed с понятным текстом."""
+async def ingest_textbook(textbook_id: int, deps: IngestDeps, *, claimed: bool = False) -> str:
+    """Весь путь книги. Возвращает итоговый статус; при ошибке — failed с понятным текстом.
+
+    claimed=True — книгу уже заняли в запросе (process_textbook), повторно не занимаем.
+    """
     store = deps.store
     book = await store.get(textbook_id)
     if book is None:
         return "missing"
-    if not await store.claim(textbook_id, datetime.now(timezone.utc) - STALE_AFTER):
+    if not claimed and not await store.claim(textbook_id, datetime.now(timezone.utc) - STALE_AFTER):
         return "busy"
     try:
         size = await deps.storage.object_size(bucket=deps.settings.bucket, path=book.storage_path)
@@ -381,7 +387,7 @@ _running: dict[int, asyncio.Task[Any]] = {}
 
 
 def start_ingest(textbook_id: int) -> bool:
-    """Обработка в фоне того же процесса; повторный запуск той же книги не создаёт вторую задачу."""
+    """Обработка в фоне того же процесса (книга уже занята в базе запросом)."""
     task = _running.get(textbook_id)
     if task is not None and not task.done():
         return False
@@ -398,7 +404,7 @@ async def _run_ingest(textbook_id: int) -> None:
         async with AsyncSessionLocal() as db:
             await ingest_textbook(textbook_id, IngestDeps(
                 store=SqlTextbookStore(db), storage=SupabaseStorage(), tool_caller=call_tool, settings=textbook_settings(),
-            ))
+            ), claimed=True)
     finally:
         _running.pop(textbook_id, None)
 
@@ -473,10 +479,38 @@ async def create_textbook(payload: dict[str, Any], db: AsyncSession, *, user: Au
 
 
 async def process_textbook(textbook_id: int, db: AsyncSession, *, user: AuthPrincipal,
-                           starter: Callable[[int], bool] = start_ingest) -> dict[str, Any]:
-    book = _require_access(await _guarded(db, db.get(Textbook, textbook_id)), user)
-    started = starter(textbook_id)
+                           starter: Callable[[int], bool] = start_ingest,
+                           claim: Callable[[int], Awaitable[bool]] | None = None) -> dict[str, Any]:
+    """Книга занимается прямо в запросе: интерфейс сразу видит «идёт обработка» и начинает опрос."""
+    _require_access(await _guarded(db, db.get(Textbook, textbook_id)), user)
+    if claim is None:
+        store = SqlTextbookStore(db)
+        claim = lambda book_id: store.claim(book_id, datetime.now(timezone.utc) - STALE_AFTER)  # noqa: E731
+    won = await _guarded(db, claim(textbook_id))
+    started = bool(won) and starter(textbook_id)
+    # UPDATE через ORM синхронизирует объект в сессии: статус уже «extracting».
+    book = await _guarded(db, db.get(Textbook, textbook_id))
     return {"textbook": serialize_textbook(book), "started": started}
+
+
+async def delete_unuploaded_textbook(textbook_id: int, db: AsyncSession, *, user: AuthPrincipal,
+                                     storage: FileStorage | None = None, settings: TextbookSettings | None = None) -> None:
+    """Удалить запись, если файл так и не загрузился (сорвалась загрузка). Обработанные книги так не удаляются."""
+    settings = settings or textbook_settings()
+    book = _require_access(await _guarded(db, db.get(Textbook, textbook_id)), user)
+    if book.status != "uploaded":
+        raise TextbookServiceError(409, "Удалить можно только книгу, файл которой не загрузился")
+    if storage is None:
+        from storage import SupabaseStorage
+        storage = SupabaseStorage()
+    try:
+        size = await storage.object_size(bucket=settings.bucket, path=book.storage_path)
+    except Exception as exc:
+        raise TextbookServiceError(503, "Хранилище учебников недоступно") from exc
+    if size is not None:
+        raise TextbookServiceError(409, "Файл уже загружен — запустите обработку")
+    await _guarded(db, db.delete(book))
+    await _guarded(db, db.commit())
 
 
 async def list_textbooks(db: AsyncSession, *, user: AuthPrincipal) -> list[dict[str, Any]]:
@@ -509,3 +543,54 @@ async def get_textbook(textbook_id: int, db: AsyncSession, *, user: AuthPrincipa
             for section in sections
         ],
     }
+
+
+async def get_section(textbook_id: int, section_id: int, db: AsyncSession, *, user: AuthPrincipal) -> dict[str, Any]:
+    """Параграф для просмотра учителем: текст со страницами и выделенные элементы."""
+    book = _require_access(await _guarded(db, db.get(Textbook, textbook_id)), user)
+    section = await _guarded(db, db.get(TextbookSection, section_id))
+    if section is None or section.textbook_id != book.id:
+        raise TextbookServiceError(404, "Параграф не найден")
+    pages = (await _guarded(db, db.scalars(
+        select(TextbookPage).where(TextbookPage.textbook_id == book.id,
+                                   TextbookPage.page_index.between(section.pdf_from, section.pdf_to))
+    ))).all()
+    items = (await _guarded(db, db.scalars(
+        select(TextbookItem).where(TextbookItem.section_id == section.id).order_by(TextbookItem.position)
+    ))).all()
+    return {
+        "section": {"id": section.id, "number": section.number, "title": section.title, "chapter": section.chapter,
+                    "printed_page": section.printed_page, "pdf_from": section.pdf_from, "pdf_to": section.pdf_to,
+                    "items_status": section.items_status},
+        "pages": [_serialize_page(page, book.page_offset) for page in sorted(pages, key=lambda page: page.page_index)],
+        "items": [{"id": item.id, "kind": item.kind, "label": item.label, "page": item.page, "text": item.text,
+                   "answer": item.answer, "difficulty": item.difficulty} for item in items],
+    }
+
+
+def _serialize_page(page: TextbookPage, offset: int | None) -> dict[str, Any]:
+    return {
+        "page_index": page.page_index,
+        "printed_page": page.printed_page if page.printed_page is not None else page.page_index - (offset or 0),
+        "text": page.text, "source": page.source, "status": page.status,
+        "needs_review": page.needs_review, "uncertain": page.uncertain or [],
+    }
+
+
+async def update_page(textbook_id: int, page_index: int, text: str, db: AsyncSession, *, user: AuthPrincipal) -> dict[str, Any]:
+    """Учитель исправил распознанный текст: страница помечается «исправлено» и не перезаписывается обработкой."""
+    book = _require_access(await _guarded(db, db.get(Textbook, textbook_id)), user)
+    page = await _guarded(db, db.scalar(
+        select(TextbookPage).where(TextbookPage.textbook_id == book.id, TextbookPage.page_index == page_index)
+    ))
+    if page is None:
+        raise TextbookServiceError(404, "Страница не найдена")
+    page.text, page.source, page.status, page.needs_review, page.uncertain = text.strip(), "edited", "done", False, []
+    # Элементы параграфа выделены из старого текста — при следующей обработке выделяются заново.
+    for section in (await _guarded(db, db.scalars(
+        select(TextbookSection).where(TextbookSection.textbook_id == book.id,
+                                      TextbookSection.pdf_from <= page_index, TextbookSection.pdf_to >= page_index)
+    ))).all():
+        section.items_status = "stale"
+    await _guarded(db, db.commit())
+    return _serialize_page(page, book.page_offset)

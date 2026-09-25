@@ -4,7 +4,8 @@ from types import SimpleNamespace
 
 from llm.base import STOP_TOOL, ToolResult
 from services.textbooks import (
-    IngestDeps, TextbookServiceError, TextbookSettings, create_textbook, ingest_textbook, process_textbook, section_text,
+    IngestDeps, TextbookServiceError, TextbookSettings, create_textbook, delete_unuploaded_textbook, ingest_textbook,
+    process_textbook, section_text,
 )
 from textbooks.extract import PageText
 from textbooks.models import Textbook, TextbookPage, TextbookSection
@@ -245,6 +246,10 @@ class CreateTests(unittest.TestCase):
             self.assertEqual(error.exception.status_code, code)
 
 
+async def CLAIM_OK(book_id):
+    return True
+
+
 class AccessTests(unittest.TestCase):
     def test_book_without_organization_is_hidden(self):
         class GetDb:
@@ -254,7 +259,7 @@ class AccessTests(unittest.TestCase):
                 return orphan
 
         with self.assertRaises(TextbookServiceError):
-            run(process_textbook(1, GetDb(), user=USER, starter=lambda book_id: True))
+            run(process_textbook(1, GetDb(), user=USER, starter=lambda book_id: True, claim=CLAIM_OK))
 
     def test_other_organization_cannot_process_book(self):
         class GetDb:
@@ -263,11 +268,50 @@ class AccessTests(unittest.TestCase):
 
         started = []
         with self.assertRaises(TextbookServiceError) as denied:
-            run(process_textbook(1, GetDb(), user=SimpleNamespace(organization_id=6), starter=started.append))
+            run(process_textbook(1, GetDb(), user=SimpleNamespace(organization_id=6), starter=started.append, claim=CLAIM_OK))
         self.assertEqual(denied.exception.status_code, 404)
         self.assertEqual(started, [])
-        run(process_textbook(1, GetDb(), user=USER, starter=lambda book_id: started.append(book_id) or True))
+        result = run(process_textbook(1, GetDb(), user=USER, starter=lambda book_id: started.append(book_id) or True, claim=CLAIM_OK))
+        self.assertTrue(result["started"])
         self.assertEqual(started, [1])
+
+    def test_busy_book_is_not_started_again(self):
+        class GetDb:
+            async def get(self, model, key):
+                return book()
+
+        async def busy(book_id):
+            return False
+
+        started = []
+        result = run(process_textbook(1, GetDb(), user=USER, starter=started.append, claim=busy))
+        self.assertEqual((result["started"], started), (False, []))
+
+
+class DeleteTests(unittest.TestCase):
+    class Db:
+        def __init__(self, status="uploaded"):
+            self.row, self.deleted = book(), False
+            self.row.status = status
+
+        async def get(self, model, key):
+            return self.row
+
+        async def delete(self, row):
+            self.deleted = True
+
+        async def commit(self):
+            pass
+
+    def test_book_without_file_is_deleted_but_uploaded_file_is_kept(self):
+        db = self.Db()
+        run(delete_unuploaded_textbook(1, db, user=USER, storage=Storage(size=None), settings=ON))
+        self.assertTrue(db.deleted)
+        for db, storage in ((self.Db(), Storage(size=1000)), (self.Db(status="ready"), Storage(size=None))):
+            with self.assertRaises(TextbookServiceError) as refused:
+                run(delete_unuploaded_textbook(1, db, user=USER, storage=storage, settings=ON))
+            self.assertEqual(refused.exception.status_code, 409)
+            self.assertFalse(db.deleted)
 
 
 if __name__ == "__main__":
