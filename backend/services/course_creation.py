@@ -31,3 +31,14 @@ async def create_section(subject_id: int, name: str, user: AuthPrincipal, db: As
     clear_subject_outline_cache(subject_id)
     return {"id": section.id, "subject_id": subject_id, "name": section.name,
             "sort_order": section.sort_order, "total_hours": 0}
+
+
+async def rename_subject(subject_id: int, name: str, user: AuthPrincipal, db: AsyncSession) -> dict:
+    subject = await require_subject_management(user, subject_id, db)
+    subject.name = name.strip()
+    await db.commit()
+    await db.refresh(subject)
+    clear_subject_outline_cache(subject_id)
+    return {"id": subject.id, "name": subject.name, "grade": subject.grade,
+            "hours_per_week": subject.hours_per_week, "hours_per_year": subject.hours_per_year,
+            "source_info": subject.source_info, "instruction_language": subject.instruction_language}

@@ -2,7 +2,7 @@ import { CreateCourse } from '@/features/teacherLessons/CreateCourse';
 import { GardenLessonCard } from '@/features/visualLesson/GardenLessonCard';
 import { useState } from 'react';
 import { useSubjects } from '@/lib/api';
-import { NoSubjectSelected, SectionsList, SubjectTabs } from '@/features/teacherLessons/listViews';
+import { NoSubjectSelected, SectionsList, SubjectPicker } from '@/features/teacherLessons/listViews';
 import { KtpImportButton } from '@/features/teacherLessons/KtpImport';
 import { subjectGrades, subjectsForGrade } from '@/features/teacherLessons/listModel';
 import { CurriculumGraphPanel } from '@/features/teacherLessons/CurriculumGraphPanel';
@@ -57,7 +57,7 @@ export default function Lessons() {
         </div>
       )}
 
-      <SubjectTabs
+      <SubjectPicker
         isLoading={loadingSubs}
         selectedSubject={selectedSubject}
         subjects={visibleSubjects}

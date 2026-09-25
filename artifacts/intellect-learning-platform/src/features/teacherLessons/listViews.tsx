@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { CreateSection } from './CreateCourse';
 import TopicForm from './TopicForm';
-import { useArchiveTopic, useTeacherOutline } from '@/lib/api';
+import { useArchiveTopic, useRenameSubject, useTeacherOutline } from '@/lib/api';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Link } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
-import { BookOpen, Edit3, Loader2 } from 'lucide-react';
+import { BookOpen, Check, Edit3, Loader2, Pencil, X } from 'lucide-react';
 import {
   getLessonByTopic,
   lessonQueryKey,
@@ -14,33 +15,84 @@ import {
 } from '@/lib/api';
 import { lessonStatusView, lessonTypeLabel } from './listModel';
 
-type SubjectTabsProps = {
+type SubjectPickerProps = {
   isLoading: boolean;
   selectedSubject: number | null;
   subjects: Subject[] | undefined;
   onSelect: (subjectId: number) => void;
 };
 
-export function SubjectTabs({ isLoading, selectedSubject, subjects, onSelect }: SubjectTabsProps) {
+/** Выпадающий список предметов выбранного класса и переименование выбранного. */
+export function SubjectPicker({ isLoading, selectedSubject, subjects, onSelect }: SubjectPickerProps) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState('');
+  const rename = useRenameSubject();
+  const current = subjects?.find((subject) => subject.id === selectedSubject);
+
+  if (isLoading) return <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />;
+  if (!subjects?.length) return null;
+
+  const startEditing = () => {
+    if (!current) return;
+    rename.reset();
+    setName(current.name);
+    setEditing(true);
+  };
+
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!current || !name.trim()) return;
+    if (name.trim() === current.name) return setEditing(false);
+    try {
+      await rename.mutateAsync({ subjectId: current.id, name: name.trim() });
+      setEditing(false);
+    } catch { /* ошибка показана ниже, введённое название сохраняется */ }
+  };
+
+  if (editing && current) {
+    return (
+      <form onSubmit={save} className="flex flex-wrap items-center gap-2" aria-label="Переименование предмета">
+        <span className="shrink-0 text-sm font-semibold text-muted-foreground">Предмет</span>
+        <input
+          autoFocus
+          required
+          maxLength={255}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => { if (event.key === 'Escape') setEditing(false); }}
+          aria-label="Новое название предмета"
+          className="h-11 min-w-0 flex-1 rounded-lg border border-primary bg-card px-3 text-base font-bold sm:max-w-md"
+        />
+        <button type="submit" disabled={rename.isPending || !name.trim()} className="inline-flex h-11 items-center gap-1 rounded-lg bg-primary px-4 font-semibold text-primary-foreground disabled:opacity-50">
+          {rename.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Сохранить
+        </button>
+        <button type="button" onClick={() => setEditing(false)} className="inline-flex h-11 items-center gap-1 rounded-lg border border-border px-4 font-semibold">
+          <X className="h-4 w-4" /> Отмена
+        </button>
+        {rename.error && <p role="alert" className="basis-full text-sm text-destructive">{rename.error.message}</p>}
+      </form>
+    );
+  }
+
   return (
-    <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar">
-      {isLoading ? (
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-      ) : (
-        subjects?.map((subject) => (
-          <button
-            key={subject.id}
-            onClick={() => onSelect(subject.id)}
-            className={`px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all ${
-              selectedSubject === subject.id
-                ? 'bg-primary text-primary-foreground shadow-md'
-                : 'bg-card border border-border text-muted-foreground hover:border-primary/30 hover:text-foreground'
-            }`}
-          >
-            {subject.name}
-            <span className="ml-2 opacity-70">{subject.grade} класс</span>
-          </button>
-        ))
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="shrink-0 text-sm font-semibold text-muted-foreground">Предмет</span>
+      <Select value={current ? String(current.id) : undefined} onValueChange={(value) => onSelect(Number(value))}>
+        <SelectTrigger className="h-11 w-full rounded-lg bg-card text-base font-bold sm:w-96" aria-label="Выберите предмет">
+          <SelectValue placeholder="Выберите предмет" />
+        </SelectTrigger>
+        <SelectContent>
+          {subjects.map((subject) => (
+            <SelectItem key={subject.id} value={String(subject.id)} className="py-2 text-base">
+              {subject.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {current && (
+        <button type="button" onClick={startEditing} title="Переименовать предмет" className="inline-flex h-11 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm font-semibold text-muted-foreground hover:border-primary/40 hover:text-foreground">
+          <Pencil className="h-4 w-4" /> Переименовать
+        </button>
       )}
     </div>
   );

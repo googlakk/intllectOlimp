@@ -98,3 +98,8 @@ export function useCreateSection() {
   return useMutation({ mutationFn: (data: { subjectId: number; name: string }) => request<Section>(`/subjects/${data.subjectId}/sections`, { method: 'POST', body: JSON.stringify({ name: data.name }) }),
     onSuccess: async () => { await Promise.all(catalogInvalidationKeys.map(queryKey => client.invalidateQueries({ queryKey }))); } });
 }
+export function useRenameSubject() {
+  const client = useQueryClient();
+  return useMutation({ mutationFn: (data: { subjectId: number; name: string }) => request<Subject>(`/subjects/${data.subjectId}`, { method: 'PATCH', body: JSON.stringify({ name: data.name }) }),
+    onSuccess: async () => { await Promise.all(catalogInvalidationKeys.map(queryKey => client.invalidateQueries({ queryKey }))); } });
+}

@@ -115,6 +115,15 @@ async def create_course(payload: CourseCreate, user: AuthPrincipal = Depends(req
         raise_http_error(exc)
 
 
+@router.patch("/subjects/{subject_id}")
+async def rename_course(subject_id: int, payload: SectionCreate, user: AuthPrincipal = Depends(require_roles("admin", "teacher")), db: AsyncSession = Depends(get_db)):
+    from services.course_creation import rename_subject
+    try:
+        return await rename_subject(subject_id, payload.name, user, db)
+    except ApplicationError as exc:
+        raise_http_error(exc)
+
+
 @router.post("/subjects/{subject_id}/sections", status_code=201)
 async def create_section(subject_id: int, payload: SectionCreate, user: AuthPrincipal = Depends(require_roles("admin", "teacher")), db: AsyncSession = Depends(get_db)):
     from services.course_creation import create_section as create
