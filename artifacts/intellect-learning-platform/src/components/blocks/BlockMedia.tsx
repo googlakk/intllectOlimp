@@ -13,6 +13,7 @@ export const INLINE_MEDIA_COMPONENTS = new Set([
 /** Блоки, которые сами ставят картинку в нужное место своей вёрстки. */
 export const SELF_MEDIA_COMPONENTS = new Set([
   'ShortExplanation', 'KeyConcept', 'Timeline', 'WorkedExample', 'GuidedPractice', 'IndependentProblem',
+  'PredictionLab', 'BranchingScenario',
 ]);
 
 export type InlineMedia = { kind?: string; url?: string; alt_text?: string; caption?: string };
@@ -29,15 +30,17 @@ export function inlineBlockMedia(block: Block): InlineMedia | null {
   return blockImage(block.content?.media);
 }
 
-type Variant = 'top' | 'side';
+type Variant = 'top' | 'side' | 'thumb';
 
 const FRAME: Record<Variant, string> = {
   top: 'mx-auto w-fit max-w-full',
   side: 'w-full',
+  thumb: 'w-24 shrink-0 sm:w-32',
 };
 const IMAGE: Record<Variant, string> = {
   top: 'h-auto max-h-[360px] w-auto max-w-full',
   side: 'h-auto w-full',
+  thumb: 'aspect-[4/3] w-full object-cover',
 };
 
 /**
@@ -59,7 +62,7 @@ export function BlockImage({ media, variant = 'top', className = '' }: { media: 
         aria-label="Открыть иллюстрацию крупно"
       >
         <img src={image.url} alt={alt} className={`block ${IMAGE[variant]}`} loading="lazy" decoding="async" />
-        <span className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-background/85 text-foreground opacity-0 shadow-sm transition group-hover:opacity-100 group-focus-visible:opacity-100">
+        <span className="absolute bottom-1.5 right-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-background/85 text-foreground opacity-0 shadow-sm transition group-hover:opacity-100 group-focus-visible:opacity-100">
           <Maximize2 className="h-4 w-4" />
         </span>
       </button>

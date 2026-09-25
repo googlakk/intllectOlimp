@@ -3,6 +3,7 @@ import { useMachine } from '@xstate/react';
 import { useMemo, useState } from 'react';
 import { BlockShell, ResultPanel } from './shared';
 import { RichText } from './RichText';
+import { BlockImage, blockImage } from './BlockMedia';
 import type { BlockResult } from '@/features/interactiveEngines/scoring';
 
 export type ScenarioChoice = {
@@ -27,6 +28,7 @@ export interface BranchingScenarioProps {
   nodes: ScenarioNode[];
   success_feedback: string;
   failure_feedback: string;
+  media?: unknown;
   onAnswer?: (isCorrect: boolean) => void;
 }
 
@@ -37,6 +39,7 @@ export default function BranchingScenario({
   nodes,
   success_feedback,
   failure_feedback,
+  media,
   onAnswer,
 }: BranchingScenarioProps) {
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
@@ -57,6 +60,8 @@ export default function BranchingScenario({
   const [lastFeedback, setLastFeedback] = useState('');
   const [result, setResult] = useState<BlockResult>('idle');
   const current = nodeById.get(String(snapshot.value)) || nodes[0];
+  const hasImage = Boolean(blockImage(media));
+  const atStart = current.id === start_node_id;
 
   const choose = (choice: ScenarioChoice, index: number) => {
     setLastFeedback(choice.feedback || '');
@@ -72,8 +77,15 @@ export default function BranchingScenario({
   return (
     <BlockShell title={title} subtitle={context}>
       <div className="rounded-xl border border-border bg-muted/20 p-5">
-        <p className="text-xs font-bold uppercase tracking-wide text-primary">Ситуация</p>
-        <h4 className="mt-2 text-lg font-bold text-foreground"><RichText text={current.title} inline /></h4>
+        {/* Сцена крупно в начале сценария; дальше — миниатюрой, чтобы не терять место действия. */}
+        {hasImage && atStart && <BlockImage media={media} className="mb-4" />}
+        <div className="flex items-start gap-4">
+          {hasImage && !atStart && <BlockImage media={media} variant="thumb" />}
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-wide text-primary">Ситуация</p>
+            <h4 className="mt-2 text-lg font-bold text-foreground"><RichText text={current.title} inline /></h4>
+          </div>
+        </div>
         <RichText text={current.text} className="mt-3 text-sm leading-relaxed text-muted-foreground" />
         {lastFeedback && (
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/10 p-3 text-sm font-medium text-foreground">

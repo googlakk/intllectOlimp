@@ -3,6 +3,7 @@ import { useMachine } from '@xstate/react';
 import { useMemo, useState } from 'react';
 import { BlockShell, PrimaryAction, ResultPanel } from './shared';
 import { RichText } from './RichText';
+import { BlockImage, blockImage } from './BlockMedia';
 import { normalizeText, type BlockResult } from '@/features/interactiveEngines/scoring';
 
 export type PredictionOption = {
@@ -23,6 +24,7 @@ export interface PredictionLabProps {
   observation_title: string;
   observations: ObservationFrame[];
   explanation: string;
+  media?: unknown;
   onAnswer?: (isCorrect: boolean) => void;
 }
 
@@ -44,11 +46,13 @@ export default function PredictionLab({
   observation_title,
   observations,
   explanation,
+  media,
   onAnswer,
 }: PredictionLabProps) {
   const [snapshot, send] = useMachine(labMachine);
   const [selected, setSelected] = useState('');
   const [result, setResult] = useState<BlockResult>('idle');
+  const hasImage = Boolean(blockImage(media));
   const correct = useMemo(() => normalizeText(selected) === normalizeText(correct_prediction), [selected, correct_prediction]);
 
   const observe = () => {
@@ -59,22 +63,30 @@ export default function PredictionLab({
 
   return (
     <BlockShell title={title} subtitle={question}>
+      {/* Картинка показывает установку опыта: смотрим на неё и делаем прогноз. */}
       {snapshot.matches('predict') && (
-        <div className="grid gap-3 md:grid-cols-2">
-          {options.map((option) => (
-            <button
-              key={option.id}
-              onClick={() => setSelected(option.id)}
-              className={`rounded-lg border p-4 text-left text-sm font-semibold transition ${selected === option.id ? 'border-primary bg-primary/10' : 'border-border bg-card hover:border-primary/30'}`}
-            >
-              <RichText text={option.label} inline />
-            </button>
-          ))}
+        <div className={hasImage ? 'grid gap-4 md:grid-cols-[minmax(0,42%)_minmax(0,1fr)] md:items-center' : ''}>
+          {hasImage && <BlockImage media={media} variant="side" />}
+          <div className={`grid gap-3 ${hasImage ? '' : 'md:grid-cols-2'}`}>
+            {options.map((option) => (
+              <button
+                key={option.id}
+                onClick={() => setSelected(option.id)}
+                className={`rounded-lg border p-4 text-left text-sm font-semibold transition ${selected === option.id ? 'border-primary bg-primary/10' : 'border-border bg-card hover:border-primary/30'}`}
+              >
+                <RichText text={option.label} inline />
+              </button>
+            ))}
+          </div>
         </div>
       )}
+      {/* После прогноза установка остаётся миниатюрой рядом с наблюдением. */}
       {!snapshot.matches('predict') && (
         <div className="rounded-xl border border-border bg-background p-5">
-          <h4 className="mb-4 text-sm font-bold uppercase tracking-wide text-primary"><RichText text={observation_title} inline /></h4>
+          <div className="mb-4 flex items-center gap-4">
+            {hasImage && <BlockImage media={media} variant="thumb" />}
+            <h4 className="text-sm font-bold uppercase tracking-wide text-primary"><RichText text={observation_title} inline /></h4>
+          </div>
           <div className="grid gap-3 md:grid-cols-3">
             {observations.map((item) => (
               <div key={item.label} className="rounded-lg border border-border bg-muted/20 p-4">
