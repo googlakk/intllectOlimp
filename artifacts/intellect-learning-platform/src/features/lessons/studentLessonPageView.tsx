@@ -217,8 +217,8 @@ export function StudentLessonPageView({
         </button>
       </header>
 
-      <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        <main className={`lesson-board h-full min-w-0 flex-1 flex-col px-4 py-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 2xl:px-16 ${isPlanOpen ? 'hidden lg:flex' : 'flex'} ${showSummary ? 'overflow-y-auto' : 'overflow-hidden'}`}>
+      <div className="lesson-board relative flex min-h-0 flex-1 overflow-hidden">
+        <main className={`h-full min-w-0 flex-1 flex-col px-4 py-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 2xl:px-16 ${isPlanOpen ? 'hidden lg:flex' : 'flex'} ${showSummary ? 'overflow-y-auto' : 'overflow-hidden'}`}>
           {saveError && (
             <div role="alert" className="mb-6 rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm font-medium text-destructive">
               Прогресс пока не сохранён: {saveError.message}
@@ -231,10 +231,10 @@ export function StudentLessonPageView({
         {showLessonRail && (
           <aside
             aria-label="Дополнительные инструменты урока"
-            className={`${isPlanOpen ? 'flex' : 'hidden lg:flex'} h-full w-full shrink-0 flex-col gap-3 overflow-hidden border-l border-border bg-muted/20 p-3 lg:w-[340px] xl:w-[360px]`}
+            className={`${isPlanOpen ? 'flex' : 'hidden lg:flex'} h-full w-full shrink-0 flex-col gap-4 overflow-hidden p-3 lg:w-[340px] lg:py-4 lg:pr-4 xl:w-[360px]`}
           >
             {isPlanOpen && (
-              <section className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm ${avatarCue ? 'lg:flex-none lg:basis-1/2' : ''}`} aria-label="План урока">
+              <section className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-md ${avatarCue ? 'lg:flex-none lg:basis-1/2' : ''}`} aria-label="План урока">
                 <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
                   <div>
                     <p className="text-sm font-bold text-foreground">План урока</p>
@@ -270,7 +270,7 @@ export function StudentLessonPageView({
             )}
 
             {avatarCue && (
-              <div className={`hidden min-h-0 overflow-y-auto lg:block ${isPlanOpen ? 'flex-1' : 'h-full'}`}>
+              <div className={`hidden min-h-0 overflow-y-auto rounded-2xl border border-border bg-card p-3 shadow-md lg:flex lg:flex-col lg:justify-center ${isPlanOpen ? 'flex-1' : 'h-full'}`}>
                 <AvatarCompanion
                   cue={avatarCue}
                   previewImageUrl={lessonDocument?.avatar.preview_image_url}
