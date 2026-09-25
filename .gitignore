@@ -53,3 +53,6 @@ Thumbs.db
 __pycache__/
 api-parse-result.json
 import-result.json
+
+# Локальный запуск через start.sh (PID и логи)
+/.run/

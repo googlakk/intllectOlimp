@@ -1,0 +1,27 @@
+# Секреты и локальное состояние — никогда в образ
+.env
+.env.*
+!.env.example
+.run
+.git
+.codex
+.agents
+.playwright-cli
+**/.playwright-cli
+
+# Зависимости и сборки пересоздаются внутри образа
+**/node_modules
+.venv
+**/dist
+**/__pycache__
+**/.pytest_cache
+**/*.tsbuildinfo
+
+# Диагностика и материалы, не нужные сайту
+output
+outputs
+scripts/output
+evidence
+attached_assets
+api-parse-result.json
+import-result.json
