@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from services.auth import AuthPrincipal, AuthServiceError, UserRole, principal_for_auth_user
-from services.supabase_auth import get_auth_user
+from services.supabase_auth import SupabaseAuthError, get_auth_user
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -21,7 +21,14 @@ async def get_current_user(
 ) -> AuthPrincipal:
     if credentials is None or credentials.scheme.casefold() != "bearer":
         raise AuthServiceError(status_code=401, detail="Требуется вход в систему.", code="auth_required")
-    auth_user = await get_auth_user(credentials.credentials)
+    try:
+        auth_user = await get_auth_user(credentials.credentials)
+    except SupabaseAuthError as exc:
+        # Supabase отвечает 403 на истёкший или битый токен. Для клиента это
+        # 401: он обновит сессию и повторит запрос, а не упрётся в «нет прав».
+        if exc.status_code in {401, 403}:
+            raise AuthServiceError(status_code=401, detail="Сессия истекла. Войдите снова.", code="session_expired") from exc
+        raise
     return await principal_for_auth_user(str(auth_user.get("id") or ""), credentials.credentials, db)
 
 

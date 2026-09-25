@@ -1,7 +1,11 @@
 import unittest
+from unittest.mock import AsyncMock, patch
 from uuid import UUID
 
-from auth_dependencies import require_roles
+from fastapi.security import HTTPAuthorizationCredentials
+
+from auth_dependencies import get_current_user, require_roles
+from services.supabase_auth import SupabaseAuthError
 from services.auth import AuthPrincipal, AuthServiceError
 
 
@@ -40,3 +44,22 @@ class AuthDependenciesTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CurrentUserTokenTests(unittest.IsolatedAsyncioTestCase):
+    async def _resolve(self, error: SupabaseAuthError):
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="expired-token")
+        with patch("auth_dependencies.get_auth_user", AsyncMock(side_effect=error)):
+            return await get_current_user(credentials, db=None)
+
+    async def test_expired_token_is_reported_as_401_so_client_refreshes(self):
+        # Supabase отвечает 403 «invalid JWT» на истёкший токен.
+        with self.assertRaises(AuthServiceError) as error:
+            await self._resolve(SupabaseAuthError(status_code=403, detail="invalid JWT: token is expired"))
+        self.assertEqual(error.exception.status_code, 401)
+        self.assertEqual(error.exception.code, "session_expired")
+
+    async def test_supabase_outage_is_not_hidden_as_session_problem(self):
+        with self.assertRaises(SupabaseAuthError) as error:
+            await self._resolve(SupabaseAuthError(status_code=503, detail="Supabase недоступен"))
+        self.assertEqual(error.exception.status_code, 503)
