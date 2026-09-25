@@ -1,10 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import type React from 'react';
-import { ReactFlow, Background, Controls, addEdge, useEdgesState, useNodesState, type Connection, type Edge, type Node } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
-import { BlockShell, PrimaryAction, ResultPanel } from './shared';
+import { BlockShell } from './shared';
 import { RichText } from './RichText';
-import { resultFromScore, scoreRatio, type BlockResult } from '@/features/interactiveEngines/scoring';
+import LinkBoard, { type BoardNode } from './LinkBoard';
+import { boardOrder } from '@/features/interactiveEngines/linkBoard';
 
 export type ArgumentNode = {
   id: string;
@@ -28,33 +27,35 @@ const KIND_STYLE: Record<ArgumentNode['kind'], React.CSSProperties> = {
   counterargument: { background: 'hsl(var(--destructive) / 0.08)', borderColor: 'hsl(var(--destructive) / 0.35)' },
 };
 
+const NODE_WIDTH = 230;
+const GAP = 60;
+
 export default function ArgumentMap({ title, prompt, nodes: argumentNodes, correct_links, explanation, onAnswer }: ArgumentMapProps) {
-  const initialNodes = useMemo<Node[]>(() => argumentNodes.map((node, index) => ({
-    id: node.id,
-    position: {
-      x: node.kind === 'claim' ? 340 : (index % 2) * 520,
-      y: node.kind === 'claim' ? 40 : 150 + Math.floor(index / 2) * 120,
-    },
-    data: { label: <RichText text={node.label} inline /> },
-    style: { width: 220, borderRadius: 12, whiteSpace: 'pre-wrap', ...KIND_STYLE[node.kind] },
-  })), [argumentNodes]);
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const [result, setResult] = useState<BlockResult>('idle');
-
-  const onConnect = (connection: Connection) => {
-    setEdges((current) => addEdge({ ...connection, animated: true, type: 'smoothstep' }, current));
-  };
-
-  const check = () => {
-    const expected = correct_links.map((link) => `${link.from}->${link.to}`);
-    const actual = edges.map((edge) => `${edge.source}->${edge.target}`);
-    const correct = actual.filter((edge) => expected.includes(edge)).length;
-    const score = scoreRatio(correct, expected.length);
-    const next = resultFromScore(score);
-    setResult(next);
-    onAnswer?.(score >= 80);
-  };
+  // Тезисы сверху, остальные карточки перемешаны ниже — раскладка не подсказывает связи.
+  const claims = useMemo(() => argumentNodes.filter((node) => node.kind === 'claim'), [argumentNodes]);
+  const others = useMemo(() => boardOrder(argumentNodes.filter((node) => node.kind !== 'claim')), [argumentNodes]);
+  const layout = useCallback((columns: number): BoardNode[] => {
+    const rowWidth = columns * NODE_WIDTH + (columns - 1) * GAP;
+    const perRow = Math.min(columns, Math.max(claims.length, 1));
+    const claimRows = Math.ceil(claims.length / perRow);
+    const place = (node: ArgumentNode, position: BoardNode['position']): BoardNode => ({
+      id: node.id,
+      position,
+      style: { width: NODE_WIDTH, ...KIND_STYLE[node.kind] },
+      content: <div className="text-sm leading-snug text-foreground"><RichText text={node.label} inline /></div>,
+    });
+    const claimStart = (rowWidth - (perRow * NODE_WIDTH + (perRow - 1) * GAP)) / 2;
+    return [
+      ...claims.map((node, index) => place(node, {
+        x: claimStart + (index % perRow) * (NODE_WIDTH + GAP),
+        y: Math.floor(index / perRow) * 170,
+      })),
+      ...others.map((node, index) => place(node, {
+        x: (index % columns) * (NODE_WIDTH + GAP),
+        y: claimRows * 170 + 30 + Math.floor(index / columns) * 170,
+      })),
+    ];
+  }, [claims, others]);
 
   return (
     <BlockShell title={title} subtitle={prompt}>
@@ -63,23 +64,7 @@ export default function ArgumentMap({ title, prompt, nodes: argumentNodes, corre
         <span className="rounded-full bg-muted px-2 py-1 text-muted-foreground">доказательство</span>
         <span className="rounded-full bg-destructive/10 px-2 py-1 text-destructive">контраргумент</span>
       </div>
-      <div className="h-[460px] overflow-hidden rounded-xl border border-border bg-background">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          fitView
-        >
-          <Background />
-          <Controls />
-        </ReactFlow>
-      </div>
-      <div className="mt-5 flex justify-end">
-        <PrimaryAction onClick={check}>Проверить аргумент</PrimaryAction>
-      </div>
-      <ResultPanel result={result} correctText={explanation} partialText={explanation} incorrectText={explanation} />
+      <LinkBoard key={argumentNodes.map((node) => node.id).join('|')} layout={layout} expected={correct_links} checkLabel="Проверить аргумент" explanation={explanation} onAnswer={onAnswer} />
     </BlockShell>
   );
 }

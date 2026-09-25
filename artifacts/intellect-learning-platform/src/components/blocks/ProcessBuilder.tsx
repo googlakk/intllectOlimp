@@ -1,9 +1,8 @@
-import { useMemo, useState } from 'react';
-import { ReactFlow, Background, Controls, addEdge, useEdgesState, useNodesState, type Connection, type Edge, type Node } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
-import { BlockShell, PrimaryAction, ResultPanel } from './shared';
+import { useCallback, useMemo } from 'react';
+import { BlockShell } from './shared';
 import { RichText } from './RichText';
-import { resultFromScore, sameSet, scoreRatio, type BlockResult } from '@/features/interactiveEngines/scoring';
+import LinkBoard, { type BoardNode } from './LinkBoard';
+import { boardOrder } from '@/features/interactiveEngines/linkBoard';
 
 export type ProcessStep = {
   id: string;
@@ -26,50 +25,25 @@ export interface ProcessBuilderProps {
   onAnswer?: (isCorrect: boolean) => void;
 }
 
+const NODE_WIDTH = 240;
+
 export default function ProcessBuilder({ title, instruction, steps, correct_edges, explanation, onAnswer }: ProcessBuilderProps) {
-  const initialNodes = useMemo<Node[]>(() => steps.map((step, index) => ({
+  const ordered = useMemo(() => boardOrder(steps), [steps]);
+  const layout = useCallback((columns: number): BoardNode[] => ordered.map((step, index) => ({
     id: step.id,
-    position: { x: (index % 3) * 230, y: Math.floor(index / 3) * 140 },
-    data: { label: <RichText text={`${step.label}${step.description ? `\n\n${step.description}` : ''}`} /> },
-    style: { width: 190, whiteSpace: 'pre-wrap', borderRadius: 12, borderColor: 'hsl(var(--border))' },
-  })), [steps]);
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const [result, setResult] = useState<BlockResult>('idle');
-
-  const onConnect = (connection: Connection) => {
-    setEdges((current) => addEdge({ ...connection, animated: true, type: 'smoothstep' }, current));
-  };
-
-  const check = () => {
-    const expected = correct_edges.map((edge) => `${edge.from}->${edge.to}`);
-    const actual = edges.map((edge) => `${edge.source}->${edge.target}`);
-    const correct = actual.filter((edge) => expected.includes(edge)).length;
-    const score = sameSet(actual, expected) ? 100 : scoreRatio(correct, expected.length);
-    const next = resultFromScore(score);
-    setResult(next);
-    onAnswer?.(score >= 80);
-  };
+    position: { x: (index % columns) * (NODE_WIDTH + 70), y: Math.floor(index / columns) * (columns === 1 ? 170 : 190) },
+    style: { width: NODE_WIDTH, textAlign: 'left' },
+    content: (
+      <div>
+        <div className="text-sm font-semibold leading-snug text-foreground"><RichText text={step.label} inline /></div>
+        {step.description && <div className="mt-1.5 text-xs leading-snug text-muted-foreground"><RichText text={step.description} inline /></div>}
+      </div>
+    ),
+  })), [ordered]);
 
   return (
     <BlockShell title={title} subtitle={instruction}>
-      <div className="h-[440px] overflow-hidden rounded-xl border border-border bg-background">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          fitView
-        >
-          <Background />
-          <Controls />
-        </ReactFlow>
-      </div>
-      <div className="mt-5 flex justify-end">
-        <PrimaryAction onClick={check}>Проверить схему</PrimaryAction>
-      </div>
-      <ResultPanel result={result} correctText={explanation} partialText={explanation} incorrectText={explanation} />
+      <LinkBoard key={ordered.map((step) => step.id).join('|')} layout={layout} expected={correct_edges} checkLabel="Проверить схему" explanation={explanation} onAnswer={onAnswer} />
     </BlockShell>
   );
 }

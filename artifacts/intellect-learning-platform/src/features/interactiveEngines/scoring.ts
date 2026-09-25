@@ -27,3 +27,14 @@ export function resultClasses(result: BlockResult): string {
   if (result === 'incorrect') return 'border-destructive/30 bg-destructive/10 text-destructive';
   return 'border-border bg-muted/20 text-muted-foreground';
 }
+
+export type LinkScore = { correct: number; wrong: number; missing: number; score: number };
+
+/** Лишние связи вычитаются: «соединить всё со всем» не должно давать 100%. */
+export function scoreLinks(actual: string[], expected: string[]): LinkScore {
+  const want = new Set(expected);
+  const have = new Set(actual);
+  const correct = [...have].filter((key) => want.has(key)).length;
+  const wrong = have.size - correct;
+  return { correct, wrong, missing: want.size - correct, score: scoreRatio(Math.max(0, correct - wrong), want.size) };
+}
