@@ -158,5 +158,198 @@ class ShowPathTests(unittest.TestCase):
         self.assertIn("Как показывать ход мысли: " + SUBJECT_FAMILY_PROFILES["mathematical"]["show_path"], prompts[0])
 
 
+class LessonPartsTests(unittest.TestCase):
+    """Большой урок генерируется по частям, обычный — одним вызовом."""
+
+    THREE = "Вычислять степени. Сравнивать степени. Применять свойства степеней."
+    TWO = "Вычислять степени. Сравнивать степени."
+
+    def run_generation(self, objectives, replies, hours=1):
+        import asyncio
+        from unittest.mock import patch
+        from ai.generator import generate_lesson
+
+        prompts = []
+
+        async def fake_call_tool(task, **kwargs):
+            prompts.append(kwargs["user"])
+            reply = replies[len(prompts) - 1]
+            if isinstance(reply, Exception):
+                raise reply
+            return reply
+
+        with patch("llm.call_tool", fake_call_tool):
+            lesson = asyncio.run(generate_lesson("Степени", "Алгебра", objectives, None, None, grade=7, hours=hours))
+        return lesson, prompts
+
+    @staticmethod
+    def reply(*components, intro=None, term=None):
+        from llm import ToolResult
+        from llm.base import STOP_TOOL
+        blocks = [{"component": name, "content": {"objective_ids": ["x"]}} for name in components]
+        if term:
+            blocks.append({"component": "KeyConcept", "content": {"term": term}})
+        data = {"blocks": blocks, **({"intro": intro} if intro else {})}
+        return ToolResult(data=data, stop_reason=STOP_TOOL, model="m")
+
+    def test_regular_lesson_is_one_call(self):
+        _, prompts = self.run_generation(self.TWO, [self.reply("ShortExplanation")], hours=2)
+        self.assertEqual(len(prompts), 1)
+        self.assertNotIn("Сейчас ты генерируешь только часть", prompts[0])
+
+    def test_large_lesson_goes_part_by_part_and_keeps_order(self):
+        intro = {"title": "Большая идея", "hook": "Загадка"}
+        replies = [
+            self.reply("RetrievalCheck", intro=intro, term="Степень"),
+            self.reply("WorkedExample"),
+            self.reply("GuidedPractice"),
+            self.reply("MasteryCheck", "Reflection"),
+        ]
+        lesson, prompts = self.run_generation(self.THREE, replies)
+        self.assertEqual(len(prompts), 4)
+        for index, prompt in enumerate(prompts):
+            self.assertIn(f"часть {index + 1} из 4", prompt)
+        self.assertIn("Введённые термины: Степень", prompts[1])
+        self.assertIn("Не добавляй титул intro", prompts[1])
+        self.assertIn("Не добавляй MasteryCheck и Reflection", prompts[0])
+        self.assertNotIn("Не добавляй MasteryCheck и Reflection", prompts[3])
+        self.assertEqual(
+            [block["component"] for block in lesson],
+            ["RetrievalCheck", "KeyConcept", "WorkedExample", "GuidedPractice", "MasteryCheck", "Reflection"],
+        )
+        self.assertEqual(lesson.intro, intro)
+
+    def test_truncated_single_call_falls_back_to_parts(self):
+        from llm import ToolResult
+        from llm.base import STOP_MAX_TOKENS
+        truncated = ToolResult(stop_reason=STOP_MAX_TOKENS, model="m")
+        replies = [truncated, self.reply("ShortExplanation"), self.reply("WorkedExample"), self.reply("MasteryCheck")]
+        lesson, prompts = self.run_generation(self.TWO, replies, hours=2)
+        self.assertEqual(len(prompts), 4)
+        self.assertIn("часть 1 из 3", prompts[1])
+        self.assertEqual([block["component"] for block in lesson], ["ShortExplanation", "WorkedExample", "MasteryCheck"])
+
+    def test_failed_part_names_the_part_and_saves_nothing(self):
+        from llm import LLMError
+        replies = [self.reply("ShortExplanation"), self.reply("WorkedExample"), LLMError("сеть", provider="p", model="m")]
+        with self.assertRaises(RuntimeError) as failed:
+            self.run_generation(self.THREE, replies)
+        self.assertIn("часть 3 из 4", str(failed.exception))
+        self.assertIn("Применять свойства степеней", str(failed.exception))
+
+    def test_assessment_is_never_split(self):
+        from ai.generator import should_generate_in_parts
+        self.assertFalse(should_generate_in_parts({"volume": "extended", "lesson_shape": "assessment_only"}, 5))
+        self.assertTrue(should_generate_in_parts({"volume": "standard", "lesson_shape": "concept_intro"}, 3))
+        self.assertFalse(should_generate_in_parts({"volume": "standard", "lesson_shape": "concept_intro"}, 2))
+
+
+    def test_stray_mastery_check_in_a_middle_part_is_dropped(self):
+        replies = [
+            self.reply("ShortExplanation", "MasteryCheck"),
+            self.reply("WorkedExample"),
+            self.reply("GuidedPractice"),
+            self.reply("MasteryCheck", "Reflection"),
+        ]
+        lesson, prompts = self.run_generation(self.THREE, replies)
+        self.assertEqual([block["component"] for block in lesson].count("MasteryCheck"), 1)
+        self.assertEqual(lesson[-2]["component"], "MasteryCheck")
+        from objectives import decompose_objectives
+        for objective in decompose_objectives(self.THREE):
+            self.assertIn(objective["id"], prompts[-1].split("MasteryCheck содержит")[1])
+
+    def test_timeout_of_single_call_falls_back_to_parts(self):
+        from llm import LLMError
+
+        class ReadTimeout(Exception):
+            pass
+
+        timeout = LLMError("Запрос не прошёл", provider="openrouter", model="m")
+        timeout.__cause__ = ReadTimeout("timed out")
+        replies = [timeout, self.reply("ShortExplanation"), self.reply("WorkedExample"), self.reply("MasteryCheck")]
+        lesson, prompts = self.run_generation(self.TWO, replies, hours=2)
+        self.assertEqual(len(prompts), 4)
+
+    def test_other_errors_of_single_call_are_not_retried_as_parts(self):
+        from llm import LLMError
+        with self.assertRaises(LLMError):
+            self.run_generation(self.TWO, [LLMError("Шлюз ответил 401", provider="p", model="m")], hours=2)
+
+    def test_truncated_one_part_lesson_reports_truncation(self):
+        from ai.generator import LessonTruncated
+        from llm import ToolResult
+        from llm.base import STOP_MAX_TOKENS
+        with self.assertRaises(LessonTruncated):
+            self.run_generation("Вычислять степени.", [ToolResult(stop_reason=STOP_MAX_TOKENS, model="m")], hours=2)
+
+    def test_truncated_part_is_named(self):
+        from llm import ToolResult
+        from llm.base import STOP_MAX_TOKENS
+        replies = [self.reply("ShortExplanation"), ToolResult(stop_reason=STOP_MAX_TOKENS, model="m")]
+        with self.assertRaises(RuntimeError) as failed:
+            self.run_generation(self.THREE, replies)
+        self.assertIn("часть 2 из 4", str(failed.exception))
+        self.assertIn("не поместился", str(failed.exception))
+
+    def test_text_parsed_first_part_has_no_intro_and_does_not_crash(self):
+        from llm import ToolResult
+        text_reply = ToolResult(text=json.dumps([{"component": "ShortExplanation", "content": {}}]), model="m")
+        replies = [text_reply, self.reply("WorkedExample"), self.reply("GuidedPractice"), self.reply("MasteryCheck")]
+        lesson, _ = self.run_generation(self.THREE, replies)
+        self.assertIsNone(lesson.intro)
+        self.assertEqual(len(lesson), 4)
+
+    def test_summary_survives_broken_slides_and_keeps_examples(self):
+        from ai.generator import summarize_blocks
+        blocks = [
+            {"component": "Presentation", "content": {"slides": 5}},
+            {"component": "Presentation", "content": {"slides": [{"heading": "Слайд " + "х" * 80} for _ in range(40)]}},
+            {"component": "WorkedExample", "content": {"problem": "Вычисли $3^2$"}},
+        ]
+        summary = summarize_blocks(blocks)
+        self.assertIn("Разобранные примеры и задачи: Вычисли $3^2$", summary)
+        self.assertLessEqual(len(summary), 1500 + 3)
+
+
+class RetryLoopTests(unittest.TestCase):
+    """Цикл запроса перенесён в _BlocksRequest — поведение прежнее."""
+
+    def request(self, replies):
+        from ai.generator import _BlocksRequest
+        prompts = []
+
+        async def fake_call_tool(task, **kwargs):
+            prompts.append(kwargs["user"])
+            return replies[len(prompts) - 1]
+
+        return _BlocksRequest(call_tool=fake_call_tool, task="lesson", route=None), prompts
+
+    def test_parse_failure_then_success(self):
+        import asyncio
+        from llm import ToolResult
+        from llm.base import STOP_TOOL
+        request, prompts = self.request([ToolResult(text="не JSON", model="m"), ToolResult(data={"blocks": [GOOD_BLOCK]}, stop_reason=STOP_TOOL)])
+        self.assertEqual(asyncio.run(request.blocks("урок")), [GOOD_BLOCK])
+        self.assertIn("Предыдущий ответ не удалось разобрать", prompts[1])
+
+    def test_two_parse_failures_raise(self):
+        import asyncio
+        from llm import ToolResult
+        request, _ = self.request([ToolResult(text="нет", model="m"), ToolResult(text="опять нет", model="m")])
+        with self.assertRaises(RuntimeError) as failed:
+            asyncio.run(request.blocks("урок"))
+        self.assertIn("дважды", str(failed.exception))
+
+    def test_truncation_on_retry_raises_at_once(self):
+        import asyncio
+        from ai.generator import LessonTruncated
+        from llm import ToolResult
+        from llm.base import STOP_MAX_TOKENS
+        request, prompts = self.request([ToolResult(text="нет", model="m"), ToolResult(stop_reason=STOP_MAX_TOKENS, model="m")])
+        with self.assertRaises(LessonTruncated):
+            asyncio.run(request.blocks("урок"))
+        self.assertEqual(len(prompts), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 import tempfile
 from pathlib import Path
 
-from ai.planner import build_topic_contract
+from ai.planner import build_topic_contract, split_component_plan
 from objectives import ALLOWED_COMPONENTS, decompose_objectives
 
 if TYPE_CHECKING:
@@ -397,6 +397,208 @@ def _parse_blocks(raw: str) -> list[dict[str, Any]]:
     return value
 
 
+# Большой урок в один ответ модели не помещается (MAX_TOKENS) и упирается
+# в тайм-аут поставщика, поэтому его генерируем по частям — по целям урока.
+PARTS_VOLUMES = {"extended", "unit"}
+PARTS_MIN_OBJECTIVES = 3
+PARTS_MIN_STEPS = 12
+# У контрольной план короткий, а в проекте все шаги общие — делить незачем.
+SINGLE_CALL_SHAPES = {"assessment_only", "project_or_practical"}
+PART_SUMMARY_LIMIT = 1500
+# Компоненты, которые модель должна ставить только в свою часть урока.
+FINAL_PART_COMPONENTS = {"MasteryCheck", "Reflection"}
+
+
+class LessonTruncated(RuntimeError):
+    """Ответ модели оборвался на лимите токенов."""
+
+
+def should_generate_in_parts(topic_contract: dict[str, Any], objective_count: int, step_count: int = 0) -> bool:
+    if str(topic_contract.get("lesson_shape") or "") in SINGLE_CALL_SHAPES:
+        return False
+    return (
+        str(topic_contract.get("volume") or "") in PARTS_VOLUMES
+        or objective_count >= PARTS_MIN_OBJECTIVES
+        or step_count >= PARTS_MIN_STEPS
+    )
+
+
+def _is_timeout(exc: BaseException) -> bool:
+    """Тайм-аут поставщика (httpx или SDK) где-то в цепочке причин ошибки."""
+    current: BaseException | None = exc
+    while current is not None:
+        if "timeout" in type(current).__name__.lower():
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def summarize_blocks(blocks: list[dict[str, Any]], limit: int = PART_SUMMARY_LIMIT) -> str:
+    """Что уже есть в уроке: термины, слайды, разобранные примеры — для связности частей."""
+    terms: list[str] = []
+    slides: list[str] = []
+    examples: list[str] = []
+    used: dict[str, int] = {}
+    for block in blocks:
+        content = block.get("content") if isinstance(block.get("content"), dict) else {}
+        component = block.get("component")
+        used[str(component)] = used.get(str(component), 0) + 1
+        if component == "KeyConcept" and content.get("term"):
+            terms.append(str(content["term"]))
+        elif component == "ShortExplanation" and content.get("title"):
+            terms.append(str(content["title"]))
+        elif component == "Presentation" and isinstance(content.get("slides"), list):
+            slides.extend(str(slide.get("heading")) for slide in content["slides"] if isinstance(slide, dict) and slide.get("heading"))
+        elif component in {"WorkedExample", "GuidedPractice", "IndependentProblem"}:
+            text = content.get("problem") or content.get("question")
+            if text:
+                examples.append(str(text)[:160])
+    sections = (
+        ("Разобранные примеры и задачи", examples),
+        ("Введённые термины", terms),
+        ("Слайды", slides),
+        ("Уже использованные компоненты", [f"{name} ×{count}" for name, count in used.items()]),
+    )
+    # У каждой строки свой бюджет: длинный список слайдов не вытесняет примеры.
+    share = limit // len(sections)
+    return "\n".join(f"{label}: {'; '.join(items)}"[:share] for label, items in sections if items)
+
+
+def _part_prompt(
+    user_prompt: str, index: int, total: int, steps: list[dict[str, Any]], summary: str, objective_ids: list[str],
+) -> str:
+    first, last = index == 0, index == total - 1
+    rules = [
+        f"ГЕНЕРАЦИЯ ПО ЧАСТЯМ. Сейчас ты генерируешь только часть {index + 1} из {total} этого урока; "
+        "части склеиваются по порядку в один урок. Правила этой части важнее общих требований "
+        "к полному уроку выше. Если lesson_shape=unit_part, весь этот урок — первая часть темы, "
+        "а «часть» здесь — только порция генерации.",
+        f"Шаги этой части (по одному блоку на шаг, ровно эти шаги, по порядку): {json.dumps(steps, ensure_ascii=False)}",
+        "Остальные шаги плана уже созданы или будут созданы в других частях — не повторяй их.",
+    ]
+    if not first:
+        rules.append("Не добавляй титул intro. Разминку добавляй, только если шаг diagnose есть среди шагов этой части.")
+    if not last:
+        rules.append(
+            "Не добавляй MasteryCheck и Reflection и не делай блоков с evidence_stage \"assessment\": "
+            "итоговая проверка каждой цели — вопросом MasteryCheck в последней части."
+        )
+    else:
+        rules.append(f"MasteryCheck содержит отдельный итоговый вопрос по каждой цели урока: {', '.join(objective_ids)}.")
+    if summary:
+        rules.append(
+            "Уже есть в уроке (не повторяй эти примеры, опирайся на введённые термины, продолжай ту же историю):\n"
+            + summary
+        )
+    return user_prompt + "\n\n" + "\n".join(rules)
+
+
+def _part_label(steps: list[dict[str, Any]], objectives: list[dict[str, Any]]) -> str:
+    ids = {objective_id for step in steps for objective_id in step.get("objective_ids") or []}
+    if len(ids) == 1:
+        objective_id = next(iter(ids))
+        text = next((item.get("text") for item in objectives if item.get("id") == objective_id), objective_id)
+        return f"цель: {text}"
+    return "итоговая проверка и рефлексия"
+
+
+class _BlocksRequest:
+    """Один запрос урока (или его части) к модели с повтором при неразборчивом ответе."""
+
+    def __init__(self, *, call_tool: Any, task: str, route: "Route | None") -> None:
+        self.call_tool = call_tool
+        self.task = task
+        self.route = route
+
+    async def blocks(self, user_prompt: str) -> list[dict[str, Any]]:
+        last_error: Exception | None = None
+        retry_prompt = user_prompt
+        result = None
+        for attempt in range(2):
+            result = await self.call_tool(
+                self.task,
+                system=SYSTEM_PROMPT,
+                user=retry_prompt,
+                tool=LESSON_TOOL,
+                max_tokens=MAX_TOKENS,
+                route=self.route,
+            )
+
+            # Обрыв по лимиту — не «некорректный JSON». Повтор тем же запросом
+            # ничего не даст, поэтому говорим прямо, что урок не поместился.
+            if result.truncated:
+                raise LessonTruncated(
+                    f"Урок не поместился в ответ модели {result.model} "
+                    f"({MAX_TOKENS} токенов). Тема слишком объёмная: уменьшите число "
+                    "целей обучения у темы или выберите модель с большим лимитом."
+                )
+
+            try:
+                if result.ok:
+                    blocks = GeneratedBlocks(_validate_blocks(result.data.get("blocks")))
+                    blocks.intro = clean_intro(result.data.get("intro"))
+                    return blocks
+                # Инструмент не заполнен — пробуем разобрать текст, как раньше.
+                return _validate_blocks(_parse_blocks(result.text))
+            except (json.JSONDecodeError, ValueError) as exc:
+                last_error = exc
+                if attempt == 0:
+                    retry_prompt = (
+                        user_prompt
+                        + "\nПредыдущий ответ не удалось разобрать. "
+                        "Передай урок вызовом инструмента submit_lesson."
+                    )
+
+        # Второй заход тоже не дал структуры — сохраняем сырой ответ, чтобы
+        # не гадать вслепую, и называем поставщика и модель.
+        dump = Path(tempfile.gettempdir()) / "lesson-raw.txt"
+        try:
+            dump.write_text(
+                f"provider={result.provider} model={result.model} "
+                f"stop={result.stop_reason}\n\n{result.text}",
+                encoding="utf-8",
+            )
+            where = f" Сырой ответ: {dump}"
+        except OSError:
+            where = ""
+        raise RuntimeError(
+            f"Модель {result.model} дважды вернула урок в неожиданном виде: "
+            f"{last_error}.{where}"
+        ) from last_error
+
+
+async def _generate_in_parts(
+    request: _BlocksRequest,
+    user_prompt: str,
+    parts: list[list[dict[str, Any]]],
+    objectives: list[dict[str, Any]],
+) -> GeneratedBlocks:
+    """Урок по частям, последовательно: каждая часть знает, что уже создано.
+
+    Если часть не удалась, падает весь урок — половину урока не сохраняем.
+    """
+    objective_ids = [str(item.get("id")) for item in objectives]
+    lesson = GeneratedBlocks()
+    for index, steps in enumerate(parts):
+        try:
+            prompt = _part_prompt(user_prompt, index, len(parts), steps, summarize_blocks(lesson), objective_ids)
+            blocks = await request.blocks(prompt)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Не удалось сгенерировать часть {index + 1} из {len(parts)} "
+                f"({_part_label(steps, objectives)}): {exc}"
+            ) from exc
+        if index == 0:
+            lesson.intro = getattr(blocks, "intro", None)
+        # Страховка от ослушания: итоговая проверка и рефлексия — только в своей части.
+        allowed = {name for step in steps for name in step.get("allowed_components") or []}
+        lesson.extend(
+            block for block in blocks
+            if block.get("component") not in FINAL_PART_COMPONENTS or block.get("component") in allowed
+        )
+    return lesson
+
+
 async def generate_lesson(
     topic_name: str,
     subject_name: str,
@@ -480,58 +682,15 @@ GeneratedMedia является только опциональным усиле
 Передай урок вызовом инструмента submit_lesson.
 """.strip()
 
-    last_error: Exception | None = None
-    retry_prompt = user_prompt
-    result = None
-    for attempt in range(2):
-        result = await call_tool(
-            TASK_LESSON,
-            system=SYSTEM_PROMPT,
-            user=retry_prompt,
-            tool=LESSON_TOOL,
-            max_tokens=MAX_TOKENS,
-            route=model_route,
-        )
-
-        # Обрыв по лимиту — не «некорректный JSON». Повтор тем же запросом
-        # ничего не даст, поэтому говорим прямо, что урок не поместился.
-        if result.truncated:
-            raise RuntimeError(
-                f"Урок не поместился в ответ модели {result.model} "
-                f"({MAX_TOKENS} токенов). Тема слишком объёмная: уменьшите число "
-                "целей обучения у темы, выберите модель с большим лимитом или "
-                "поднимите MAX_TOKENS в ai/generator.py (не выше 21333)."
-            )
-
-        try:
-            if result.ok:
-                blocks = GeneratedBlocks(_validate_blocks(result.data.get("blocks")))
-                blocks.intro = clean_intro(result.data.get("intro"))
-                return blocks
-            # Инструмент не заполнен — пробуем разобрать текст, как раньше.
-            return _validate_blocks(_parse_blocks(result.text))
-        except (json.JSONDecodeError, ValueError) as exc:
-            last_error = exc
-            if attempt == 0:
-                retry_prompt = (
-                    user_prompt
-                    + "\nПредыдущий ответ не удалось разобрать. "
-                    "Передай урок вызовом инструмента submit_lesson."
-                )
-
-    # Второй заход тоже не дал структуры — сохраняем сырой ответ, чтобы
-    # не гадать вслепую, и называем поставщика и модель.
-    dump = Path(tempfile.gettempdir()) / "lesson-raw.txt"
+    request = _BlocksRequest(call_tool=call_tool, task=TASK_LESSON, route=model_route)
+    parts = split_component_plan(component_plan)
+    if len(parts) > 1 and should_generate_in_parts(topic_contract, len(objective_catalog), len(component_plan)):
+        return await _generate_in_parts(request, user_prompt, parts, objective_catalog)
     try:
-        dump.write_text(
-            f"provider={result.provider} model={result.model} "
-            f"stop={result.stop_reason}\n\n{result.text}",
-            encoding="utf-8",
-        )
-        where = f" Сырой ответ: {dump}"
-    except OSError:
-        where = ""
-    raise RuntimeError(
-        f"Модель {result.model} дважды вернула урок в неожиданном виде: "
-        f"{last_error}.{where}"
-    ) from last_error
+        return await request.blocks(user_prompt)
+    except Exception as exc:
+        # Одним ответом урок не поместился или не успел за тайм-аут поставщика —
+        # собираем его по частям: каждая короче и укладывается в лимиты.
+        if len(parts) > 1 and (isinstance(exc, LessonTruncated) or _is_timeout(exc)):
+            return await _generate_in_parts(request, user_prompt, parts, objective_catalog)
+        raise

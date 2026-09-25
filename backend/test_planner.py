@@ -106,6 +106,25 @@ class SplitPlanTests(unittest.TestCase):
         last = split_component_plan(self.plan("Вычислять степени. Сравнивать степени. Применять свойства степеней."))[-1]
         self.assertEqual([step["role"] for step in last][-2:], ["assess", "reflect"])
 
+    def test_short_or_all_common_plans_stay_whole(self):
+        three = "Вычислять степени. Сравнивать степени. Применять свойства степеней."
+        for lesson_type in ("assessment", "project"):
+            plan = build_topic_contract(
+                topic_name="Степени", subject_name="Алгебра", learning_objectives=three,
+                skills=[], resources=None, grade=7, hours=2, lesson_type=lesson_type,
+            )["component_plan"]
+            parts = split_component_plan(plan)
+            self.assertEqual([step for part in parts for step in part], plan, lesson_type)
+        self.assertEqual(split_component_plan(self.plan(None)), [self.plan(None)])
+
+    def test_common_step_in_the_middle_keeps_plan_whole(self):
+        plan = [
+            {"role": "explain", "objective_ids": ["a"]},
+            {"role": "compare", "objective_ids": ["a", "b"]},
+            {"role": "explain", "objective_ids": ["b"]},
+        ]
+        self.assertEqual(split_component_plan(plan), [plan])
+
     def test_single_objective_is_one_part(self):
         plan = self.plan("Вычислять степени.")
         self.assertEqual(split_component_plan(plan), [plan])

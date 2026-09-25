@@ -250,6 +250,10 @@ def split_component_plan(component_plan: list[dict[str, Any]]) -> list[list[dict
     parts = list(by_objective.values())
     if common:
         parts.append(common)
+    # Части склеиваются по порядку. Если общий шаг стоит посреди плана, такая
+    # раскладка переставила бы шаги — тогда не делим.
+    if [step for part in parts for step in part] != list(component_plan):
+        return [list(component_plan)]
     return parts
 
 
