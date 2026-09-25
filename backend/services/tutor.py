@@ -79,12 +79,13 @@ def tutor_settings(env: dict[str, str] | None = None) -> TutorSettings:
 class TutorStore(Protocol):
     async def recent_turns(self, student_id: int, topic_id: int, block_index: int, question_index: int | None, version_id: int | None) -> list[TutorTurn]: ...
     async def llm_calls_since(self, student_id: int, since: datetime) -> int: ...
-    async def topic_turns(self, student_id: int, topic_id: int) -> list[TutorTurn]: ...
+    async def topic_turns(self, student_id: int, topic_id: int, version_id: int | None) -> list[TutorTurn]: ...
     async def release(self) -> None: ...
     async def add(self, turn: TutorTurn) -> TutorTurn: ...
 
 
 UNAVAILABLE = "Помощник временно недоступен"
+SESSION_TURNS = 300
 
 
 def _db_guarded(method: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
@@ -126,11 +127,16 @@ class SqlTutorStore:
         ) or 0)
 
     @_db_guarded
-    async def topic_turns(self, student_id: int, topic_id: int) -> list[TutorTurn]:
-        return list((await self.db.scalars(
-            select(TutorTurn).where(TutorTurn.student_id == student_id, TutorTurn.topic_id == topic_id)
-            .order_by(TutorTurn.id.asc()).limit(300)
-        )).all())
+    async def topic_turns(self, student_id: int, topic_id: int, version_id: int | None) -> list[TutorTurn]:
+        # Только текущая версия урока: после переиздания индексы блоков могли сдвинуться.
+        query = select(TutorTurn).where(
+            TutorTurn.student_id == student_id, TutorTurn.topic_id == topic_id,
+            TutorTurn.lesson_version_id.is_(None) if version_id is None else TutorTurn.lesson_version_id == version_id,
+        )
+        # Последние SESSION_TURNS реплик, по порядку: иначе после долгого урока новые не вернутся.
+        return list(reversed((await self.db.scalars(
+            query.order_by(TutorTurn.id.desc()).limit(SESSION_TURNS)
+        )).all()))
 
     @_db_guarded
     async def release(self) -> None:
@@ -418,10 +424,10 @@ async def get_tutor_session(
         return {"enabled": False, "turns": []}
     if manifest_loader is None:
         from services.lessons import get_student_lesson_manifest as manifest_loader
-    await _load_lesson(manifest_loader, student_id, topic_id, db)
+    lesson = await _load_lesson(manifest_loader, student_id, topic_id, db)
     store = store or SqlTutorStore(db)
     try:
-        turns = await store.topic_turns(student_id, topic_id)
+        turns = await store.topic_turns(student_id, topic_id, lesson.get("active_version_id"))
     except TutorServiceError:
         return {"enabled": False, "turns": []}
     return {

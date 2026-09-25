@@ -21,6 +21,8 @@ import { lessonHeaderText, lessonObjectives } from '@/features/lessons/lessonMet
 import { StudentLessonPageView } from '@/features/lessons/studentLessonPageView';
 import { useNextLessonManifestPrefetch } from '@/features/lessons/lessonPrefetch';
 import { buildLessonIntro } from '@/features/lessons/lessonIntro';
+import { useLessonTutor } from '@/features/tutor/useLessonTutor';
+import { TutorBridgeProvider } from '@/features/tutor/TutorBridgeContext';
 export function RegularLesson() {
   const { subjectId, topicId: topicIdParam } = useParams();
   const topicId = Number(topicIdParam);
@@ -165,6 +167,18 @@ export function RegularLesson() {
     setCurrentStep(index);
     if (!isCompleted) saveState(index, maxOpenedStep, 'in_progress', answers, attemptsByStep);
   };
+  const tutor = useLessonTutor({
+    topicId,
+    studentId: user?.id,
+    enabled: user?.role === 'student',
+    answers,
+    retryKeys,
+    activeBlocks,
+    activeOriginalIndices,
+    currentStep,
+    maxOpenedStep,
+    onNavigate: navigateToStep,
+  });
   const restartLesson = async () => {
     if (!user?.id) return;
     initializedForId.current = null;
@@ -181,49 +195,52 @@ export function RegularLesson() {
     if (!isLoading && currentStep < activeBlocks.length) contentRef.current?.focus({ preventScroll: true });
   }, [currentStep, isLoading, activeBlocks.length]);
   return (
-    <StudentLessonPageView
-      learningContext={lesson && user ? <LearningContext lesson={lesson} studentId={user.id} subjectId={subjectId ?? ''} /> : null}
-      intro={showIntro ? intro : null}
-      onStartLesson={() => setIntroDismissed(true)}
-      activeBlocks={activeBlocks}
-      activeOriginalIndices={activeOriginalIndices}
-      answers={answers}
-      assessmentBlocksCount={activeBlocks.filter(isAssessmentBlock).length}
-      attemptsByStep={attemptsByStep}
-      contentRef={contentRef}
-      currentStep={currentStep}
-      isCompleted={isCompleted}
-      isDiagnosticRoute={hasObjectiveRoute && !diagnosticComplete}
-      isEmpty={!lesson || blocks.length === 0}
-      isLoading={isLoading}
-      loadError={error}
-      learningObjective={learningObjective}
-      lessonDocument={lesson?.lesson_document} lessonVersionId={lesson?.active_version_id}
-      maxOpenedStep={maxOpenedStep}
-      objectiveMastery={objectiveMastery}
-      objectives={objectives}
-      prefersReducedMotion={prefersReducedMotion}
-      result={result}
-      retryKeys={retryKeys}
-      saveError={saveError}
-      subjectId={subjectId}
-      topicTitle={topicTitle}
-      warpGates={progress?.warp_gates}
-      onAnswer={handleBlockAnswer}
-      onNavigate={navigateToStep}
-      onNext={handleNextStep}
-      onOpenSummary={() => setCurrentStep(activeBlocks.length)}
-      onReviewAnswers={() => setCurrentStep(activeBlocks.length - 1)}
-      onRestart={restartLesson}
-      isRestarting={restartProgress.isPending}
-      restartError={restartProgress.error as Error | null}
-      onSaveIntermediate={(nextAnswers, nextAttempts) => saveState(currentStep, maxOpenedStep, 'in_progress', nextAnswers, nextAttempts)}
-      onSetAnswers={setAnswers}
-      onSetRetryKeys={setRetryKeys}
-      avatarEnabled={avatarEnabled}
-      audioEnabled={audioEnabled}
-      onAvatarEnabledChange={setAvatarEnabled}
-      onAudioEnabledChange={setAudioEnabled}
-    />
+    <TutorBridgeProvider value={tutor.bridge}>
+      <StudentLessonPageView
+        tutor={tutor.available ? tutor : undefined}
+        learningContext={lesson && user ? <LearningContext lesson={lesson} studentId={user.id} subjectId={subjectId ?? ''} /> : null}
+        intro={showIntro ? intro : null}
+        onStartLesson={() => setIntroDismissed(true)}
+        activeBlocks={activeBlocks}
+        activeOriginalIndices={activeOriginalIndices}
+        answers={answers}
+        assessmentBlocksCount={activeBlocks.filter(isAssessmentBlock).length}
+        attemptsByStep={attemptsByStep}
+        contentRef={contentRef}
+        currentStep={currentStep}
+        isCompleted={isCompleted}
+        isDiagnosticRoute={hasObjectiveRoute && !diagnosticComplete}
+        isEmpty={!lesson || blocks.length === 0}
+        isLoading={isLoading}
+        loadError={error}
+        learningObjective={learningObjective}
+        lessonDocument={lesson?.lesson_document} lessonVersionId={lesson?.active_version_id}
+        maxOpenedStep={maxOpenedStep}
+        objectiveMastery={objectiveMastery}
+        objectives={objectives}
+        prefersReducedMotion={prefersReducedMotion}
+        result={result}
+        retryKeys={retryKeys}
+        saveError={saveError}
+        subjectId={subjectId}
+        topicTitle={topicTitle}
+        warpGates={progress?.warp_gates}
+        onAnswer={handleBlockAnswer}
+        onNavigate={navigateToStep}
+        onNext={handleNextStep}
+        onOpenSummary={() => setCurrentStep(activeBlocks.length)}
+        onReviewAnswers={() => setCurrentStep(activeBlocks.length - 1)}
+        onRestart={restartLesson}
+        isRestarting={restartProgress.isPending}
+        restartError={restartProgress.error as Error | null}
+        onSaveIntermediate={(nextAnswers, nextAttempts) => saveState(currentStep, maxOpenedStep, 'in_progress', nextAnswers, nextAttempts)}
+        onSetAnswers={setAnswers}
+        onSetRetryKeys={setRetryKeys}
+        avatarEnabled={avatarEnabled}
+        audioEnabled={audioEnabled}
+        onAvatarEnabledChange={setAvatarEnabled}
+        onAudioEnabledChange={setAudioEnabled}
+      />
+    </TutorBridgeProvider>
   );
 }

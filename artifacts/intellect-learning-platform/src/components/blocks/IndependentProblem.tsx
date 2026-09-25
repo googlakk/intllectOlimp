@@ -34,7 +34,7 @@ export default function IndependentProblem({ question, type, options, correct_an
     const numeric = type !== 'multiple_choice' && (type === 'numeric' || type === 'number' || Boolean(answer_unit));
     const result = checkAnswer(value, { correct: correct_answer, numeric, unit: answer_unit, acceptedUnits: accepted_units, tolerance });
     setStatus(result);
-    onAttempt?.({ value: value.trim(), outcome: result });
+    onAttempt?.({ value: value.trim(), outcome: result, locked: result === 'correct' || (result === 'incorrect' && attempts + 1 >= 3) });
     // Верное число с неверной единицей не тратит попытку: просим проверить единицы.
     if (result === 'wrong_unit') return;
     const isCorrect = result === 'correct';

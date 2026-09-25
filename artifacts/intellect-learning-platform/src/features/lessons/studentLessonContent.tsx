@@ -177,7 +177,7 @@ export function ActiveLessonContent({
             />
           </FitToViewport>
           {cue && (
-            <div className="fixed bottom-[clamp(8rem,28vh,11rem)] right-2 z-[70] flex w-[min(300px,calc(100vw-16px))] justify-end lg:hidden">
+            <div className="pointer-events-none fixed bottom-[clamp(8rem,28vh,11rem)] right-2 z-[70] flex w-[min(300px,calc(100vw-16px))] justify-end lg:hidden">
               <AvatarCompanion
                 cue={cue}
                 previewImageUrl={lessonDocument?.avatar.preview_image_url}

@@ -46,8 +46,9 @@ class MemoryStore:
     async def llm_calls_since(self, student_id, since):
         return sum(1 for t in self.turns if t.student_id == student_id and t.llm_called)
 
-    async def topic_turns(self, student_id, topic_id):
-        return [t for t in self.turns if (t.student_id, t.topic_id) == (student_id, topic_id)]
+    async def topic_turns(self, student_id, topic_id, version_id):
+        return [t for t in self.turns if (t.student_id, t.topic_id) == (student_id, topic_id)
+                and t.lesson_version_id == version_id]
 
     async def add(self, turn):
         turn.id = len(self.turns) + 1
@@ -214,6 +215,14 @@ class TutorServiceTests(unittest.TestCase):
         ))
         self.assertTrue(session["enabled"])
         self.assertEqual([turn["reply"] for turn in session["turns"]], ["Что дано?"])
+
+        # После переиздания урока старый диалог не показывается: индексы блоков могли сдвинуться.
+        h.manifest["lesson"]["active_version_id"] = 12
+        republished = asyncio.run(get_tutor_session(
+            student_id=7, organization_id=1, topic_id=3, db=None, store=h.store,
+            manifest_loader=h.manifest_loader, settings=ON,
+        ))
+        self.assertEqual(republished["turns"], [])
 
     def test_final_check_question_pasted_into_another_task_is_protected(self):
         h = Harness([reply("Давление равно 5 Па"), reply("Ответ 5")])

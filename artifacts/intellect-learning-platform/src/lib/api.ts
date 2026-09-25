@@ -11,6 +11,7 @@ export * from './api/curriculum';
 export * from './api/dashboard';
 export * from './api/ktp';
 export * from './api/lessons';
+export * from './api/tutor';
 export * from './api/media';
 export * from './api/progress';
 export type * from './api/types';

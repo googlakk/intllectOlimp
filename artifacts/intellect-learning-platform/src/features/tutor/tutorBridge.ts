@@ -1,7 +1,13 @@
 import type { AnswerCheck } from '@/features/interactiveEngines/scoring';
 
 /** Попытка ученика в блоке: само значение, а не только «верно/неверно». */
-export type BlockAttempt = { value: string; outcome: AnswerCheck; hintsSeen?: number };
+export type BlockAttempt = {
+  value: string;
+  outcome: AnswerCheck;
+  hintsSeen?: number;
+  /** Блок закрыт после этой попытки (попытки кончились) — помощь по бездействию уже не нужна. */
+  locked?: boolean;
+};
 
 /** Попытка с местом в уроке: blockIndex — исходный индекс блока, stepIndex — позиция в маршруте. */
 export type TutorAttempt = BlockAttempt & { blockIndex: number; stepIndex: number };
