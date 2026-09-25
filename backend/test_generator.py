@@ -13,7 +13,7 @@ import json
 import unittest
 
 from ai.generator import (
-    LESSON_TOOL, MAX_TOKENS, _blocks_from_tool, _parse_blocks, _validate_blocks,
+    LESSON_TOOL, MAX_TOKENS, GeneratedBlocks, _blocks_from_tool, _parse_blocks, _validate_blocks, clean_intro,
 )
 from objectives import ALLOWED_COMPONENTS
 
@@ -106,3 +106,25 @@ class TextFallbackTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class IntroTests(unittest.TestCase):
+    def test_tool_accepts_optional_intro(self):
+        schema = LESSON_TOOL["input_schema"]
+        self.assertIn("intro", schema["properties"])
+        self.assertEqual(schema["required"], ["blocks"])
+
+    def test_clean_intro_keeps_short_strings(self):
+        intro = clean_intro({"title": " Большая идея. ", "accent": "Квадратный сад.", "hook": "Как превратить площадь в сторону?", "cta": 5})
+        self.assertEqual(intro, {"title": "Большая идея.", "accent": "Квадратный сад.", "hook": "Как превратить площадь в сторону?"})
+
+    def test_clean_intro_drops_broken_or_too_long(self):
+        self.assertIsNone(clean_intro(None))
+        self.assertIsNone(clean_intro({"title": "Без крючка"}))
+        self.assertIsNone(clean_intro({"title": "Т", "hook": "х" * 281}))
+
+    def test_generated_blocks_still_a_list(self):
+        blocks = GeneratedBlocks([GOOD_BLOCK])
+        blocks.intro = {"title": "Т", "hook": "Х"}
+        self.assertEqual(blocks, [GOOD_BLOCK])
+        self.assertEqual(blocks.intro["title"], "Т")

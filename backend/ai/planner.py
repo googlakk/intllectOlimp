@@ -198,8 +198,11 @@ def build_component_plan(shape: LessonShape, objectives: list[dict[str, Any]], f
         ])
         return plan
 
-    for objective_id in ids:
-        plan.append(_step("diagnose", "diagnostic", [objective_id], ["RetrievalCheck"], "Вспомнить предварительное знание"))
+    # Урок открывается титулом, дальше одна лёгкая разминка на знакомое из
+    # жизни или прошлых тем. Отдельную проверку на каждую цель не делаем:
+    # она превращала начало урока в анкету и маршрут всё равно не меняла.
+    if ids:
+        plan.append(_step("diagnose", "diagnostic", [ids[0]], ["RetrievalCheck"], "Разминка: вспомнить знакомое перед новой темой"))
 
     # A concise slide sequence is the shared visual spine. Simulations and
     # generated media may clarify it, but never become the only explanation.

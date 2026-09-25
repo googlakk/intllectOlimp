@@ -1,3 +1,4 @@
+import copy
 import unittest
 from copy import deepcopy
 import hashlib
@@ -747,6 +748,30 @@ def complete_single_objective_blocks(raw_objective):
     ]
 
 
+class SingleWarmUpTests(unittest.TestCase):
+    def test_objective_without_its_own_warm_up_has_no_gap(self):
+        raw = "Складывать дроби. Вычитать дроби."
+        first, second = decompose_objectives(raw)[:2]
+        blocks = complete_single_objective_blocks("Складывать дроби")
+        for block in blocks:
+            content = block["content"]
+            if "objective_ids" in content:
+                content["objective_ids"] = [first["id"]]
+        # Вторая цель: объяснение, практика и итог, но без собственной разминки.
+        for block in copy.deepcopy(blocks[1:4]):
+            block["content"]["objective_ids"] = [second["id"]]
+            for question in block["content"].get("questions", []):
+                question["objective_ids"] = [second["id"]]
+                question["dimension"] = second["id"]
+            blocks.insert(-1, block)
+        for question in blocks[3]["content"]["questions"]:
+            question["objective_ids"] = [first["id"]]
+            question["dimension"] = first["id"]
+        report = quality_report(blocks, raw)["quality_report"]
+        self.assertEqual(report["gaps"], [])
+        self.assertTrue(report["publishable"])
+
+
 class LessonGenerateServiceTests(unittest.IsolatedAsyncioTestCase):
     def _context(self, lesson=None):
         teacher = Teacher(id=3, name="Генератор")
@@ -809,6 +834,27 @@ class LessonGenerateServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(lesson.lesson_metadata["block_budget"]["min"], 5)
         self.assertTrue(lesson.lesson_metadata["component_plan"])
         self.assertIn("quality_report", lesson.lesson_metadata)
+
+    async def test_generate_saves_intro_from_generator(self):
+        from ai.generator import GeneratedBlocks
+        teacher, topic, _section, _subject, db = self._context()
+
+        async def fake_generator(**_kwargs):
+            blocks = GeneratedBlocks(complete_single_objective_blocks(topic.learning_objectives))
+            blocks.intro = {"title": "Большая идея.", "hook": "Сколько яблок в корзине?"}
+            return blocks
+
+        lesson = await generate_lesson_draft(topic_id=topic.id, teacher_id=teacher.id, db=db, lesson_generator=fake_generator)
+        self.assertEqual(lesson.lesson_metadata["intro"], {"title": "Большая идея.", "hook": "Сколько яблок в корзине?"})
+
+    async def test_generate_without_intro_keeps_metadata_clean(self):
+        teacher, topic, _section, _subject, db = self._context()
+
+        async def fake_generator(**_kwargs):
+            return complete_single_objective_blocks(topic.learning_objectives)
+
+        lesson = await generate_lesson_draft(topic_id=topic.id, teacher_id=teacher.id, db=db, lesson_generator=fake_generator)
+        self.assertNotIn("intro", lesson.lesson_metadata)
 
     async def test_generate_uses_selected_model_and_records_it(self):
         teacher, topic, _section, _subject, db = self._context()

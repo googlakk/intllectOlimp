@@ -545,7 +545,9 @@ def build_coverage(
         errors.extend(validate_block_answers(block, index))
     gaps = []
     for objective_id, item in coverage.items():
-        required_stages = ("assessment",) if assessment_only else ("diagnostic", "explanation", "practice", "assessment")
+        # Разминка в начале урока одна на весь урок, поэтому для каждой цели
+        # её не требуем; если она есть, она по-прежнему должна идти первой.
+        required_stages = ("assessment",) if assessment_only else ("explanation", "practice", "assessment")
         missing = [stage for stage in required_stages if not item[stage]]
         teaching = item["explanation"] + item["practice"]
         if (

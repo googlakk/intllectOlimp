@@ -873,6 +873,7 @@ async def generate_lesson_draft(
     else:
         blocks = generated
         lesson_document = None
+    intro = getattr(generated, "intro", None)
 
     lesson = await db.scalar(select(GeneratedLesson).where(GeneratedLesson.topic_id == topic.id))
     if lesson is None:
@@ -918,6 +919,8 @@ async def generate_lesson_draft(
         "skills": topic.skills or [],
         "teacher_id": teacher_id,
     }
+    if isinstance(intro, dict) and intro:
+        lesson.lesson_metadata["intro"] = intro
     lesson_document = normalize_lesson_document(
         lesson_document,
         lesson.blocks,

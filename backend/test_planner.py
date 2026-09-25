@@ -70,6 +70,13 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(result["topic_contract"]["module_part_index"], 1)
         self.assertGreaterEqual(result["topic_contract"]["module_total_parts"], 2)
 
+    def test_study_lesson_opens_with_single_warm_up(self):
+        result = plan(hours=2, learning_objectives="Складывать дроби. Вычитать дроби.")
+        warm_up = [step for step in result["component_plan"] if step["evidence_stage"] == "diagnostic"]
+        self.assertEqual(len(warm_up), 1)
+        self.assertEqual(result["component_plan"][0]["evidence_stage"], "diagnostic")
+        self.assertEqual(len(warm_up[0]["objective_ids"]), 1)
+
     def test_lesson_type_overrides_shape(self):
         self.assertEqual(plan(lesson_type="assessment")["topic_contract"]["lesson_shape"], "assessment_only")
         self.assertEqual(plan(lesson_type="project")["topic_contract"]["lesson_shape"], "project_or_practical")

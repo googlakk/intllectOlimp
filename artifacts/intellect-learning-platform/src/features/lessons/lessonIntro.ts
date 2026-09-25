@@ -90,7 +90,7 @@ export function buildLessonIntro(lesson: GeneratedLesson | null | undefined): Le
   const contract = (metadata.topic_contract ?? {}) as Record<string, unknown>;
 
   const subject = text(contract.subject_name) || text(metadata.subject_name);
-  const grade = Number(contract.grade);
+  const grade = Number(contract.grade || metadata.subject_grade);
   const kicker = text(custom.kicker) || [subject, grade > 0 ? `${grade} класс` : ''].filter(Boolean).join(' · ');
   const topicName = text(metadata.topic_name) || 'Урок';
   const objectives = Array.isArray(metadata.objectives)

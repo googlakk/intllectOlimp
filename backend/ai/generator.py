@@ -38,10 +38,41 @@ LESSON_TOOL = {
                     "required": ["component", "content"],
                 },
             },
+            "intro": {
+                "type": "object",
+                "description": "Титульная страница урока: заинтересовать до первого вопроса.",
+                "properties": {
+                    "kicker": {"type": "string"},
+                    "title": {"type": "string"},
+                    "accent": {"type": "string"},
+                    "hook": {"type": "string"},
+                    "cta": {"type": "string"},
+                },
+            },
         },
         "required": ["blocks"],
     },
 }
+
+INTRO_LIMITS = {"kicker": 60, "title": 80, "accent": 60, "hook": 280, "cta": 40}
+
+
+class GeneratedBlocks(list):
+    """Блоки урока; титул (intro) едет рядом, не ломая тех, кто ждёт список."""
+
+    intro: dict[str, str] | None = None
+
+
+def clean_intro(value: Any) -> dict[str, str] | None:
+    """Оставляет только строковые поля титула разумной длины; битое — отбрасывает."""
+    if not isinstance(value, dict):
+        return None
+    intro = {
+        key: text.strip()
+        for key, limit in INTRO_LIMITS.items()
+        if isinstance(text := value.get(key), str) and text.strip() and len(text.strip()) <= limit
+    }
+    return intro if intro.get("title") and intro.get("hook") else None
 
 SUBJECT_FAMILY_PROFILES = {
     "mathematical": {
@@ -369,7 +400,8 @@ async def generate_lesson(
         'Не добавляй объяснения, подсказки, обратную связь до сдачи или Reflection. '
         'Каждый вопрос проверяет ровно одну цель и содержит objective_ids, правильный ответ и объяснение для разбора после сдачи.'
         if lesson_type == "assessment" else
-        'До объяснения дай диагностический RetrievalCheck на каждую цель. '
+        'Урок открывается титулом intro, затем ровно один лёгкий RetrievalCheck-разминка '
+        '(evidence_stage "diagnostic") по первой цели: вопрос о знакомом из жизни или прошлых тем, без новых терминов. '
         'Для каждой цели обязательно дай объяснение, разобранный пример, самостоятельную практику и независимую итоговую проверку. '
         'В повторении и разборе ошибок закрепляй навыки указанных изученных тем, не придумывай новые навыки для названия занятия.'
     )
@@ -399,6 +431,12 @@ async def generate_lesson(
 сгенерируй только первую часть темы и не пытайся вместить весь модуль. Media через
 GeneratedMedia является только опциональным усилением объяснения; урок должен быть
 полноценным и без OpenRouter media. Не заменяй обязательный Presentation картинкой или видео.
+Титул intro (обязательно, короткий, на языке урока):
+- kicker: предмет и класс или образ-подзаголовок, до 60 символов;
+- title: короткая большая идея урока, до 80 символов (не копия названия темы из КТП);
+- accent: образ или метафора урока одной фразой, до 60 символов, например «Квадратный сад.»;
+- hook: жизненная загадка или ситуация, 1–2 предложения, без терминов урока, до 280 символов;
+- cta: глагол на кнопке, до 40 символов, например «Спроектировать сад».
 Передай урок вызовом инструмента submit_lesson.
 """.strip()
 
@@ -427,7 +465,9 @@ GeneratedMedia является только опциональным усиле
 
         try:
             if result.ok:
-                return _validate_blocks(result.data.get("blocks"))
+                blocks = GeneratedBlocks(_validate_blocks(result.data.get("blocks")))
+                blocks.intro = clean_intro(result.data.get("intro"))
+                return blocks
             # Инструмент не заполнен — пробуем разобрать текст, как раньше.
             return _validate_blocks(_parse_blocks(result.text))
         except (json.JSONDecodeError, ValueError) as exc:
