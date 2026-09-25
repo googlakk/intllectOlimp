@@ -387,7 +387,7 @@ type LessonContinueBarProps = {
 /** Кнопка «Продолжить» всегда в одном месте, под шагом, независимо от высоты контента. */
 function LessonContinueBar({ canContinue, isLastStep, isCompleted, isDiagnosticRoute, onNext, onOpenSummary, leading }: LessonContinueBarProps) {
   return (
-    <div className="flex shrink-0 items-center gap-2 border-t border-border/60 pt-3 lg:gap-6">
+    <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border/60 pt-3 lg:gap-6">
       {leading && <div className="min-w-0 flex-1">{leading}</div>}
       <div className={`ml-auto flex justify-end ${leading ? '' : 'pr-20 sm:pr-0'}`}>
         <button
@@ -395,7 +395,10 @@ function LessonContinueBar({ canContinue, isLastStep, isCompleted, isDiagnosticR
           disabled={!canContinue}
           title={canContinue ? undefined : 'Сначала ответьте на задание'}
           onClick={() => (isLastStep && isCompleted ? onOpenSummary() : onNext())}
-          className={`flex items-center justify-center gap-2 rounded-xl bg-primary py-3.5 ${leading ? 'px-5 sm:w-[240px] sm:px-8' : 'w-[240px] px-8'} font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40`}
+          className={`flex items-center justify-center gap-2 py-3.5 ${leading
+            // Рядом с помощником — в стилистике его плашки: тёмная «таблетка».
+            ? 'h-12 rounded-[26px] border border-white/10 bg-neutral-900/95 px-5 text-white shadow-2xl hover:bg-neutral-800 sm:w-[240px] sm:px-8'
+            : 'w-[240px] rounded-xl bg-primary px-8 text-primary-foreground shadow-sm hover:bg-primary/90'} font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40`}
         >
           {isLastStep ? (isDiagnosticRoute ? 'Начать урок' : 'Завершить урок') : 'Продолжить'}
           <ChevronDown className="h-5 w-5 -rotate-90" />

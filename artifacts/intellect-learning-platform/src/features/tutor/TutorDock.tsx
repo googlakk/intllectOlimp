@@ -131,7 +131,7 @@ export function TutorDock({ tutor }: { tutor: LessonTutor }) {
     <div ref={rootRef} className="relative h-12 w-full" aria-live="off">
       <p className="sr-only" aria-live="polite">{announcement}</p>
       <div
-        className={`absolute bottom-0 left-0 z-[75] transition-[width] lg:left-1/2 lg:-translate-x-1/2 duration-300 ease-out motion-reduce:transition-none ${WIDTH[mode]}`}
+        className={`absolute bottom-0 left-0 z-[75] transition-[width] duration-300 ease-out motion-reduce:transition-none ${WIDTH[mode]}`}
         onPointerEnter={(event) => hover(event, true)}
         onPointerLeave={(event) => hover(event, false)}
       >
