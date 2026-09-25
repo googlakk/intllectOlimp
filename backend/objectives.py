@@ -81,6 +81,11 @@ ALLOWED_COMPONENTS = {
     "DataInvestigation", "PhysicsSandbox", "HotspotInvestigation",
     "CodeBlocksLab",
 }
+# Выведены из употребления: генератор их не выбирает, в конструкторе и каталоге
+# их нет. В ALLOWED_COMPONENTS остаются, чтобы уже созданные уроки открывались
+# и проходили проверку качества.
+RETIRED_COMPONENTS = frozenset({"HotspotInvestigation"})
+GENERATION_COMPONENTS = frozenset(ALLOWED_COMPONENTS - RETIRED_COMPONENTS)
 
 
 def _normalise(value: str) -> str:

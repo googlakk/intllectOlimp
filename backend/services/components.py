@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from errors import ApplicationError
+from objectives import RETIRED_COMPONENTS
 
 REGISTRY = Path(__file__).resolve().parent.parent / "component_registry.json"
 REQUIRED_FIELDS = {
@@ -99,7 +100,12 @@ def enrich_component_registry(value: list[dict[str, Any]]) -> list[dict[str, Any
 def load_component_registry(path: Path = REGISTRY) -> list[dict[str, Any]]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-        return enrich_component_registry(validate_component_registry(raw))
+        registry = enrich_component_registry(validate_component_registry(raw))
+        # Выведенные из употребления компоненты не предлагаем в конструкторе и каталоге.
+        return [
+            item for item in registry
+            if REGISTRY_ID_TO_COMPONENT.get(str(item.get("id")), str(item.get("code"))) not in RETIRED_COMPONENTS
+        ]
     except ValueError as exc:
         raise ComponentRegistryError(
             status_code=500,

@@ -212,14 +212,14 @@ def build_component_plan(shape: LessonShape, objectives: list[dict[str, Any]], f
         if shape != "procedure_mastery":
             plan.append(_step("model", "explanation", [objective_id], ["WorkedExample"], "Разобрать пример применения"))
         if shape == "process_inquiry":
-            plan.append(_step("practice", "practice", [objective_id], ["PredictionLab", "ProcessBuilder", "HotspotInvestigation", "DataInvestigation"], "Исследовать процесс или данные"))
+            plan.append(_step("practice", "practice", [objective_id], ["PredictionLab", "ProcessBuilder", "DataInvestigation"], "Исследовать процесс или данные"))
         elif shape == "source_argument":
             plan.append(_step("practice", "practice", [objective_id], ["TextEvidencePicker", "ArgumentMap", "BranchingScenario"], "Найти доказательство и построить вывод"))
         elif shape == "procedure_mastery":
             plan.append(_step("model", "explanation", [objective_id], ["WorkedExample"], "Разобрать способ действия"))
             plan.append(_step("practice", "practice", [objective_id], ["GuidedPractice", "MisconceptionDebugger", "SortAndClassify", "ProcessBuilder", "CodeBlocksLab"], "Применить способ и исправить ошибку"))
         else:
-            plan.append(_step("practice", "practice", [objective_id], ["GuidedPractice", "SortAndClassify", "ProcessBuilder", "HotspotInvestigation"], "Активно обработать материал"))
+            plan.append(_step("practice", "practice", [objective_id], ["GuidedPractice", "SortAndClassify", "ProcessBuilder"], "Активно обработать материал"))
 
     if shape in {"extended_concept", "process_inquiry", "source_argument"} or len(ids) > 1:
         plan.append(_step("apply", "practice", ids, ["IndependentProblem", "ArgumentBuilder", "DataInvestigation", "ProcessBuilder"], "Связать цели и перенести знания"))

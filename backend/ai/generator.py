@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 from ai.planner import build_topic_contract, split_component_plan
-from objectives import ALLOWED_COMPONENTS, decompose_objectives
+from objectives import GENERATION_COMPONENTS, decompose_objectives
 
 if TYPE_CHECKING:
     from llm import Route
@@ -32,7 +32,7 @@ LESSON_TOOL = {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "component": {"type": "string", "enum": sorted(ALLOWED_COMPONENTS)},
+                        "component": {"type": "string", "enum": sorted(GENERATION_COMPONENTS)},
                         "content": {"type": "object"},
                     },
                     "required": ["component", "content"],
@@ -173,7 +173,7 @@ SYSTEM_PROMPT = """
 Каждый элемент массива имеет ровно такую оболочку:
 {"component": "ИмяКомпонента", "content": { ... }}
 
-Допустимы только следующие 26 компонентов и их точные схемы content:
+Допустимы только следующие 25 компонентов и их точные схемы content:
 
 1. ShortExplanation:
 {"title": string, "text": string, "key_concepts": string[], "callout"?: string}
@@ -297,15 +297,11 @@ vega_lite_spec должен быть простой Vega-Lite специфика
 {"title": string, "prompt": string, "bodies": [{"shape": "circle"|"rectangle", "x": number, "y": number, "width"?: number, "height"?: number, "radius"?: number, "is_static"?: boolean}], "params": [{"name": "gravity"|"restitution", "label": string, "min": number, "max": number, "step": number, "default": number}], "question": string, "options": [string, string, string, string], "correct_answer": string, "explanation": string}
 Используй только для простых 2D физических моделей.
 
-24. HotspotInvestigation:
-{"title": string, "instruction": string, "svg_content": string, "hotspots": [{"id": string, "label": string, "x": number, "y": number, "feedback": string, "is_correct"?: boolean}], "required_hotspots": string[], "explanation": string}
-x и y — проценты от 0 до 100. svg_content безопасный inline SVG без script, event-атрибутов и внешних ресурсов.
-
-25. CodeBlocksLab:
+24. CodeBlocksLab:
 {"title": string, "task": string, "toolbox_xml": string, "expected_block_types": string[], "explanation": string, "starter_xml"?: string}
 Используй для информатики и алгоритмов. toolbox_xml должен содержать только стандартные Blockly block type.
 
-26. GeneratedMedia:
+25. GeneratedMedia:
 {"title": string, "description"?: string, "media_kind": "image"|"video", "url"?: string, "data_url"?: string, "poster_url"?: string, "alt_text"?: string, "caption"?: string, "pedagogical_role"?: string, "visual_intent"?: string, "success_check"?: string, "job_id"?: string, "generation_id"?: string, "prompt"?: string, "model"?: string}
 Не используй GeneratedMedia при обычной генерации урока: этот блок вставляется только после
 реального вызова OpenRouter media API из редактора. Никогда не выдумывай url, data_url или
@@ -327,11 +323,11 @@ $3 \\cdot 3 = 9$ → «значит, $3^2 = 9$». Нельзя: «формула
 Следуй переданному предметному маршруту, а не одной универсальной последовательности.
 Для математических задач используй разобранные примеры, MisconceptionDebugger,
 SortAndClassify или ProcessBuilder; для наук — PredictionLab, DataInvestigation,
-PhysicsSandbox, HotspotInvestigation и ProcessBuilder; для языков — SortAndClassify,
+PhysicsSandbox и ProcessBuilder; для языков — SortAndClassify,
 BranchingScenario и ArgumentMap; для гуманитарных предметов — источники,
-HotspotInvestigation, ArgumentMap, BranchingScenario и ProcessBuilder; для информатики —
+ArgumentMap, BranchingScenario и ProcessBuilder; для информатики —
 CodeBlocksLab, MisconceptionDebugger и ProcessBuilder; для практических предметов —
-BranchingScenario, HotspotInvestigation и самооценку. Цифровой тест не должен подменять
+BranchingScenario и самооценку. Цифровой тест не должен подменять
 физическое или творческое выполнение. Заверши урок Reflection и MasteryCheck с вопросом
 по каждой цели. В уроке должно быть не менее пяти оцениваемых действий с учётом отдельных
 вопросов MasteryCheck.

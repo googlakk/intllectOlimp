@@ -15,7 +15,7 @@ import unittest
 from ai.generator import (
     LESSON_TOOL, MAX_TOKENS, GeneratedBlocks, _blocks_from_tool, _parse_blocks, _validate_blocks, clean_intro,
 )
-from objectives import ALLOWED_COMPONENTS
+from objectives import ALLOWED_COMPONENTS, GENERATION_COMPONENTS, RETIRED_COMPONENTS
 
 GOOD_BLOCK = {"component": "ShortExplanation", "content": {"objective_ids": ["obj-1"]}}
 
@@ -37,7 +37,21 @@ class ToolSchemaTests(unittest.TestCase):
     def test_component_enum_matches_allowed_components(self):
         enum = LESSON_TOOL["input_schema"]["properties"]["blocks"]["items"] \
             ["properties"]["component"]["enum"]
-        self.assertEqual(set(enum), ALLOWED_COMPONENTS)
+        self.assertEqual(set(enum), GENERATION_COMPONENTS)
+        self.assertEqual(set(enum), ALLOWED_COMPONENTS - RETIRED_COMPONENTS)
+
+    def test_retired_hotspot_is_not_offered_to_the_model(self):
+        from ai.generator import SYSTEM_PROMPT
+        from ai.planner import build_topic_contract
+        self.assertNotIn("HotspotInvestigation", SYSTEM_PROMPT)
+        self.assertIn("25 компонентов", SYSTEM_PROMPT)
+        for subject in ("География", "Физика", "История"):
+            plan = build_topic_contract(topic_name="Т", subject_name=subject, learning_objectives="Цель один. Цель два.",
+                                        skills=[], resources=None, grade=7, hours=3, lesson_type="study")["component_plan"]
+            self.assertFalse(any("HotspotInvestigation" in step["allowed_components"] for step in plan), subject)
+
+    def test_old_lessons_with_hotspot_still_pass_component_validation(self):
+        self.assertIn("HotspotInvestigation", ALLOWED_COMPONENTS)
 
     def test_max_tokens_below_sdk_streaming_threshold(self):
         # Выше 21333 SDK требует стриминг — см. ktp/mapper.py.

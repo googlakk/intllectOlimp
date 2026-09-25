@@ -39,9 +39,12 @@ class ComponentRegistryTests(unittest.TestCase):
             "prediction-lab",
             "data-investigation",
             "physics-sandbox",
-            "hotspot-investigation",
             "code-blocks-lab",
         }.issubset(ids))
+
+    def test_retired_hotspot_investigation_is_not_offered(self):
+        ids = {item["id"] for item in load_component_registry()}
+        self.assertNotIn("hotspot-investigation", ids)
 
     def test_registry_is_enriched_with_pedagogical_metadata(self):
         registry = load_component_registry()
