@@ -39,13 +39,14 @@ def decide(event: str, state: RuleState) -> Decision:
     if event == "message" and state.distress:
         return Decision("template", "distress", action="call_teacher")
     if state.assessment:
-        if event == "answer_submitted":
+        if event in {"answer_submitted", "idle"}:
             return Decision("silent")
         return Decision("template", "assessment_locked", action="open_theory")
     if event == "answer_submitted":
         if state.outcome == "correct":
             return Decision("template", "correct")
-        if state.outcome == "incorrect" and state.consecutive_wrong >= state.offer_after_errors:
+        # Помощь предлагается один раз за серию ошибок, а не после каждой следующей.
+        if state.outcome == "incorrect" and state.consecutive_wrong == state.offer_after_errors:
             return Decision("template", "offer_help", offer=True)
         return Decision("silent")
     if event == "idle":

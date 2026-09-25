@@ -64,6 +64,23 @@ def answer_spec(block: dict[str, Any], question_index: int | None = None) -> dic
     }
 
 
+def protected_items(blocks: list[dict[str, Any]], block_index: int, question_index: int | None) -> list[tuple[dict[str, Any], str, bool]]:
+    """Ответы, которые реплика не должна раскрыть: текущее задание и все итоговые задания урока.
+
+    Иначе ученик скопирует итоговый вопрос в чат на другом задании. Третий элемент —
+    это ли текущее задание (только для него учитывается, что ученик уже дошёл до ответа).
+    """
+    items = [(answer_spec(blocks[block_index], question_index), task_text(blocks[block_index], question_index), True)]
+    for index, block in enumerate(blocks):
+        if not assessment_mode(block):
+            continue
+        questions = _content(block).get("questions") if block.get("component") == "MasteryCheck" else None
+        for number in range(len(questions)) if isinstance(questions, list) else [None]:
+            if (index, number) != (block_index, question_index):
+                items.append((answer_spec(block, number), task_text(block, number), False))
+    return items
+
+
 def task_text(block: dict[str, Any], question_index: int | None = None) -> str:
     item = task_item(block, question_index)
     return str(item.get("question") or item.get("problem") or item.get("prompt") or item.get("task") or item.get("title") or "")

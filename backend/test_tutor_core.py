@@ -21,7 +21,7 @@ class AnswerLeakTests(unittest.TestCase):
             self.assertTrue(self.leak(reply), reply)
 
     def test_negative_answer_with_unicode_minus(self):
-        self.assertTrue(self.leak("Скорость −3 м/с", {**DENSITY, "correct": "-3"}))
+        self.assertTrue(self.leak("Скорость равна −3 м/с", {**DENSITY, "correct": "-3"}))
 
     def test_other_numbers_are_fine(self):
         self.assertFalse(self.leak("Раздели 24 на 2 и посмотри, что выйдет."))
@@ -46,6 +46,49 @@ class AnswerLeakTests(unittest.TestCase):
         choice = {"correct": "1917", "numeric": False, "options": ["1905", "1917", "1918", "1924"]}
         self.assertTrue(self.leak("Выбери вариант Б.", choice))
         self.assertFalse(self.leak("Посмотри на варианты внимательно.", choice))
+
+
+class LeakFormatTests(unittest.TestCase):
+    """Форматы, которые находил рецензент, и обратные случаи — нормальные подсказки."""
+
+    CHOICE = {"correct": "12", "numeric": False, "options": ["10", "12", "14", "16"]}
+
+    def test_short_choice_answer_and_letters(self):
+        self.assertTrue(detect_answer_leak("Правильный ответ 12.", self.CHOICE))
+        self.assertTrue(detect_answer_leak("Ответ: Б", self.CHOICE))
+        self.assertTrue(detect_answer_leak("Правильный — второй вариант.", self.CHOICE))
+        self.assertFalse(detect_answer_leak("Сравни все четыре числа с условием.", self.CHOICE))
+
+    def test_digit_by_digit_and_plain_fraction(self):
+        self.assertTrue(detect_answer_leak("Первая цифра 8, после запятой 9", DENSITY | {"correct": "8.9"}))
+        self.assertTrue(detect_answer_leak("Это 89/10", DENSITY | {"correct": "8.9"}))
+
+    def test_small_integer_answers_do_not_block_normal_help(self):
+        spec = {"correct": "2", "numeric": True, "options": []}
+        for reply in ("Шаг 2: раздели обе части на 3.", "Умножь на 2 обе части.", "Сколько частей? Их 2 или больше?"):
+            self.assertFalse(detect_answer_leak(reply, spec, question_text="Реши 3x = 6"), reply)
+        self.assertTrue(detect_answer_leak("Значит, x = 2.", spec, question_text="Реши 3x = 6"))
+
+    def test_other_items_only_leak_when_named_as_the_answer(self):
+        final = {"correct": "фотосинтез", "numeric": False, "options": ["дыхание", "фотосинтез", "испарение", "рост"]}
+        self.assertFalse(detect_answer_leak("Вспомни, как идёт фотосинтез в листе.", final, current=False))
+        self.assertFalse(detect_answer_leak("Верно, Б — это другое обозначение.", final, current=False))
+        self.assertTrue(detect_answer_leak("Ответ: фотосинтез", final, current=False))
+        number = {"correct": "25", "numeric": True, "options": []}
+        self.assertFalse(detect_answer_leak("Возьми 25 грамм для опыта.", number, current=False))
+        self.assertTrue(detect_answer_leak("Там ответ 25.", number, current=False))
+
+    def test_steps_are_not_mistaken_for_digits_of_the_answer(self):
+        self.assertFalse(detect_answer_leak("Сначала сделай шаг 1, потом шаг 2.", {"correct": "12", "numeric": True, "options": []}))
+        self.assertFalse(detect_answer_leak("Найди 2 множителя: 5 и 5.", {"correct": "25", "numeric": True, "options": []}))
+
+    def test_kyrgyz_local_phone_is_masked_completely(self):
+        for phone in ("0555 12 34 56", "0 (555) 12-34-56"):
+            self.assertNotIn("56", scrub_pii(f"номер {phone}"), phone)
+
+    def test_numbers_from_the_solution_are_not_masked_as_phones(self):
+        self.assertIn("1 234 567", scrub_pii("получилось 1 234 567"))
+        self.assertNotIn("555", scrub_pii("звони 0555 123 456"))
 
 
 class SafetyTests(unittest.TestCase):
@@ -79,7 +122,8 @@ class RuleTests(unittest.TestCase):
 
     def test_assessment_blocks_are_locked(self):
         self.assertEqual(decide("answer_submitted", RuleState(assessment=True, outcome="incorrect", consecutive_wrong=3)).kind, "silent")
-        for event in ("message", "hint_requested", "idle"):
+        self.assertEqual(decide("idle", RuleState(assessment=True)).kind, "silent")
+        for event in ("message", "hint_requested"):
             decision = decide(event, RuleState(assessment=True))
             self.assertEqual((decision.template_key, decision.action), ("assessment_locked", "open_theory"), event)
 

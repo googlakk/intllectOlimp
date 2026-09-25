@@ -441,7 +441,7 @@ class TutorCallOptionsTests(unittest.TestCase):
             {"type": "text", "text": "Контекст урока", "cache_control": {"type": "ephemeral"}},
         ])
         self.assertEqual(client.seen["thinking"], {"type": "disabled"})
-        self.assertEqual(client.options, {"timeout": 20, "max_retries": 1})
+        self.assertEqual(client.options, {"timeout": 20, "max_retries": 0})
 
     def test_anthropic_without_new_options_sends_plain_system(self):
         client = _FakeAnthropic(_AnthropicMessage([_AnthropicBlock("tool_use", input={"name": 1})], stop_reason="tool_use"))

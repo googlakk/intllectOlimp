@@ -59,7 +59,7 @@ class AnthropicProvider:
     ) -> ToolResult:
         client = self._build_client()
         if timeout is not None and hasattr(client, "with_options"):
-            client = client.with_options(timeout=timeout, max_retries=1)
+            client = client.with_options(timeout=timeout, max_retries=0)
         try:
             message = await client.messages.create(
                 model=model,
