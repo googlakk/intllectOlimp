@@ -30,6 +30,7 @@ TASK_KTP_COLUMNS = "ktp-columns"
 TASK_LESSON = "lesson"
 TASK_TUTOR = "tutor"
 TASK_TEXTBOOK_OCR = "textbook-ocr"
+TASK_TEXTBOOK_STRUCTURE = "textbook-structure"
 
 IMAGE_MEDIA_TYPES = frozenset({"image/png", "image/jpeg", "image/webp", "image/gif"})
 
@@ -52,6 +53,11 @@ DEFAULTS: dict[str, dict[str, str]] = {
     },
     # Распознавание сканов учебника: формулы и номера задач должны быть точными.
     TASK_TEXTBOOK_OCR: {
+        "anthropic": "claude-sonnet-5",
+        "openrouter": "anthropic/claude-sonnet-5",
+    },
+    # Разбор текста учебника: оглавление и элементы параграфов (дословно, без решений).
+    TASK_TEXTBOOK_STRUCTURE: {
         "anthropic": "claude-sonnet-5",
         "openrouter": "anthropic/claude-sonnet-5",
     },

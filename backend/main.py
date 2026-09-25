@@ -26,7 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from cache_policy import api_cache_control
 from database import Base, engine, warm_database_pool
 from errors import ApplicationError
-from routes import topics, accounts, ai_models, auth, avatar, components, curriculum, dashboard, ktp, lessons, media, progress, subjects, tutor
+from routes import topics, accounts, ai_models, auth, avatar, components, curriculum, dashboard, ktp, lessons, media, progress, subjects, textbooks, tutor
 from schema_compat import apply_schema_compatibility
 from seed import seed_if_empty
 from static_site import mount_frontend
@@ -74,7 +74,7 @@ app.include_router(auth.router)
 app.include_router(accounts.router)
 app.include_router(topics.router)
 app.include_router(avatar.webhook_router)
-for router in (ktp.router, components.router, avatar.router, dashboard.router, ai_models.router):
+for router in (ktp.router, components.router, avatar.router, dashboard.router, ai_models.router, textbooks.router):
     app.include_router(router, dependencies=[Depends(require_roles("admin", "teacher"))])
 app.include_router(media.router)
 app.include_router(avatar.asset_router)

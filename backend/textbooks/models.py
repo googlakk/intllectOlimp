@@ -17,7 +17,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 # Что ученик видит из учебника: только ссылку на страницу или и текст задач (когда права подтверждены).
 STUDENT_DISPLAY = ("refs_only", "verbatim")
-TEXTBOOK_STATUSES = ("uploaded", "extracting", "recognizing", "structuring", "ready", "failed")
+TEXTBOOK_STATUSES = ("uploaded", "extracting", "needs_ai", "recognizing", "structuring", "ready", "needs_review", "failed")
 
 
 class TextbookBase(DeclarativeBase):
