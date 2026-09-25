@@ -8,10 +8,12 @@ export interface RetrievalCheckProps {
   options: string[];
   correct_answer: string;
   explanation: string;
+  /** «diagnostic» — вопрос-разминка в начале урока. */
+  evidence_stage?: string;
   onAnswer?: (isCorrect: boolean) => void;
 }
 
-export default function RetrievalCheck({ question, options, correct_answer, explanation, onAnswer }: RetrievalCheckProps) {
+export default function RetrievalCheck({ question, options, correct_answer, explanation, evidence_stage, onAnswer }: RetrievalCheckProps) {
   const [selected, setSelected] = useState<string | null>(null);
   const [status, setStatus] = useState<'idle' | 'correct' | 'incorrect'>('idle');
 
@@ -36,7 +38,7 @@ export default function RetrievalCheck({ question, options, correct_answer, expl
       
       <div className="relative z-10">
         <span className="inline-block px-3 py-1 bg-primary/10 text-primary text-xs font-bold rounded-full mb-6 uppercase tracking-widest">
-          Проверка знаний
+          {evidence_stage === 'diagnostic' ? 'Разминка' : 'Проверка знаний'}
         </span>
         <h3 className="text-xl font-medium mb-8 text-foreground leading-relaxed max-w-2xl mx-auto whitespace-pre-wrap">
           {parseMathText(question)}

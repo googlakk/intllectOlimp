@@ -95,7 +95,9 @@ export function ActiveLessonContent({
   onAudioEnabledChange,
 }: ActiveLessonContentProps) {
   const block = activeBlocks[currentStep];
-  const phaseLabel = PHASE_LABELS[block?.component] || 'Учебный шаг';
+  const phaseLabel = block?.content?.evidence_stage === 'diagnostic'
+    ? 'Разминка'
+    : PHASE_LABELS[block?.component] || 'Учебный шаг';
   const originalIndex = activeOriginalIndices[currentStep] ?? currentStep;
   const blockIsAssessment = block ? isAssessmentBlock(block) : false;
   const position = lessonPositionForBlock(lessonDocument, originalIndex);
@@ -370,7 +372,7 @@ function LessonContinueBar({ canContinue, isLastStep, isCompleted, isDiagnosticR
         onClick={() => (isLastStep && isCompleted ? onOpenSummary() : onNext())}
         className="flex w-[240px] items-center justify-center gap-2 rounded-xl bg-primary px-8 py-3.5 font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
       >
-        {isLastStep ? (isDiagnosticRoute ? 'Перейти к объяснению' : 'Завершить урок') : 'Продолжить'}
+        {isLastStep ? (isDiagnosticRoute ? 'Начать урок' : 'Завершить урок') : 'Продолжить'}
         <ChevronDown className="h-5 w-5 -rotate-90" />
       </button>
     </div>
