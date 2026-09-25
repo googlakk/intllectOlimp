@@ -25,7 +25,7 @@ TUTOR_TOOL: dict[str, Any] = {
             "reply": {"type": "string", "description": f"Реплика ученику, не длиннее {REPLY_LIMIT} символов."},
             "action": {"type": "string", "enum": list(ACTIONS)},
             "hint_level": {"type": "integer", "description": "Для show_hint: номер готовой подсказки урока."},
-            "misconception_code": {"type": "string", "description": "Короткий код заблуждения или пусто."},
+            "misconception_code": {"type": "string", "description": "Затруднение ученика для учителя: 2–5 слов по-русски (например, «умножил вместо деления»), одинаково для одинаковых ошибок; пусто, если его нет."},
             "diagnosis": {"type": "string", "description": "Для учителя: в чём ошибка ученика, одна фраза."},
             "reveals_answer": {"type": "boolean", "description": "true, если реплика раскрывает итоговый ответ."},
             "asks_student_to_try": {"type": "boolean"},

@@ -1,4 +1,5 @@
 import { useStudentLearningReport } from '@/lib/api';
+import { StudentTutorReport } from './StudentTutorReport';
 
 export function StudentLearningReport({ studentId, onClose }: { studentId: number; onClose: () => void }) {
   const { data, isLoading, isError, refetch } = useStudentLearningReport(studentId);
@@ -10,6 +11,7 @@ export function StudentLearningReport({ studentId, onClose }: { studentId: numbe
       <ul className="space-y-2">{data.skills.map(skill => <li key={skill.id}>{skill.name} — <strong>{skill.status === 'mastered' ? 'Освоен' : 'Нужна практика'}</strong> <span className="text-muted-foreground">({skill.evidence_count} проверок)</span></li>)}</ul>
       <h3 className="font-semibold">Занятия и темы, которым нужна помощь</h3>
       <ul className="space-y-2">{data.lessons.map(lesson => <li key={lesson.topic_id}>{lesson.name}{lesson.archived ? ' (архив)' : ''} — {lesson.status === 'completed' ? 'Пройдено' : 'В процессе'}; {lesson.mastery_status === 'needs_practice' ? 'Нужна помощь' : lesson.mastery_status === 'mastered' ? 'Цели освоены' : 'Цели ещё не проверены'}</li>)}</ul>
+      <StudentTutorReport studentId={studentId} />
     </>}
   </section>;
 }

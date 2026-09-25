@@ -114,10 +114,15 @@ async def get_dashboard_students(db: AsyncSession, *, user: AuthPrincipal) -> li
     return [serialize_student_summary(row) for row in rows]
 
 
-async def get_student_learning_report(student_id: int, db: AsyncSession, *, user: AuthPrincipal) -> dict[str, Any]:
+async def ensure_student_visible(db: AsyncSession, user: AuthPrincipal, student_id: int) -> None:
+    """Админ видит всех; учитель — только учеников своих активных классов."""
     visible_ids = await _visible_student_ids(db, user)
     if visible_ids is not None and student_id not in visible_ids:
         raise ApplicationError(404, "Ученик недоступен.")
+
+
+async def get_student_learning_report(student_id: int, db: AsyncSession, *, user: AuthPrincipal) -> dict[str, Any]:
+    await ensure_student_visible(db, user, student_id)
     student = await db.get(Student, student_id)
     if student is None:
         raise ApplicationError(404, "Ученик не найден.")
