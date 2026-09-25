@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState, type ReactNode, type RefObject, type 
 import type { Block, LearningObjective, LessonDocument, ObjectiveMastery, WarpGate } from '@/lib/api/types';
 import type { AttemptsByStep, LessonAnswers } from './studentProgress';
 import { ActiveLessonContent } from './studentLessonContent';
+import { LessonTitlePage } from './LessonTitlePage';
+import type { LessonIntro } from './lessonIntro';
 import { AvatarCompanion } from './AvatarCompanion';
 import { avatarCueForBeat, defaultBeatId, lessonPositionForBlock } from './lessonExperience';
 import {
@@ -16,6 +18,9 @@ import {
 
 type StudentLessonPageViewProps = {
   learningContext?: ReactNode;
+  /** Титульная страница: пока она есть, урок ещё не начат. */
+  intro?: LessonIntro | null;
+  onStartLesson?: () => void;
   activeBlocks: Block[];
   activeOriginalIndices: number[];
   answers: LessonAnswers;
@@ -59,6 +64,8 @@ type StudentLessonPageViewProps = {
 };
 
 export function StudentLessonPageView({
+  intro,
+  onStartLesson,
   learningContext,
   activeBlocks,
   activeOriginalIndices,
@@ -111,7 +118,8 @@ export function StudentLessonPageView({
     ? activeBeatId
     : sceneDefaultBeatId;
   const avatarCue = avatarCueForBeat(lessonPosition?.scene, effectiveBeatId);
-  const showLessonRail = !isLoading && !isEmpty && !showSummary;
+  const showIntro = Boolean(intro && onStartLesson && !isLoading && !loadError && !isEmpty && !showSummary);
+  const showLessonRail = !isLoading && !isEmpty && !showSummary && !showIntro;
   const handleTeachingBeatChange = useCallback((beatId: string) => setActiveBeatId(beatId), []);
 
   useEffect(() => {
@@ -134,6 +142,8 @@ export function StudentLessonPageView({
     content = <LessonUnavailableState message={loadError.message} />;
   } else if (isEmpty) {
     content = <EmptyLessonState />;
+  } else if (showIntro && intro && onStartLesson) {
+    content = <LessonTitlePage intro={intro} onStart={onStartLesson} />;
   } else if (showSummary) {
     content = (
       <LessonCompletionSummary
@@ -224,7 +234,7 @@ export function StudentLessonPageView({
               Прогресс пока не сохранён: {saveError.message}
             </div>
           )}
-          {currentStep === 0 && learningContext && <div className="max-h-[40vh] shrink-0 overflow-y-auto">{learningContext}</div>}
+          {currentStep === 0 && !showIntro && learningContext && <div className="max-h-[40vh] shrink-0 overflow-y-auto">{learningContext}</div>}
           {content}
         </main>
 

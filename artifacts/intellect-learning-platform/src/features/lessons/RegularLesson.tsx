@@ -20,6 +20,7 @@ import { useStudentLessonData } from '@/features/lessons/lessonManifest';
 import { lessonHeaderText, lessonObjectives } from '@/features/lessons/lessonMetadata';
 import { StudentLessonPageView } from '@/features/lessons/studentLessonPageView';
 import { useNextLessonManifestPrefetch } from '@/features/lessons/lessonPrefetch';
+import { buildLessonIntro } from '@/features/lessons/lessonIntro';
 export function RegularLesson() {
   const { subjectId, topicId: topicIdParam } = useParams();
   const topicId = Number(topicIdParam);
@@ -38,6 +39,7 @@ export function RegularLesson() {
   const [diagnosticComplete, setDiagnosticComplete] = useState(false);
   const [avatarEnabled, setAvatarEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
+  const [introDismissed, setIntroDismissed] = useState(false);
   const restartProgress = useRestartLessonProgress();
   const initializedForId = useRef<number | null>(null);
   const startTime = useRef(Date.now());
@@ -171,12 +173,18 @@ export function RegularLesson() {
     await refetch();
   };
   const { learningObjective, topicTitle } = lessonHeaderText(lesson);
+  const intro = useMemo(() => buildLessonIntro(lesson), [lesson]);
+  // Титул только на самом старте: урок не начат, ответов нет, шаг первый.
+  const lessonNotStarted = !isCompleted && !diagnosticComplete && currentStep === 0 && maxOpenedStep === 0 && Object.keys(answers).length === 0;
+  const showIntro = !introDismissed && lessonNotStarted;
   useEffect(() => {
     if (!isLoading && currentStep < activeBlocks.length) contentRef.current?.focus({ preventScroll: true });
   }, [currentStep, isLoading, activeBlocks.length]);
   return (
     <StudentLessonPageView
       learningContext={lesson && user ? <LearningContext lesson={lesson} studentId={user.id} subjectId={subjectId ?? ''} /> : null}
+      intro={showIntro ? intro : null}
+      onStartLesson={() => setIntroDismissed(true)}
       activeBlocks={activeBlocks}
       activeOriginalIndices={activeOriginalIndices}
       answers={answers}
