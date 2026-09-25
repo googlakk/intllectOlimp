@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Block } from '@/lib/api/types';
 import { IdleTimer } from './idleTimer';
-import { isRepeatAttempt, isTutorLocked, resolveTheoryStep, sessionToMessages } from './tutorRules';
+import { isRepeatAttempt, isTutorLocked, resolveTheoryStep, sessionToMessages, tutorTeasers } from './tutorRules';
 
 const block = (component: string, content: Record<string, unknown> = {}) => ({ component, content }) as unknown as Block;
 
@@ -68,5 +68,13 @@ describe('IdleTimer', () => {
     vi.advanceTimersByTime(60_000);
     expect(onIdle).toHaveBeenCalledTimes(2);
     timer.stop();
+  });
+});
+
+describe('tutorTeasers', () => {
+  it('предложение помощи показывается вместо дежурных фраз, на итоговом — только напоминание', () => {
+    expect(tutorTeasers({ locked: false, hasOffer: true, lastReply: 'Хочешь, разберём?' })).toEqual(['Хочешь, разберём?']);
+    expect(tutorTeasers({ locked: false, hasOffer: false, lastReply: 'x' }).length).toBeGreaterThan(1);
+    expect(tutorTeasers({ locked: true, hasOffer: true, lastReply: 'x' })[0]).toMatch(/Итоговое/);
   });
 });

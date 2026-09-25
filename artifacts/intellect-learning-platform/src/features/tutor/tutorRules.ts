@@ -51,3 +51,13 @@ export function sessionToMessages(turns: TutorSessionTurn[]): TutorMessage[] {
     ...(turn.reply ? [{ id: `t${turn.id}`, role: 'tutor' as const, text: turn.reply, blockIndex: turn.block_index }] : []),
   ]);
 }
+
+const IDLE_TEASERS = ['Застрял? Спроси меня', 'Могу дать подсказку', 'Разберём задачу по шагам?', 'Непонятно условие? Напиши мне'];
+const LOCKED_TEASERS = ['Итоговое задание — здесь ты справляешься сам', 'Если что-то забыл, вернись к объяснению'];
+
+/** Что плашка помощника показывает в покое: предложение помощи важнее дежурных фраз. */
+export function tutorTeasers({ locked, hasOffer, lastReply }: { locked: boolean; hasOffer: boolean; lastReply?: string }): string[] {
+  if (locked) return LOCKED_TEASERS;
+  if (hasOffer && lastReply) return [lastReply];
+  return IDLE_TEASERS;
+}

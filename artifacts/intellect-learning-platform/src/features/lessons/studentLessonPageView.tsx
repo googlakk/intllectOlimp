@@ -7,7 +7,6 @@ import { ActiveLessonContent } from './studentLessonContent';
 import { LessonTitlePage } from './LessonTitlePage';
 import type { LessonIntro } from './lessonIntro';
 import { AvatarCompanion } from './AvatarCompanion';
-import { TutorCard, TutorMobileButton } from '@/features/tutor/TutorPanel';
 import type { LessonTutor } from '@/features/tutor/useLessonTutor';
 import { avatarCueForBeat, defaultBeatId, lessonPositionForBlock } from './lessonExperience';
 import {
@@ -193,6 +192,7 @@ export function StudentLessonPageView({
         audioEnabled={audioEnabled}
         onAvatarEnabledChange={onAvatarEnabledChange}
         onAudioEnabledChange={onAudioEnabledChange}
+        tutor={tutor}
       />
     );
   }
@@ -249,7 +249,7 @@ export function StudentLessonPageView({
             className={`${isPlanOpen ? 'flex' : 'hidden lg:flex'} h-full w-full shrink-0 flex-col gap-4 overflow-hidden p-3 lg:w-[340px] lg:py-4 lg:pr-4 xl:w-[360px]`}
           >
             {isPlanOpen && (
-              <section className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-md ${avatarCue || tutor ? 'lg:flex-none lg:basis-1/2' : ''}`} aria-label="План урока">
+              <section className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-md ${avatarCue ? 'lg:flex-none lg:basis-1/2' : ''}`} aria-label="План урока">
                 <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
                   <div>
                     <p className="text-sm font-bold text-foreground">План урока</p>
@@ -285,7 +285,7 @@ export function StudentLessonPageView({
             )}
 
             {avatarCue && (
-              <div className={`hidden min-h-0 overflow-y-auto rounded-2xl border border-border bg-card p-3 shadow-md lg:flex lg:flex-col lg:justify-center ${tutor ? 'lg:shrink-0' : isPlanOpen ? 'flex-1' : 'h-full'}`}>
+              <div className={`hidden min-h-0 overflow-y-auto rounded-2xl border border-border bg-card p-3 shadow-md lg:flex lg:flex-col lg:justify-center ${isPlanOpen ? 'flex-1' : 'h-full'}`}>
                 <AvatarCompanion
                   cue={avatarCue}
                   previewImageUrl={lessonDocument?.avatar.preview_image_url}
@@ -298,11 +298,8 @@ export function StudentLessonPageView({
                 />
               </div>
             )}
-
-            {tutor && <TutorCard tutor={tutor} />}
           </aside>
         )}
-        {showLessonRail && tutor && <TutorMobileButton tutor={tutor} />}
       </div>
     </div>
   );

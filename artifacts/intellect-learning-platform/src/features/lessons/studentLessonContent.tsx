@@ -7,6 +7,8 @@ import { BlockMedia } from '@/components/blocks/BlockMedia';
 import type { Block, LessonDocument } from '@/lib/api/types';
 import { tutorAttemptProps } from '@/features/tutor/tutorBridge';
 import { useTutorBridge } from '@/features/tutor/TutorBridgeContext';
+import { TutorDock } from '@/features/tutor/TutorDock';
+import type { LessonTutor } from '@/features/tutor/useLessonTutor';
 import { isAssessmentBlock, type AttemptsByStep, type LessonAnswers } from './studentProgress';
 import { avatarCueForBeat, lessonPositionForBlock } from './lessonExperience';
 import { AvatarCompanion } from './AvatarCompanion';
@@ -67,6 +69,8 @@ type ActiveLessonContentProps = {
   audioEnabled: boolean;
   onAvatarEnabledChange: (enabled: boolean) => void;
   onAudioEnabledChange: (enabled: boolean) => void;
+  /** Помощник урока — только когда он включён для ученика. */
+  tutor?: LessonTutor;
 };
 
 export function ActiveLessonContent({
@@ -96,6 +100,7 @@ export function ActiveLessonContent({
   audioEnabled,
   onAvatarEnabledChange,
   onAudioEnabledChange,
+  tutor,
 }: ActiveLessonContentProps) {
   const block = activeBlocks[currentStep];
   const phaseLabel = block?.content?.evidence_stage === 'diagnostic'
@@ -199,6 +204,7 @@ export function ActiveLessonContent({
         isDiagnosticRoute={isDiagnosticRoute}
         onNext={onNext}
         onOpenSummary={onOpenSummary}
+        leading={tutor ? <TutorDock tutor={tutor} /> : null}
       />
     </div>
   );
@@ -290,7 +296,7 @@ function FitToViewport({ children, resetKey }: { children: ReactNode; resetKey: 
 
 type LessonStepCardProps = Omit<ActiveLessonContentProps,
   'contentRef' | 'prefersReducedMotion' | 'avatarEnabled' | 'audioEnabled' |
-  'onAvatarEnabledChange' | 'onAudioEnabledChange' | 'isCompleted' | 'isDiagnosticRoute' | 'onNext' | 'onOpenSummary'>;
+  'onAvatarEnabledChange' | 'onAudioEnabledChange' | 'isCompleted' | 'isDiagnosticRoute' | 'onNext' | 'onOpenSummary' | 'tutor'>;
 
 function LessonStepCard({
   activeBlocks,
@@ -374,22 +380,27 @@ type LessonContinueBarProps = {
   isDiagnosticRoute: boolean;
   onNext: () => void;
   onOpenSummary: () => void;
+  /** Слева от кнопки (на телефоне — над ней): помощник урока. */
+  leading?: ReactNode;
 };
 
 /** Кнопка «Продолжить» всегда в одном месте, под шагом, независимо от высоты контента. */
-function LessonContinueBar({ canContinue, isLastStep, isCompleted, isDiagnosticRoute, onNext, onOpenSummary }: LessonContinueBarProps) {
+function LessonContinueBar({ canContinue, isLastStep, isCompleted, isDiagnosticRoute, onNext, onOpenSummary, leading }: LessonContinueBarProps) {
   return (
-    <div className="flex shrink-0 justify-end border-t border-border/60 pt-3 pr-20 sm:pr-0">
-      <button
-        type="button"
-        disabled={!canContinue}
-        title={canContinue ? undefined : 'Сначала ответьте на задание'}
-        onClick={() => (isLastStep && isCompleted ? onOpenSummary() : onNext())}
-        className="flex w-[240px] items-center justify-center gap-2 rounded-xl bg-primary px-8 py-3.5 font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {isLastStep ? (isDiagnosticRoute ? 'Начать урок' : 'Завершить урок') : 'Продолжить'}
-        <ChevronDown className="h-5 w-5 -rotate-90" />
-      </button>
+    <div className="flex shrink-0 items-center gap-2 border-t border-border/60 pt-3 lg:gap-6">
+      {leading && <div className="min-w-0 flex-1">{leading}</div>}
+      <div className={`ml-auto flex justify-end ${leading ? '' : 'pr-20 sm:pr-0'}`}>
+        <button
+          type="button"
+          disabled={!canContinue}
+          title={canContinue ? undefined : 'Сначала ответьте на задание'}
+          onClick={() => (isLastStep && isCompleted ? onOpenSummary() : onNext())}
+          className={`flex items-center justify-center gap-2 rounded-xl bg-primary py-3.5 ${leading ? 'px-5 sm:w-[240px] sm:px-8' : 'w-[240px] px-8'} font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40`}
+        >
+          {isLastStep ? (isDiagnosticRoute ? 'Начать урок' : 'Завершить урок') : 'Продолжить'}
+          <ChevronDown className="h-5 w-5 -rotate-90" />
+        </button>
+      </div>
     </div>
   );
 }
