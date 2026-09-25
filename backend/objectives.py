@@ -652,6 +652,51 @@ def _lesson_shape_warnings_and_errors(
     return errors, warnings
 
 
+_EMPTY_EXPLANATION_WORDS = {"ответ", "верно", "правильно", "правильный", "это", "да", "итак", "получаем"}
+
+
+def _explanation_without_path(explanation: Any, correct: Any) -> bool:
+    """Объяснение только повторяет ответ: «Ответ 9» вместо «$3^2 = 3 \\cdot 3 = 9$»."""
+    if not isinstance(explanation, str) or not explanation.strip():
+        return False
+    words = re.findall(r"\w+", explanation.casefold())
+    answer = set(re.findall(r"\w+", str(correct or "").casefold()))
+    return not [word for word in words if word not in answer and word not in _EMPTY_EXPLANATION_WORDS]
+
+
+def explanation_path_warnings(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Предупреждения учителю, когда урок показывает ответ без пути к нему."""
+    warnings: list[dict[str, Any]] = []
+    for index, block in enumerate(blocks):
+        content = block.get("content")
+        if not isinstance(content, dict):
+            continue
+        if block.get("component") == "WorkedExample":
+            steps = [step for step in content.get("steps") or [] if isinstance(step, dict)]
+            has_formula = "$" in str(content.get("problem", ""))
+            if len(steps) < 2 or (has_formula and not any(str(step.get("math", "")).strip() for step in steps)):
+                warnings.append({
+                    "code": "worked_example_without_path",
+                    "block": index,
+                    "message": "Разобранный пример показывает ответ без хода решения",
+                })
+        if _explanation_without_path(content.get("explanation"), content.get("correct_answer")):
+            warnings.append({
+                "code": "explanation_without_path",
+                "block": index,
+                "message": "Объяснение повторяет ответ и не показывает, как он получен",
+            })
+        for question_index, question in enumerate(content.get("questions") or []):
+            if isinstance(question, dict) and _explanation_without_path(question.get("explanation"), question.get("correct_answer")):
+                warnings.append({
+                    "code": "explanation_without_path",
+                    "block": index,
+                    "question": question_index,
+                    "message": "Объяснение повторяет ответ и не показывает, как он получен",
+                })
+    return warnings
+
+
 def quality_report(
     blocks: list[dict[str, Any]],
     raw_objectives: str | None,
@@ -679,6 +724,7 @@ def quality_report(
     coverage["errors"] = coverage["errors"] + shape_errors
     coverage["warnings"] = normalization_warnings + coverage["warnings"]
     coverage["warnings"] = coverage["warnings"] + shape_warnings
+    coverage["warnings"] = coverage["warnings"] + explanation_path_warnings(normalized_blocks)
     coverage["publishable"] = not coverage["errors"] and not coverage["gaps"] and bool(objectives)
     return {
         "objectives": objectives,

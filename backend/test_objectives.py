@@ -1204,3 +1204,41 @@ class LessonPublishServiceTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExplanationPathWarningTests(unittest.TestCase):
+    """Урок должен показывать путь к ответу: $3^2 = 3 \\cdot 3 = 9$, а не только «9»."""
+
+    def codes(self, blocks):
+        from objectives import explanation_path_warnings
+        return [item["code"] for item in explanation_path_warnings(blocks)]
+
+    def test_worked_example_with_one_step_is_flagged(self):
+        block = {"component": "WorkedExample", "content": {"problem": "Вычисли $3^2$", "steps": [{"description": "Ответ", "math": "$9$"}], "final_answer": "9"}}
+        self.assertEqual(self.codes([block]), ["worked_example_without_path"])
+
+    def test_worked_example_with_formula_but_no_math_steps_is_flagged(self):
+        block = {"component": "WorkedExample", "content": {"problem": "Вычисли $3^2$", "steps": [{"description": "Думаем"}, {"description": "Получаем"}], "final_answer": "9"}}
+        self.assertEqual(self.codes([block]), ["worked_example_without_path"])
+
+    def test_explanation_that_only_repeats_the_answer_is_flagged(self):
+        blocks = [
+            {"component": "IndependentProblem", "content": {"question": "$3^2$?", "correct_answer": "9", "explanation": "9."}},
+            {"component": "MasteryCheck", "content": {"questions": [{"question": "$2^3$?", "correct_answer": "8", "explanation": "Ответ 8"}]}},
+        ]
+        self.assertEqual(self.codes(blocks), ["explanation_without_path", "explanation_without_path"])
+
+    def test_explanation_that_shows_the_path_passes(self):
+        blocks = [
+            {"component": "WorkedExample", "content": {"problem": "Вычисли $3^2$", "steps": [
+                {"description": "Квадрат — это число, умноженное само на себя", "math": "$3^2 = 3 \\cdot 3$"},
+                {"description": "Перемножаем", "math": "$3 \\cdot 3 = 9$"},
+            ], "final_answer": "$3^2 = 3 \\cdot 3 = 9$"}},
+            {"component": "GuidedPractice", "content": {"question": "$3^2$?", "correct_answer": "9", "explanation": "$3^2 = 3 \\cdot 3 = 9$"}},
+            {"component": "IndependentProblem", "content": {"question": "?", "correct_answer": "Бишкек", "explanation": "Бишкек — столица, потому что там работают парламент и правительство."}},
+        ]
+        self.assertEqual(self.codes(blocks), [])
+
+    def test_quality_report_includes_path_warnings(self):
+        report = quality_report([{"component": "GuidedPractice", "content": {"correct_answer": "9", "explanation": "9"}}], "Вычислять степени")
+        self.assertIn("explanation_without_path", [item["code"] for item in report["quality_report"]["warnings"]])
