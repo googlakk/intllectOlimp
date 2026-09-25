@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .extract import Extraction
-from topic_semantics import infer_lesson_type, ambiguous_lesson_name
+from topic_semantics import infer_lesson_type, ambiguous_lesson_name, join_topic_details, split_topic_title
 
 
 ASSESSMENT_WORDS = (
@@ -181,6 +181,12 @@ def _consume_row(
             "они собраны в раздел без названия."
         )
 
+    name, details = split_topic_title(name)
+    if details:
+        warnings.append(
+            f"Название темы сокращено до «{name}», "
+            "подпункты и практические работы перенесены в ресурсы темы."
+        )
     if ambiguous_lesson_name(name):
         warnings.append(f"Проверьте тип занятия «{name}».")
     order += 1
@@ -192,7 +198,7 @@ def _consume_row(
         "review_required": ambiguous_lesson_name(name),
         "learning_objectives": _cell(row, mapping.objectives),
         "skills": _split_skills(row, mapping.skills),
-        "resources": _cell(row, mapping.resources),
+        "resources": join_topic_details(details, _cell(row, mapping.resources)),
         "note": _cell(row, mapping.note),
         "confidence": "high",
         "sort_order": order,

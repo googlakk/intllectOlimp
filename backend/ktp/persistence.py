@@ -1,5 +1,6 @@
 """Persistence use cases for imported KTP drafts."""
 
+import logging
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,16 +11,38 @@ from topic_semantics import CONSOLIDATION_TYPES, ambiguous_lesson_name
 from services.curriculum_graph import infer_topic_contract, rebuild_subject_graph
 
 
+logger = logging.getLogger(__name__)
+
+# Длины полей в базе (models.py): длиннее запись отвергается целиком.
+TOPIC_NAME_LIMIT = 500
+SECTION_NAME_LIMIT = 255
+
+
 class KtpPersistenceError(ApplicationError):
-    def __init__(self):
-        super().__init__(
-            status_code=500,
-            detail="Не удалось сохранить загруженный КТП",
-        )
+    def __init__(self, detail: str = "Не удалось сохранить загруженный КТП", status_code: int = 500):
+        super().__init__(status_code=status_code, detail=detail)
+
+
+def _check_lengths(payload: Any) -> None:
+    """Слишком длинное название — понятная ошибка до записи, а не 500 от базы."""
+    for section in payload.sections:
+        if len(section.name) > SECTION_NAME_LIMIT:
+            raise KtpPersistenceError(
+                f"Название раздела длиннее {SECTION_NAME_LIMIT} символов: «{section.name[:80]}…». Сократите его.",
+                status_code=422,
+            )
+        for topic in section.topics:
+            if len(topic.name) > TOPIC_NAME_LIMIT:
+                raise KtpPersistenceError(
+                    f"Название темы длиннее {TOPIC_NAME_LIMIT} символов: «{topic.name[:80]}…». "
+                    "Оставьте в названии саму тему, подпункты перенесите в ресурсы.",
+                    status_code=422,
+                )
 
 
 async def save_ktp_draft(payload: Any, db: AsyncSession) -> dict[str, Any]:
     """Persist a reviewed KTP draft as subject, sections, and topics."""
+    _check_lengths(payload)
     try:
         subject = Subject(
             name=payload.subject_name,
@@ -94,4 +117,6 @@ async def save_ktp_draft(payload: Any, db: AsyncSession) -> dict[str, Any]:
         }
     except Exception as exc:
         await db.rollback()
+        # Причина иначе теряется: учитель видит общую фразу, в логе — только 500.
+        logger.exception("KTP import failed for subject %r", getattr(payload, "subject_name", ""))
         raise KtpPersistenceError() from exc

@@ -110,5 +110,26 @@ class KtpPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(db.rollbacks, 1)
 
 
+    async def test_too_long_topic_name_is_a_clear_error_before_writing(self):
+        payload = self._payload()
+        payload.sections[0].topics[0].name = "Рельеф. " + "Подпункт темы. " * 40
+        db = FakeSession()
+
+        with self.assertRaises(KtpPersistenceError) as failed:
+            await save_ktp_draft(payload, db)
+
+        self.assertEqual(failed.exception.status_code, 422)
+        self.assertIn("длиннее 500 символов", failed.exception.detail)
+        self.assertEqual(db.rows, [])
+        self.assertEqual(db.commits, 0)
+
+    async def test_unexpected_failure_is_logged_with_its_cause(self):
+        db = FakeSession(fail_on_add_type=Topic)
+        with self.assertLogs("ktp.persistence", level="ERROR") as logs:
+            with self.assertRaises(KtpPersistenceError):
+                await save_ktp_draft(self._payload(), db)
+        self.assertIn("Traceback", logs.output[0])
+
+
 if __name__ == "__main__":
     unittest.main()

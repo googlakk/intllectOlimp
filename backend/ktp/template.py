@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from topic_semantics import infer_lesson_type, ambiguous_lesson_name
+from topic_semantics import infer_lesson_type, ambiguous_lesson_name, join_topic_details, split_topic_title
 
 import re
 from typing import Any
@@ -127,6 +127,12 @@ def map_standard_template(extraction: Extraction) -> dict[str, Any]:
         if hours <= 0:
             hours = 1
             warnings.append(f"Строка {row_number}: часы заменены на 1.")
+        topic_name, details = split_topic_title(topic_name)
+        if details:
+            warnings.append(
+                f"Строка {row_number}: название темы сокращено до «{topic_name}», "
+                "подпункты и практические работы перенесены в ресурсы темы."
+            )
         if ambiguous_lesson_name(topic_name):
             warnings.append(f"Строка {row_number}: проверьте тип занятия «{topic_name}».")
         objective = cell(row, "objectives")
@@ -138,7 +144,7 @@ def map_standard_template(extraction: Extraction) -> dict[str, Any]:
             "review_required": ambiguous_lesson_name(topic_name),
             "learning_objectives": objective,
             "skills": _skills(cell(row, "skills")),
-            "resources": cell(row, "resources"),
+            "resources": join_topic_details(details, cell(row, "resources")),
             "note": cell(row, "note"),
             "confidence": "high" if objective else "low",
         })
