@@ -100,7 +100,7 @@ class TopicTextbookLink(TextbookBase):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     topic_id: Mapped[int] = mapped_column(Integer)
     section_id: Mapped[int] = mapped_column(BigInteger)
-    status: Mapped[str] = mapped_column(String(12), default="suggested")  # suggested | confirmed
+    status: Mapped[str] = mapped_column(String(12), default="suggested")  # suggested | confirmed | rejected
     source: Mapped[str] = mapped_column(String(12), default="match")      # ktp | match | model | manual
     role: Mapped[str] = mapped_column(String(12), default="primary")      # primary | supporting
     score: Mapped[float | None] = mapped_column(Float)

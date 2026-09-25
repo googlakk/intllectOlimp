@@ -105,3 +105,32 @@ export const useTextbookSection = (id: number | null, sectionId: number | null) 
     queryFn: () => request<TextbookSectionView>(`/textbooks/${id}/sections/${sectionId}`),
     enabled: id !== null && sectionId !== null,
   });
+
+export type TopicLink = {
+  section_id: number; status: 'suggested' | 'confirmed'; source: 'ktp' | 'match' | 'model' | 'manual';
+  role: 'primary' | 'supporting'; score: number | null; number: string; title: string;
+};
+
+export type TextbookLinksOverview = {
+  sections: Array<{ id: number; number: string; title: string; chapter: string; printed_page: number | null }>;
+  topics: Array<{ id: number; ktp_number: string | null; name: string; lesson_type: string; uses_covered_topics: boolean; rejected: boolean; links: TopicLink[] }>;
+};
+
+export const useTextbookLinks = (id: number | null, enabled = true) =>
+  useQuery({
+    queryKey: ['textbook-links', id],
+    queryFn: () => request<TextbookLinksOverview>(`/textbooks/${id}/links`),
+    enabled: enabled && id !== null,
+    retry: false,
+  });
+
+export const suggestTextbookLinks = (id: number) =>
+  request<{ confirmed: number; suggested: number; not_found: number; skipped: number }>(`/textbooks/${id}/links/suggest`, { method: 'POST' });
+
+export const setTopicTextbookLinks = (id: number, topicId: number, sectionIds: number[]) =>
+  request<{ topic_id: number; section_ids: number[] }>(`/textbooks/${id}/links/${topicId}`, {
+    method: 'PUT', body: JSON.stringify({ section_ids: sectionIds }),
+  });
+
+export const setTextbookSubject = (id: number, subjectId: number) =>
+  request<Textbook>(`/textbooks/${id}/subject`, { method: 'PUT', body: JSON.stringify({ subject_id: subjectId }) });

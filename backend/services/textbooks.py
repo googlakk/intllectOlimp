@@ -594,3 +594,26 @@ async def update_page(textbook_id: int, page_index: int, text: str, db: AsyncSes
         section.items_status = "stale"
     await _guarded(db, db.commit())
     return _serialize_page(page, book.page_offset)
+
+
+async def set_textbook_subject(textbook_id: int, subject_id: int, db: AsyncSession, *, user: AuthPrincipal) -> dict[str, Any]:
+    """Указать предмет КТП, к темам которого привязывается учебник."""
+    from services.educator_access import require_subject_management
+
+    book = _require_access(await _guarded(db, db.get(Textbook, textbook_id)), user)
+    subject = await require_subject_management(user, subject_id, db)
+    if subject.grade != book.grade:
+        raise TextbookServiceError(422, "Предмет другого класса")
+    if book.subject_id != subject_id:
+        # Связи тем прежнего предмета с этой книгой снимаются — иначе генерация продолжила бы ими пользоваться.
+        from models import Section, Topic
+        from textbooks.models import TopicTextbookLink
+
+        new_topics = select(Topic.id).join(Section, Section.id == Topic.section_id).where(Section.subject_id == subject_id)
+        book_sections = select(TextbookSection.id).where(TextbookSection.textbook_id == book.id)
+        await _guarded(db, db.execute(delete(TopicTextbookLink).where(
+            TopicTextbookLink.section_id.in_(book_sections), TopicTextbookLink.topic_id.not_in(new_topics),
+        )))
+    book.subject_id = subject_id
+    await _guarded(db, db.commit())
+    return serialize_textbook(book)

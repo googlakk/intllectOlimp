@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth_dependencies import require_roles
 from database import get_db
 from services.auth import AuthPrincipal
-from services.textbooks import create_textbook, delete_unuploaded_textbook, get_section, get_textbook, list_textbooks, process_textbook, update_page
+from services.textbook_links import links_overview, set_topic_links, suggest_links
+from services.textbooks import create_textbook, delete_unuploaded_textbook, get_section, get_textbook, list_textbooks, process_textbook, set_textbook_subject, update_page
 
 router = APIRouter(prefix="/api/textbooks", tags=["textbooks"])
 
@@ -64,3 +65,35 @@ async def page(textbook_id: int, page_index: int, payload: PageUpdateInput,
 async def delete_unuploaded(textbook_id: int, user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
                             db: AsyncSession = Depends(get_db)):
     await delete_unuploaded_textbook(textbook_id, db, user=user)
+
+
+class TopicLinksInput(BaseModel):
+    section_ids: list[int] = Field(default_factory=list, max_length=10)
+
+
+@router.get("/{textbook_id}/links")
+async def links(textbook_id: int, user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
+                db: AsyncSession = Depends(get_db)):
+    return await links_overview(textbook_id, db, user=user)
+
+
+@router.post("/{textbook_id}/links/suggest")
+async def suggest(textbook_id: int, user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
+                  db: AsyncSession = Depends(get_db)):
+    return await suggest_links(textbook_id, db, user=user)
+
+
+@router.put("/{textbook_id}/links/{topic_id}")
+async def set_links(textbook_id: int, topic_id: int, payload: TopicLinksInput,
+                    user: AuthPrincipal = Depends(require_roles("admin", "teacher")), db: AsyncSession = Depends(get_db)):
+    return await set_topic_links(textbook_id, topic_id, payload.section_ids, db, user=user)
+
+
+class SubjectInput(BaseModel):
+    subject_id: int = Field(ge=1)
+
+
+@router.put("/{textbook_id}/subject")
+async def subject(textbook_id: int, payload: SubjectInput, user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
+                  db: AsyncSession = Depends(get_db)):
+    return await set_textbook_subject(textbook_id, payload.subject_id, db, user=user)

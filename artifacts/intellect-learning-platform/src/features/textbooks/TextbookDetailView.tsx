@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, RotateCw } from 'lucide-react';
-import { processTextbook, updateTextbookPage, useTextbook, useTextbookSection, type TextbookPageView } from '@/lib/api';
+import { processTextbook, setTextbookSubject, updateTextbookPage, useSubjects, useTextbook, useTextbookSection, type TextbookPageView } from '@/lib/api';
+import { TopicLinksPanel } from './TopicLinksPanel';
 import { parseMathText } from '@/components/blocks/ShortExplanation';
 import { ITEM_KIND_LABELS, textbookStatusView } from './textbookStatus';
 
@@ -21,6 +22,8 @@ export function TextbookDetailView({ id, onBack }: { id: number; onBack: () => v
   const { data, isLoading, isError } = useTextbook(id);
   const [sectionId, setSectionId] = useState<number | null>(null);
   const [runError, setRunError] = useState('');
+  const [tab, setTab] = useState<'sections' | 'topics'>('sections');
+  const { data: subjects } = useSubjects();
 
   if (isLoading) return <p>Загружаем учебник…</p>;
   if (isError || !data) return <p role="alert">Не удалось загрузить учебник.</p>;
@@ -61,6 +64,29 @@ export function TextbookDetailView({ id, onBack }: { id: number; onBack: () => v
         {runError && <p role="alert" className="w-full text-sm text-destructive">{runError}</p>}
       </div>
 
+      <div className="flex flex-wrap items-center gap-2" role="tablist">
+        {(['sections', 'topics'] as const).map((value) => (
+          <button key={value} type="button" role="tab" aria-selected={tab === value} onClick={() => setTab(value)}
+            className={`min-h-[40px] rounded-xl px-4 text-sm font-semibold ${tab === value ? 'bg-primary text-primary-foreground' : 'border border-border hover:bg-muted'}`}>
+            {value === 'sections' ? 'Параграфы' : 'Темы КТП'}
+          </button>
+        ))}
+        <label className="ml-auto flex items-center gap-2 text-sm">Предмет КТП
+          <select value={textbook.subject_id ?? ''} className="min-h-[40px] rounded-lg border border-border bg-background px-2"
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              if (value && textbook.subject_id && !window.confirm('Сменить предмет? Привязки тем прежнего предмета к этому учебнику будут сняты.')) return;
+              if (value) void setTextbookSubject(textbook.id, value).then(() => queryClient.invalidateQueries({ queryKey: ['textbook', id] })).catch((reason) => setRunError(reason instanceof Error ? reason.message : 'Не удалось сохранить предмет'));
+            }}>
+            <option value="">— не выбран —</option>
+            {(subjects ?? []).filter((subject) => subject.grade === textbook.grade).map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+          </select>
+        </label>
+      </div>
+
+      {tab === 'topics' ? (
+        <TopicLinksPanel key={textbook.subject_id ?? 0} textbookId={textbook.id} hasSubject={textbook.subject_id !== null} hasSections={sections.length > 0} />
+      ) : (<>
       {review.length > 0 && (
         <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
           Проверьте распознавание на {review.length} стр. (PDF: {review.slice(0, 12).map((index) => index + 1).join(', ')}{review.length > 12 ? '…' : ''}) — там формулы или фрагменты прочитаны неуверенно.
@@ -91,6 +117,7 @@ export function TextbookDetailView({ id, onBack }: { id: number; onBack: () => v
       ) : (
         <p className="text-sm text-muted-foreground">Параграфы появятся после разбора оглавления.</p>
       )}
+      </>)}
     </section>
   );
 }
