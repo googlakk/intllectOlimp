@@ -29,6 +29,13 @@ class SystemBlock(TypedDict):
     cache: bool
 
 
+class UserImage(TypedDict):
+    """Картинка в сообщении пользователя (например, скан страницы учебника).
+    data — base64 без префикса data:, media_type — image/png или image/jpeg."""
+    media_type: str
+    data: str
+
+
 class LLMError(RuntimeError):
     """Ошибка обращения к модели с указанием поставщика и модели."""
 
@@ -75,6 +82,7 @@ class LLMProvider(Protocol):
         system_blocks: list[SystemBlock] | None = None,
         timeout: float | None = None,
         extra: dict[str, Any] | None = None,
+        user_images: list[UserImage] | None = None,
     ) -> ToolResult:
-        """system_blocks, timeout и extra необязательны: старые вызовы их не передают."""
+        """system_blocks, timeout, extra и user_images необязательны: старые вызовы их не передают."""
         ...

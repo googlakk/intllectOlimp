@@ -64,6 +64,17 @@ def system_content(system: str, blocks: list[dict[str, Any]] | None, model: str)
     ]
 
 
+def user_content(user: str, images: list[dict[str, str]] | None) -> Any:
+    """Картинки в форме OpenAI: data-URL в image_url, затем текст."""
+    if not images:
+        return user
+    return [
+        *({"type": "image_url", "image_url": {"url": f"data:{image['media_type']};base64,{image['data']}"}}
+          for image in images),
+        {"type": "text", "text": user},
+    ]
+
+
 class OpenRouterProvider:
     name = "openrouter"
 
@@ -107,6 +118,7 @@ class OpenRouterProvider:
         system_blocks: list[dict[str, Any]] | None = None,
         timeout: float | None = None,
         extra: dict[str, Any] | None = None,
+        user_images: list[dict[str, str]] | None = None,
     ) -> ToolResult:
         # extra — параметры Anthropic (например, thinking); шлюзу они не передаются.
         payload = {
@@ -114,7 +126,7 @@ class OpenRouterProvider:
             "max_tokens": max_tokens,
             "messages": [
                 {"role": "system", "content": system_content(system, system_blocks, model)},
-                {"role": "user", "content": user},
+                {"role": "user", "content": user_content(user, user_images)},
             ],
             "tools": [to_openai_tool(tool)],
             "tool_choice": {"type": "function", "function": {"name": tool["name"]}},

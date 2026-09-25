@@ -12,7 +12,7 @@ from .base import (
 )
 
 _ROUTER_EXPORTS = {
-    "TASK_KTP_COLUMNS", "TASK_LESSON", "Route", "DEFAULTS", "PROVIDERS",
+    "TASK_KTP_COLUMNS", "TASK_LESSON", "TASK_TUTOR", "TASK_TEXTBOOK_OCR", "Route", "DEFAULTS", "PROVIDERS",
     "call_tool", "resolve_route", "build_provider",
 }
 
@@ -29,6 +29,6 @@ def __getattr__(name: str):
 __all__ = [
     "LLMError", "LLMProvider", "ToolResult",
     "STOP_TOOL", "STOP_MAX_TOKENS", "STOP_OTHER",
-    "TASK_KTP_COLUMNS", "TASK_LESSON", "Route", "DEFAULTS", "PROVIDERS",
+    "TASK_KTP_COLUMNS", "TASK_LESSON", "TASK_TUTOR", "TASK_TEXTBOOK_OCR", "Route", "DEFAULTS", "PROVIDERS",
     "call_tool", "resolve_route", "build_provider",
 ]

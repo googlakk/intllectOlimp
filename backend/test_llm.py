@@ -483,3 +483,48 @@ class TutorCallOptionsTests(unittest.TestCase):
         from llm.router import TASK_TUTOR
         self.assertEqual(resolve_route(TASK_TUTOR, env={}).model, "claude-sonnet-5")
         self.assertEqual(resolve_route(TASK_TUTOR, env={"LLM_MODEL_TUTOR": "claude-haiku-4-5"}).model, "claude-haiku-4-5")
+
+
+class UserImagesTests(unittest.TestCase):
+    """Сканы страниц учебника идут картинками в сообщении пользователя."""
+
+    IMAGE = {"media_type": "image/png", "data": "iVBORw0KGgo="}
+
+    def test_anthropic_sends_images_before_text(self):
+        client = _FakeAnthropic(_AnthropicMessage([_AnthropicBlock("tool_use", input={"name": 1})], stop_reason="tool_use"))
+        run(AnthropicProvider(client=client).call_tool(
+            system="s", user="Распознай страницу", tool=TOOL, model="m", max_tokens=10, user_images=[self.IMAGE],
+        ))
+        self.assertEqual(client.seen["messages"][0]["content"], [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "iVBORw0KGgo="}},
+            {"type": "text", "text": "Распознай страницу"},
+        ])
+
+    def test_without_images_message_stays_a_string(self):
+        client = _FakeAnthropic(_AnthropicMessage([_AnthropicBlock("tool_use", input={"name": 1})], stop_reason="tool_use"))
+        run(AnthropicProvider(client=client).call_tool(system="s", user="u", tool=TOOL, model="m", max_tokens=10))
+        self.assertEqual(client.seen["messages"][0]["content"], "u")
+
+    def test_openrouter_sends_data_url(self):
+        from llm.openrouter_provider import user_content
+        self.assertEqual(user_content("u", [self.IMAGE])[0],
+                         {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgo="}})
+        self.assertEqual(user_content("u", None), "u")
+
+    def test_textbook_ocr_task_defaults(self):
+        from llm.router import TASK_TEXTBOOK_OCR
+        self.assertEqual(resolve_route(TASK_TEXTBOOK_OCR, env={}).model, "claude-sonnet-5")
+
+    def test_router_skips_empty_images_and_rejects_bad_format(self):
+        class OldProvider:
+            name = "old"
+
+            async def call_tool(self, *, system, user, tool, model, max_tokens):
+                return ToolResult(data={"name": 1}, stop_reason=STOP_TOOL)
+
+        env = {"LLM_PROVIDER": "anthropic"}
+        self.assertTrue(run(call_tool(TASK_LESSON, system="s", user="u", tool=TOOL, max_tokens=10,
+                                      provider=OldProvider(), env=env, user_images=[])).ok)
+        with self.assertRaises(LLMError):
+            run(call_tool(TASK_LESSON, system="s", user="u", tool=TOOL, max_tokens=10, provider=OldProvider(), env=env,
+                          user_images=[{"media_type": "application/pdf", "data": "x"}]))

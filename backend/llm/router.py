@@ -22,13 +22,16 @@ from dataclasses import dataclass
 from typing import Any
 
 from .anthropic_provider import AnthropicProvider
-from .base import LLMError, LLMProvider, SystemBlock, ToolResult
+from .base import LLMError, LLMProvider, SystemBlock, ToolResult, UserImage
 from .openrouter_provider import OpenRouterProvider
 
 # Задачи, которые сейчас есть в продукте.
 TASK_KTP_COLUMNS = "ktp-columns"
 TASK_LESSON = "lesson"
 TASK_TUTOR = "tutor"
+TASK_TEXTBOOK_OCR = "textbook-ocr"
+
+IMAGE_MEDIA_TYPES = frozenset({"image/png", "image/jpeg", "image/webp", "image/gif"})
 
 # Значения по умолчанию: без единой настройки всё работает как раньше —
 # прямой Anthropic. Переход на шлюз включается переменными окружения.
@@ -44,6 +47,11 @@ DEFAULTS: dict[str, dict[str, str]] = {
     # Тьютор отвечает ученику в реальном времени: нужна сильная модель,
     # но короткие ответы. Модель меняется переменной LLM_MODEL_TUTOR.
     TASK_TUTOR: {
+        "anthropic": "claude-sonnet-5",
+        "openrouter": "anthropic/claude-sonnet-5",
+    },
+    # Распознавание сканов учебника: формулы и номера задач должны быть точными.
+    TASK_TEXTBOOK_OCR: {
         "anthropic": "claude-sonnet-5",
         "openrouter": "anthropic/claude-sonnet-5",
     },
@@ -113,6 +121,7 @@ async def call_tool(
     system_blocks: list[SystemBlock] | None = None,
     timeout: float | None = None,
     extra: dict[str, Any] | None = None,
+    user_images: list[UserImage] | None = None,
 ) -> ToolResult:
     """Единственная точка входа для приложения.
 
@@ -124,10 +133,17 @@ async def call_tool(
     engine = provider if provider is not None else build_provider(route.provider)
     # Новые параметры передаются, только если заданы: старые поставщики и
     # тестовые подмены их не знают.
+    if user_images:
+        for image in user_images:
+            if image.get("media_type") not in IMAGE_MEDIA_TYPES:
+                raise LLMError(f"Неподдерживаемый формат изображения: {image.get('media_type')}")
     optional = {
         key: value
-        for key, value in (("system_blocks", system_blocks), ("timeout", timeout), ("extra", extra))
-        if value is not None
+        for key, value in (
+            ("system_blocks", system_blocks), ("timeout", timeout), ("extra", extra), ("user_images", user_images),
+        )
+        # Пустой список картинок — то же, что их нет: старые поставщики параметр не знают.
+        if value is not None and not (key == "user_images" and not value)
     }
     return await engine.call_tool(
         system=system, user=user, tool=tool,

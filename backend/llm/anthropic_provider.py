@@ -23,6 +23,17 @@ def _system_param(system: str, blocks: list[dict[str, Any]] | None) -> Any:
     ]
 
 
+def _user_content(user: str, images: list[dict[str, str]] | None) -> Any:
+    """Без картинок — строка, как раньше; с картинками — сначала изображения, потом текст."""
+    if not images:
+        return user
+    return [
+        *({"type": "image", "source": {"type": "base64", "media_type": image["media_type"], "data": image["data"]}}
+          for image in images),
+        {"type": "text", "text": user},
+    ]
+
+
 class AnthropicProvider:
     name = "anthropic"
 
@@ -56,6 +67,7 @@ class AnthropicProvider:
         system_blocks: list[dict[str, Any]] | None = None,
         timeout: float | None = None,
         extra: dict[str, Any] | None = None,
+        user_images: list[dict[str, str]] | None = None,
     ) -> ToolResult:
         client = self._build_client()
         if timeout is not None and hasattr(client, "with_options"):
@@ -67,7 +79,7 @@ class AnthropicProvider:
                 system=_system_param(system, system_blocks),
                 tools=[tool],
                 tool_choice={"type": "tool", "name": tool["name"]},
-                messages=[{"role": "user", "content": user}],
+                messages=[{"role": "user", "content": _user_content(user, user_images)}],
                 **(extra or {}),
             )
         except Exception as exc:  # сеть, ключ, лимиты — наверх с контекстом
