@@ -1,10 +1,10 @@
 import { request } from './client';
 import type { BlockMediaPlan, EducationalImageRequest, EducationalImageResponse, EducationalVideoRequest, EducationalVideoResponse, LessonMediaPlan } from './types';
 
-export const getLessonMediaPlan = (lessonId: number) =>
+export const getLessonMediaPlan = (lessonId: number, options: { imagesOnly?: boolean } = {}) =>
   request<LessonMediaPlan>('/media/lesson-plan', {
     method: 'POST',
-    body: JSON.stringify({ lesson_id: lessonId }),
+    body: JSON.stringify({ lesson_id: lessonId, ...(options.imagesOnly ? { images_only: true } : {}) }),
   });
 
 export const getBlockMediaPlan = (payload: {

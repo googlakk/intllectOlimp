@@ -11,6 +11,7 @@ import LessonPlanningSummary from './LessonPlanningSummary';
 import AvatarConfigurationPanel from './AvatarConfigurationPanel';
 import LessonBlockBuilder from './LessonBlockBuilder';
 import ModelPicker, { useModelChoice } from './ModelPicker';
+import { LessonIllustrationsPanel, useLessonIllustrations } from './IllustrationsPanel';
 
 export default function EditorWorkspace({ topicId }: { topicId: number }) {
   const { user } = useAuth();
@@ -26,6 +27,8 @@ export default function EditorWorkspace({ topicId }: { topicId: number }) {
   const createDraft = useCreateLessonDraft();
   const aiModels = useAiModels();
   const lessonModel = useModelChoice(aiModels.data?.lesson, 'intellect:lesson-model');
+  const imageModel = useModelChoice(aiModels.data?.image, 'intellect:image-model');
+  const illustrations = useLessonIllustrations(topicId, imageModel.requestModel);
   const usedModel = generationModelLabel(lesson?.lesson_metadata?.generation_model, aiModels.data?.lesson.options);
   const [unsaved, setUnsaved] = useState(false);
   const [step, setStep] = useState(() => new URLSearchParams(window.location.search).has('preview') ? 3 : 2);
@@ -35,7 +38,7 @@ export default function EditorWorkspace({ topicId }: { topicId: number }) {
   const blocks = lesson?.blocks ?? [];
   const published = lesson?.status === 'published';
   const canUpdate = published && lesson?.has_unpublished_changes;
-  const busy = workflow.publishLessonMutation.isPending || workflow.unpublishLessonMutation.isPending || workflow.generateLessonMutation.isPending;
+  const busy = workflow.publishLessonMutation.isPending || workflow.unpublishLessonMutation.isPending || workflow.generateLessonMutation.isPending || illustrations.running;
   const error = workflow.publishLessonMutation.error || workflow.unpublishLessonMutation.error || workflow.generateLessonMutation.error || createDraft.error;
   return <div className="mx-auto max-w-6xl space-y-6 pb-12">
     <Link href="/dashboard/lessons" className="text-sm font-semibold text-muted-foreground">← Назад к программе</Link>
@@ -49,7 +52,8 @@ export default function EditorWorkspace({ topicId }: { topicId: number }) {
         <h2 className="text-xl font-bold">Подготовьте материалы</h2><p className="mt-2 text-sm text-muted-foreground">ИИ подготовит черновик. Проверьте объяснение, примеры и задания или добавьте их вручную.</p>
         <div className="mt-5 max-w-md"><ModelPicker label="Модель для плана урока" group={aiModels.data?.lesson} choice={lessonModel} disabled={busy} loadError={aiModels.isError} /></div>
         {usedModel && <p className="mt-2 text-xs text-muted-foreground">Текущий черновик подготовлен моделью: {usedModel}</p>}
-        <div className="my-5 flex flex-wrap gap-3"><button type="button" onClick={() => workflow.generateLesson(lessonModel.requestModel)} disabled={busy || unsaved} className="rounded-lg bg-primary px-5 py-3 font-bold text-primary-foreground disabled:opacity-50">{workflow.generateLessonMutation.isPending ? 'Готовим черновик…' : blocks.length ? 'Заменить черновик с помощью ИИ' : 'Подготовить черновик'}</button>
+        <LessonIllustrationsPanel lesson={lesson} state={illustrations} imageGroup={aiModels.data?.image} imageChoice={imageModel} disabled={busy && !illustrations.running} />
+        <div className="my-5 flex flex-wrap gap-3"><button type="button" onClick={() => workflow.generateLesson(lessonModel.requestModel, (generated) => { if (illustrations.enabled) void illustrations.start(generated); })} disabled={busy || unsaved} className="rounded-lg bg-primary px-5 py-3 font-bold text-primary-foreground disabled:opacity-50">{workflow.generateLessonMutation.isPending ? 'Готовим черновик…' : blocks.length ? 'Заменить черновик с помощью ИИ' : 'Подготовить черновик'}</button>
         {!lesson && <button type="button" disabled={createDraft.isPending || busy} onClick={async () => {
           if (!user) return;
           try { await createDraft.mutateAsync({ topic_id: topicId, teacher_id: user.id }); await Promise.all(lessonEditorInvalidationKeys(topicId).map(queryKey => client.invalidateQueries({ queryKey }))); } catch { /* Error is displayed above. */ }

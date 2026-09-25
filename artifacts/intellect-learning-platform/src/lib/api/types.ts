@@ -351,9 +351,11 @@ export type MediaRecommendation = {
   must_include: string[];
   avoid: string[];
   success_check: string;
-  placement: 'slide_visual' | 'after_block';
+  placement: 'slide_visual' | 'after_block' | 'block_visual';
   component: string;
   priority: number;
+  media_slot_id?: string;
+  media_role?: string;
 };
 export type LessonMediaPlan = {
   subject: string;
@@ -361,6 +363,8 @@ export type LessonMediaPlan = {
   subject_family: string;
   strategy: string;
   visual_system?: string;
+  /** Сколько иллюстраций урок может получить при автогенерации. */
+  limit?: number;
   recommendations: MediaRecommendation[];
 };
 export type BlockMediaPlan = Omit<LessonMediaPlan, 'strategy'>;
