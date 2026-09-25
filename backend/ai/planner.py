@@ -230,6 +230,29 @@ def build_component_plan(shape: LessonShape, objectives: list[dict[str, Any]], f
     return plan
 
 
+def split_component_plan(component_plan: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """Делит план урока на части для генерации по частям.
+
+    Шаги одной цели идут в часть этой цели (разминка — вместе с первой целью),
+    общие шаги по нескольким целям и рефлексия — в последнюю часть. Порядок
+    шагов сохраняется. Если цель одна, часть тоже одна: делить нечего.
+    """
+    by_objective: dict[str, list[dict[str, Any]]] = {}
+    common: list[dict[str, Any]] = []
+    for step in component_plan:
+        ids = step.get("objective_ids") or []
+        if len(ids) == 1:
+            by_objective.setdefault(ids[0], []).append(step)
+        else:
+            common.append(step)
+    if len(by_objective) <= 1:
+        return [list(component_plan)] if component_plan else []
+    parts = list(by_objective.values())
+    if common:
+        parts.append(common)
+    return parts
+
+
 def build_topic_contract(
     *,
     topic_name: str,

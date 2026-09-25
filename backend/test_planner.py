@@ -1,6 +1,6 @@
 import unittest
 
-from ai.planner import build_topic_contract
+from ai.planner import build_topic_contract, split_component_plan
 from objectives import quality_report
 
 
@@ -80,6 +80,35 @@ class PlannerTests(unittest.TestCase):
     def test_lesson_type_overrides_shape(self):
         self.assertEqual(plan(lesson_type="assessment")["topic_contract"]["lesson_shape"], "assessment_only")
         self.assertEqual(plan(lesson_type="project")["topic_contract"]["lesson_shape"], "project_or_practical")
+
+
+class SplitPlanTests(unittest.TestCase):
+    """Большой урок генерируется по частям: по одной на цель и общая в конце."""
+
+    def plan(self, objectives):
+        return build_topic_contract(
+            topic_name="Степени", subject_name="Алгебра", learning_objectives=objectives,
+            skills=[], resources=None, grade=7, hours=2, lesson_type="study",
+        )["component_plan"]
+
+    def test_parts_keep_every_step_in_order(self):
+        plan = self.plan("Вычислять степени. Сравнивать степени. Применять свойства степеней.")
+        parts = split_component_plan(plan)
+        self.assertEqual(len(parts), 4)
+        self.assertEqual([step for part in parts for step in part], plan)
+
+    def test_warm_up_opens_the_first_part(self):
+        parts = split_component_plan(self.plan("Вычислять степени. Сравнивать степени. Применять свойства степеней."))
+        self.assertEqual(parts[0][0]["role"], "diagnose")
+        self.assertTrue(all(len(step["objective_ids"]) == 1 for part in parts[:-1] for step in part))
+
+    def test_mastery_check_and_reflection_close_the_last_part(self):
+        last = split_component_plan(self.plan("Вычислять степени. Сравнивать степени. Применять свойства степеней."))[-1]
+        self.assertEqual([step["role"] for step in last][-2:], ["assess", "reflect"])
+
+    def test_single_objective_is_one_part(self):
+        plan = self.plan("Вычислять степени.")
+        self.assertEqual(split_component_plan(plan), [plan])
 
 
 class ContractQualityTests(unittest.TestCase):
