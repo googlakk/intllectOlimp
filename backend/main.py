@@ -26,9 +26,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from cache_policy import api_cache_control
 from database import Base, engine, warm_database_pool
 from errors import ApplicationError
-from routes import topics, accounts, auth, avatar, components, curriculum, dashboard, ktp, lessons, media, progress, subjects
+from routes import topics, accounts, ai_models, auth, avatar, components, curriculum, dashboard, ktp, lessons, media, progress, subjects
 from schema_compat import apply_schema_compatibility
 from seed import seed_if_empty
+from static_site import mount_frontend
 from auth_dependencies import require_roles
 
 
@@ -73,7 +74,7 @@ app.include_router(auth.router)
 app.include_router(accounts.router)
 app.include_router(topics.router)
 app.include_router(avatar.webhook_router)
-for router in (ktp.router, components.router, avatar.router, dashboard.router):
+for router in (ktp.router, components.router, avatar.router, dashboard.router, ai_models.router):
     app.include_router(router, dependencies=[Depends(require_roles("admin", "teacher"))])
 app.include_router(media.router)
 app.include_router(avatar.asset_router)
@@ -85,3 +86,7 @@ for router in (subjects.router, curriculum.router, lessons.router, progress.rout
 @app.get("/api/healthz")
 async def health():
     return {"status": "ok"}
+
+
+# Последним: перехватывает все остальные пути и отдаёт собранный сайт.
+mount_frontend(app)

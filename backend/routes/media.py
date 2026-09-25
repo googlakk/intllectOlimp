@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from auth_dependencies import require_roles
 from llm import LLMError
+from llm.catalog import ModelChoiceError, resolve_image_choice
 from llm.media import build_educational_media_prompt, media_provider
 from media_planner import build_block_media_plan, build_lesson_media_plan
 from models import GeneratedLesson, GenerationJob, LessonAsset, LessonVersion
@@ -40,7 +41,7 @@ class EducationalImageInput(BaseModel):
     grade: int | None = Field(default=None, ge=1, le=12)
     concept: str | None = None
     learning_goal: str | None = None
-    visual_form: str | None = "labeled explanatory diagram"
+    visual_form: str | None = None
     visual_intent: str | None = "structure"
     pedagogical_role: str | None = "conceptual explanation support"
     misconception_to_avoid: str | None = None
@@ -50,7 +51,7 @@ class EducationalImageInput(BaseModel):
     avoid: list[str] = Field(default_factory=list, max_length=6)
     success_check: str | None = None
     prompt: str | None = None
-    style: str = "clean academic educational diagram"
+    style: str | None = None
     labels_language: str = "ru"
     aspect_ratio: str = "16:9"
     resolution: str = "1K"
@@ -72,7 +73,7 @@ class EducationalVideoInput(BaseModel):
     grade: int | None = Field(default=None, ge=1, le=12)
     concept: str | None = None
     learning_goal: str | None = None
-    visual_form: str | None = "short step-by-step explanatory animation"
+    visual_form: str | None = None
     visual_intent: str | None = "process"
     pedagogical_role: str | None = "dynamic explanation support"
     misconception_to_avoid: str | None = None
@@ -82,7 +83,7 @@ class EducationalVideoInput(BaseModel):
     avoid: list[str] = Field(default_factory=list, max_length=6)
     success_check: str | None = None
     prompt: str | None = None
-    style: str = "clear academic educational animation"
+    style: str | None = None
     labels_language: str = "ru"
     aspect_ratio: str = "16:9"
     duration: int = Field(default=6, ge=2, le=20)
@@ -197,10 +198,14 @@ async def generate_image(
         success_check=payload.success_check,
     )
     try:
+        selected_model = resolve_image_choice(payload.model)
+    except ModelChoiceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
         provider = _provider()
         result = await provider.generate_image(
             prompt=prompt,
-            model=payload.model,
+            model=selected_model,
             aspect_ratio=payload.aspect_ratio,
             resolution=payload.resolution,
             quality=payload.quality,

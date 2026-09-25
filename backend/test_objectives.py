@@ -3,7 +3,7 @@ from copy import deepcopy
 import hashlib
 import re
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from models import GeneratedLesson, Section, Student, Subject, Teacher, Topic
 from objectives import (
@@ -809,6 +809,47 @@ class LessonGenerateServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(lesson.lesson_metadata["block_budget"]["min"], 5)
         self.assertTrue(lesson.lesson_metadata["component_plan"])
         self.assertIn("quality_report", lesson.lesson_metadata)
+
+    async def test_generate_uses_selected_model_and_records_it(self):
+        teacher, topic, _section, _subject, db = self._context()
+        seen = {}
+
+        async def fake_generator(**kwargs):
+            seen.update(kwargs)
+            return complete_single_objective_blocks(topic.learning_objectives)
+
+        with patch.dict("os.environ", {"OPENROUTER_API_KEY": "sk-or-test"}):
+            lesson = await generate_lesson_draft(
+                topic_id=topic.id,
+                teacher_id=teacher.id,
+                db=db,
+                lesson_generator=fake_generator,
+                model_choice="openrouter:openai/gpt-6-sol",
+            )
+
+        self.assertEqual(seen["model_route"].model, "openai/gpt-6-sol")
+        self.assertEqual(
+            lesson.lesson_metadata["generation_model"],
+            {"provider": "openrouter", "model": "openai/gpt-6-sol"},
+        )
+
+    async def test_generate_rejects_unlisted_model_before_calling_provider(self):
+        teacher, topic, _section, _subject, db = self._context()
+
+        async def fake_generator(**_kwargs):
+            raise AssertionError("провайдер не должен вызываться")
+
+        with self.assertRaises(LessonServiceError) as rejected:
+            await generate_lesson_draft(
+                topic_id=topic.id,
+                teacher_id=teacher.id,
+                db=db,
+                lesson_generator=fake_generator,
+                model_choice="openrouter:evil/any-model",
+            )
+
+        self.assertEqual(rejected.exception.status_code, 422)
+        self.assertEqual(db.commits, 0)
 
     async def test_generate_reuses_existing_lesson_row(self):
         teacher, topic, _section, _subject, db = self._context(

@@ -3,13 +3,14 @@ import { Link } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthContext';
 import BlockRenderer from '@/components/blocks/BlockRenderer';
-import { useCreateLessonDraft, useGetLesson, useTopic, useTeacherOutline } from '@/lib/api';
+import { useAiModels, useCreateLessonDraft, useGetLesson, useTopic, useTeacherOutline } from '@/lib/api';
 import { getLessonQualityState } from '@/features/lessons/quality';
 import { useLessonEditorWorkflow, lessonEditorInvalidationKeys } from './workflow';
 import TopicForm from '@/features/teacherLessons/TopicForm';
 import LessonPlanningSummary from './LessonPlanningSummary';
 import AvatarConfigurationPanel from './AvatarConfigurationPanel';
 import LessonBlockBuilder from './LessonBlockBuilder';
+import ModelPicker, { useModelChoice } from './ModelPicker';
 
 export default function EditorWorkspace({ topicId }: { topicId: number }) {
   const { user } = useAuth();
@@ -23,6 +24,9 @@ export default function EditorWorkspace({ topicId }: { topicId: number }) {
   const section = outline.data?.find(item => item.id === topic?.section_id);
   const workflow = useLessonEditorWorkflow(topicId, lesson);
   const createDraft = useCreateLessonDraft();
+  const aiModels = useAiModels();
+  const lessonModel = useModelChoice(aiModels.data?.lesson, 'intellect:lesson-model');
+  const usedModel = generationModelLabel(lesson?.lesson_metadata?.generation_model, aiModels.data?.lesson.options);
   const [unsaved, setUnsaved] = useState(false);
   const [step, setStep] = useState(() => new URLSearchParams(window.location.search).has('preview') ? 3 : 2);
   const [acknowledged, setAcknowledged] = useState(false);
@@ -43,7 +47,9 @@ export default function EditorWorkspace({ topicId }: { topicId: number }) {
       {step === 1 && <>{section && topic ? <TopicForm key={topic.id} section={section} topic={topic} onClose={() => setStep(2)} /> : <div className="rounded-lg border p-5"><h2 className="font-bold">{topic?.name}</h2><p className="mt-2">{topic?.learning_objectives}</p><Link href="/dashboard/lessons" className="underline">Открыть предмет в программе для изменения темы</Link></div>}</>}
       {step === 2 && <section className="rounded-xl border bg-card p-4 md:p-6">
         <h2 className="text-xl font-bold">Подготовьте материалы</h2><p className="mt-2 text-sm text-muted-foreground">ИИ подготовит черновик. Проверьте объяснение, примеры и задания или добавьте их вручную.</p>
-        <div className="my-5 flex flex-wrap gap-3"><button type="button" onClick={workflow.generateLesson} disabled={busy || unsaved} className="rounded-lg bg-primary px-5 py-3 font-bold text-primary-foreground disabled:opacity-50">{workflow.generateLessonMutation.isPending ? 'Готовим черновик…' : blocks.length ? 'Заменить черновик с помощью ИИ' : 'Подготовить черновик'}</button>
+        <div className="mt-5 max-w-md"><ModelPicker label="Модель для плана урока" group={aiModels.data?.lesson} choice={lessonModel} disabled={busy} loadError={aiModels.isError} /></div>
+        {usedModel && <p className="mt-2 text-xs text-muted-foreground">Текущий черновик подготовлен моделью: {usedModel}</p>}
+        <div className="my-5 flex flex-wrap gap-3"><button type="button" onClick={() => workflow.generateLesson(lessonModel.requestModel)} disabled={busy || unsaved} className="rounded-lg bg-primary px-5 py-3 font-bold text-primary-foreground disabled:opacity-50">{workflow.generateLessonMutation.isPending ? 'Готовим черновик…' : blocks.length ? 'Заменить черновик с помощью ИИ' : 'Подготовить черновик'}</button>
         {!lesson && <button type="button" disabled={createDraft.isPending || busy} onClick={async () => {
           if (!user) return;
           try { await createDraft.mutateAsync({ topic_id: topicId, teacher_id: user.id }); await Promise.all(lessonEditorInvalidationKeys(topicId).map(queryKey => client.invalidateQueries({ queryKey }))); } catch { /* Error is displayed above. */ }
@@ -64,4 +70,11 @@ export default function EditorWorkspace({ topicId }: { topicId: number }) {
       </section>}
     </>}
   </div>;
+}
+
+function generationModelLabel(value: unknown, options: { id: string; label: string }[] | undefined): string {
+  if (!value || typeof value !== 'object') return '';
+  const { provider, model } = value as { provider?: unknown; model?: unknown };
+  if (typeof model !== 'string') return '';
+  return options?.find(option => option.id === `${String(provider)}:${model}`)?.label || model;
 }

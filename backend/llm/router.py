@@ -102,13 +102,15 @@ async def call_tool(
     max_tokens: int,
     provider: LLMProvider | None = None,
     env: dict[str, str] | None = None,
+    route: Route | None = None,
 ) -> ToolResult:
     """Единственная точка входа для приложения.
 
     Код вызывающей стороны не знает ни поставщика, ни модели — только задачу.
     Поэтому переезд на свои сервера не затрагивает бизнес-логику.
     """
-    route = resolve_route(task, env)
+    # Явный маршрут — выбор учителя из проверенного каталога (catalog.py).
+    route = route or resolve_route(task, env)
     engine = provider if provider is not None else build_provider(route.provider)
     return await engine.call_tool(
         system=system, user=user, tool=tool,

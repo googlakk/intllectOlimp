@@ -5,6 +5,7 @@ import {
   generateEducationalImage,
   generateEducationalVideo,
   getBlockMediaPlan,
+  useAiModels,
   useUpdateLessonBlocks,
   type EducationalVideoResponse,
   type GeneratedLesson,
@@ -12,6 +13,7 @@ import {
 } from '@/lib/api';
 import { lessonEditorInvalidationKeys } from './workflow';
 import { placeGeneratedMedia, type MediaPlacementTarget, type PlacedLessonMedia } from './mediaPlacement';
+import ModelPicker, { useModelChoice } from './ModelPicker';
 
 export const MEDIA_CAPABLE_COMPONENTS = new Set([
   'ShortExplanation', 'KeyConcept', 'WorkedExample', 'MindMap', 'Timeline',
@@ -34,6 +36,8 @@ export default function BlockMediaGenerator({ lesson, topicId, blockIndex, onClo
   const [teacherPrompt, setTeacherPrompt] = useState('');
   const queryClient = useQueryClient();
   const updateBlocks = useUpdateLessonBlocks();
+  const aiModels = useAiModels();
+  const imageModel = useModelChoice(aiModels.data?.image, 'intellect:image-model');
   const planQuery = useQuery({
     queryKey: ['block-media-plan', lesson.id, lesson.active_version_id, blockIndex, slides.length ? slideIndex : null, kind],
     queryFn: () => getBlockMediaPlan({
@@ -55,7 +59,7 @@ export default function BlockMediaGenerator({ lesson, topicId, blockIndex, onClo
       const request = mediaRequest(lesson, item, teacherPrompt.trim());
       let media: PlacedLessonMedia;
       if (kind === 'image') {
-        const result = await generateEducationalImage(request);
+        const result = await generateEducationalImage({ ...request, model: imageModel.requestModel });
         media = {
           kind: 'image', url: result.url || result.data_url,
           alt_text: `Учебная визуализация: ${item.title}`,
@@ -98,6 +102,8 @@ export default function BlockMediaGenerator({ lesson, topicId, blockIndex, onClo
             <button type="button" onClick={() => setKind('video')} className={`flex h-11 items-center justify-center gap-2 rounded-lg border text-sm font-bold ${kind === 'video' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card text-muted-foreground'}`}><PlayCircle className="h-4 w-4" /> Видео</button>
           </div>
 
+          {kind === 'image' && <ModelPicker label="Модель для изображения" group={aiModels.data?.image} choice={imageModel} disabled={generation.isPending} loadError={aiModels.isError} />}
+
           <label className="block text-xs font-semibold text-muted-foreground">
             Что важно показать? <span className="font-normal">Необязательно</span>
             <textarea
@@ -109,8 +115,8 @@ export default function BlockMediaGenerator({ lesson, topicId, blockIndex, onClo
           </label>
 
           <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
-            <p className="font-bold text-foreground">Системный визуальный контракт применяется автоматически</p>
-            <p className="mt-1">Сохраняются стиль всего урока, точный контекст блока, учебная цель, терминология предмета и защита от фактических искажений. Ваше уточнение дополняет, но не заменяет эти правила.</p>
+            <p className="font-bold text-foreground">Медиа усиливает блок, а не повторяет его</p>
+            <p className="mt-1">Получится иллюстрация без текста: подписи, формулы и числа остаются в самом блоке. Сохраняются единый стиль урока, контекст блока и точность фактов. Если на изображении нужна конкретная надпись или число, прямо напишите об этом в уточнении.</p>
           </div>
 
           {planQuery.isLoading && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Анализируем выбранный блок...</div>}

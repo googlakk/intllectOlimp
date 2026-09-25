@@ -32,10 +32,10 @@ const lessonManifestPath = (topicId: number) => `/lessons/${topicId}/manifest`;
 export const getStudentLessonManifest = (topicId: number) =>
   requestCached<StudentLessonManifest>(lessonManifestPath(topicId), LESSON_READ_CACHE_MS);
 
-export const generateLesson = (topicId: number, teacherId: number) =>
+export const generateLesson = (topicId: number, teacherId: number, model?: string) =>
   request<GeneratedLesson>('/lessons/generate', {
     method: 'POST',
-    body: JSON.stringify({ topic_id: topicId, teacher_id: teacherId }),
+    body: JSON.stringify({ topic_id: topicId, teacher_id: teacherId, ...(model ? { model } : {}) }),
   });
 
 export const updateLessonBlocks = (lessonId: number, blocks: Block[]) =>
@@ -92,8 +92,8 @@ export const useStudentLessonManifest = (
 
 export const useGenerateLesson = () =>
   useMutation({
-    mutationFn: (data: { topic_id: number; teacher_id: number }) =>
-      generateLesson(data.topic_id, data.teacher_id),
+    mutationFn: (data: { topic_id: number; teacher_id: number; model?: string }) =>
+      generateLesson(data.topic_id, data.teacher_id, data.model),
   });
 
 export const useUpdateLessonBlocks = () =>

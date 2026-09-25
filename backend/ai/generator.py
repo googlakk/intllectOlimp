@@ -1,13 +1,16 @@
 import json
 import os
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import tempfile
 from pathlib import Path
 
 from ai.planner import build_topic_contract
 from objectives import ALLOWED_COMPONENTS, decompose_objectives
+
+if TYPE_CHECKING:
+    from llm import Route
 
 MODEL = "claude-sonnet-4-6"
 
@@ -177,7 +180,9 @@ correct_segments должны дословно совпадать с предл�
 Каждый id уникален внутри презентации (slide-1, slide-2...). learning_point — одна проверяемая
 мысль слайда. avatar_script — короткое устное дополнение именно к этому слайду: причинная связь,
 аналогия, акцент или предупреждение об ошибке; оно не должно зачитывать heading/body. media_slot
-добавляй только там, где визуализация действительно помогает понять learning_point. Не выдумывай
+добавляй только там, где визуализация действительно помогает понять learning_point. Медиа —
+иллюстрация без текста: must_show перечисляет предметы, явления и действия в кадре, а не надписи,
+формулы или числа (они остаются в heading/body). Не выдумывай
 URL: после генерации учитель привяжет реальный asset к этому слоту.
 
 13. Illustration:
@@ -334,6 +339,7 @@ async def generate_lesson(
     content_language: str = "ru",
     topic_contract: dict[str, Any] | None = None,
     component_plan: list[dict[str, Any]] | None = None,
+    model_route: "Route | None" = None,
 ) -> list[dict[str, Any]]:
     from llm import TASK_LESSON, call_tool
 
@@ -406,6 +412,7 @@ GeneratedMedia является только опциональным усиле
             user=retry_prompt,
             tool=LESSON_TOOL,
             max_tokens=MAX_TOKENS,
+            route=model_route,
         )
 
         # Обрыв по лимиту — не «некорректный JSON». Повтор тем же запросом

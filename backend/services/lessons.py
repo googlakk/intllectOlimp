@@ -798,7 +798,15 @@ async def generate_lesson_draft(
     teacher_id: int,
     db: AsyncSession,
     lesson_generator: LessonGenerator | None = None,
+    model_choice: str | None = None,
 ) -> GeneratedLesson:
+    from llm import TASK_LESSON, resolve_route
+    from llm.catalog import ModelChoiceError, resolve_lesson_choice
+
+    try:
+        model_route = resolve_lesson_choice(model_choice)
+    except ModelChoiceError as exc:
+        raise LessonServiceError(status_code=422, detail=str(exc)) from exc
     if await db.get(Teacher, teacher_id) is None:
         raise LessonServiceError(status_code=404, detail="Преподаватель не найден")
 
@@ -850,6 +858,8 @@ async def generate_lesson_draft(
             content_language=subject.instruction_language,
             topic_contract=plan["topic_contract"],
             component_plan=plan["component_plan"],
+            # Старые генераторы (и тестовые подмены) аргумент не знают.
+            **({"model_route": model_route} if model_route else {}),
         )
     except Exception as exc:
         raise LessonServiceError(
@@ -883,6 +893,7 @@ async def generate_lesson_draft(
         topic.lesson_type,
         topic.learning_objectives,
     )
+    used_route = model_route or resolve_route(TASK_LESSON)
     lesson.lesson_metadata = {
         "subject_name": subject.name,
         "subject_grade": subject.grade,
@@ -893,6 +904,7 @@ async def generate_lesson_draft(
         "teacher_review_required": profile["teacher_review_required"],
         "topic_name": topic.name,
         "lesson_type": topic.lesson_type,
+        "generation_model": {"provider": used_route.provider, "model": used_route.model},
         "covered_topic_ids": covered_ids,
         "source_assessment_topic_id": getattr(topic, "source_assessment_topic_id", None),
         "topic_hours": topic.hours,

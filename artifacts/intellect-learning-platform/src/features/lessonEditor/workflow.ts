@@ -30,11 +30,11 @@ export function useLessonEditorWorkflow(topicId: number, lesson: GeneratedLesson
     });
   };
 
-  const generateLesson = () => {
+  const generateLesson = (model?: string) => {
     if (!user) return;
     if (lesson?.blocks.length && !window.confirm('Заменить материалы черновика? Ваши правки в черновике будут заменены после успешной генерации. Опубликованный урок останется доступен ученикам.')) return;
     generateLessonMutation.mutate(
-      { topic_id: topicId, teacher_id: user.id },
+      { topic_id: topicId, teacher_id: user.id, model },
       { onSuccess: invalidateLessonQueries },
     );
   };

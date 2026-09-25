@@ -1,7 +1,7 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -30,6 +30,8 @@ router = APIRouter(prefix="/api/lessons", tags=["lessons"])
 class GenerateInput(BaseModel):
     topic_id: int
     teacher_id: int
+    # id варианта из /api/ai/models; пусто — модель по умолчанию.
+    model: str | None = Field(default=None, max_length=200)
 
 
 class BlocksInput(BaseModel):
@@ -81,6 +83,7 @@ async def generate(
             topic_id=payload.topic_id,
             teacher_id=teacher_id,
             db=db,
+            model_choice=payload.model,
         )
     except LessonServiceError as exc:
         raise_http_error(exc)

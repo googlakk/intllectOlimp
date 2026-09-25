@@ -3,6 +3,7 @@ import { formatApiDetail } from './api/client';
 export { formatApiDetail };
 export * from './api/auth';
 export * from './api/accounts';
+export * from './api/aiModels';
 export * from './api/avatar';
 export * from './api/catalog';
 export * from './api/components';
