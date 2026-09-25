@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { parseMathText } from './ShortExplanation';
+import { TaskCondition } from './BlockMedia';
 import { CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -9,10 +10,11 @@ export interface GuidedPracticeProps {
   input_type: "text" | "numeric" | "expression" | "number" | "multiple_choice";
   correct_answer: string | string[];
   explanation: string;
+  media?: unknown;
   onAnswer?: (isCorrect: boolean) => void;
 }
 
-export default function GuidedPractice({ question, hints, input_type, correct_answer, explanation, onAnswer }: GuidedPracticeProps) {
+export default function GuidedPractice({ question, hints, input_type, correct_answer, explanation, media, onAnswer }: GuidedPracticeProps) {
   const [value, setValue] = useState('');
   const [status, setStatus] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const [hintIndex, setHintIndex] = useState(0);
@@ -49,7 +51,7 @@ export default function GuidedPractice({ question, hints, input_type, correct_an
           <span className="w-2 h-2 rounded-full bg-primary"></span>
           Практика с подсказками
         </h3>
-        <div className="text-foreground text-base p-4 bg-muted/20 rounded-lg whitespace-pre-wrap">{parseMathText(question)}</div>
+        <TaskCondition media={media} className="text-foreground text-base p-4 bg-muted/20 rounded-lg">{parseMathText(question)}</TaskCondition>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">

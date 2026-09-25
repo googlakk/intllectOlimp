@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { parseMathText } from './ShortExplanation';
+import { TaskCondition } from './BlockMedia';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -9,11 +10,12 @@ export interface IndependentProblemProps {
   options?: string[];
   correct_answer: string | string[];
   explanation: string;
+  media?: unknown;
   difficulty: "basic" | "advanced" | "easy" | "medium" | "hard";
   onAnswer?: (isCorrect: boolean) => void;
 }
 
-export default function IndependentProblem({ question, type, options, correct_answer, explanation, difficulty, onAnswer }: IndependentProblemProps) {
+export default function IndependentProblem({ question, type, options, correct_answer, explanation, difficulty, media, onAnswer }: IndependentProblemProps) {
   const [value, setValue] = useState('');
   const [status, setStatus] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const [attempts, setAttempts] = useState(0);
@@ -68,9 +70,9 @@ export default function IndependentProblem({ question, type, options, correct_an
         </span>
       </div>
       
-      <div className="text-foreground p-4 bg-muted/20 rounded-lg whitespace-pre-wrap mb-6">
+      <TaskCondition media={media} className="text-foreground p-4 bg-muted/20 rounded-lg mb-6">
         {parseMathText(question)}
-      </div>
+      </TaskCondition>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {type === 'multiple_choice' && options ? (

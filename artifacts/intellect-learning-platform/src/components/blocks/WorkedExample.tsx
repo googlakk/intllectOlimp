@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { parseMathText } from './ShortExplanation';
+import { TaskCondition } from './BlockMedia';
 import { HelpCircle } from 'lucide-react';
 
 export interface WorkedExampleStep {
@@ -13,9 +14,10 @@ export interface WorkedExampleProps {
   problem: string;
   steps: WorkedExampleStep[];
   final_answer: string;
+  media?: unknown;
 }
 
-export default function WorkedExample({ problem, steps, final_answer }: WorkedExampleProps) {
+export default function WorkedExample({ problem, steps, final_answer, media }: WorkedExampleProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [activeHintIndex, setActiveHintIndex] = useState<number | null>(null);
 
@@ -29,10 +31,10 @@ export default function WorkedExample({ problem, steps, final_answer }: WorkedEx
   return (
     <div className="border rounded-xl p-6 my-6 bg-card shadow-sm">
       <h3 className="font-semibold text-lg mb-4 text-foreground">Пример решения</h3>
-      <div className="mb-6 text-foreground p-4 bg-muted/30 rounded-lg whitespace-pre-wrap">
+      <TaskCondition media={media} className="mb-6 text-foreground p-4 bg-muted/30 rounded-lg">
         <span className="font-medium mr-2 text-primary">Задача:</span>
         {parseMathText(problem)}
-      </div>
+      </TaskCondition>
       
       <div className="space-y-4 mb-6">
         <AnimatePresence initial={false}>

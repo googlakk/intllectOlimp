@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Maximize2 } from 'lucide-react';
 import type { Block } from '@/lib/api/types';
 import { useProtectedMediaUrl } from '@/lib/useProtectedMediaUrl';
@@ -11,7 +11,9 @@ export const INLINE_MEDIA_COMPONENTS = new Set([
 ]);
 
 /** Блоки, которые сами ставят картинку в нужное место своей вёрстки. */
-export const SELF_MEDIA_COMPONENTS = new Set(['ShortExplanation', 'KeyConcept', 'Timeline']);
+export const SELF_MEDIA_COMPONENTS = new Set([
+  'ShortExplanation', 'KeyConcept', 'Timeline', 'WorkedExample', 'GuidedPractice', 'IndependentProblem',
+]);
 
 export type InlineMedia = { kind?: string; url?: string; alt_text?: string; caption?: string };
 
@@ -63,13 +65,27 @@ export function BlockImage({ media, variant = 'top', className = '' }: { media: 
       </button>
       {value.caption && <figcaption className="mt-2 text-center text-sm text-muted-foreground">{value.caption}</figcaption>}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-5xl p-3 sm:p-4">
+        <DialogContent className="max-w-5xl p-3 pt-12 sm:p-4 sm:pt-12">
           <DialogTitle className="sr-only">{alt || 'Иллюстрация'}</DialogTitle>
           <img src={image.url} alt={alt} className="mx-auto max-h-[80vh] w-auto max-w-full rounded-lg" />
           {value.caption && <p className="text-center text-sm text-muted-foreground">{value.caption}</p>}
         </DialogContent>
       </Dialog>
     </figure>
+  );
+}
+
+/**
+ * Условие задачи со сценой: картинка слева от текста, на телефоне — над ним.
+ * Ученик сначала видит ситуацию, потом читает, что в ней нужно найти.
+ */
+export function TaskCondition({ media, className = '', children }: { media: unknown; className?: string; children: ReactNode }) {
+  const hasImage = Boolean(blockImage(media));
+  return (
+    <div className={`${className} ${hasImage ? 'grid gap-4 md:grid-cols-[minmax(0,38%)_minmax(0,1fr)] md:items-center' : ''}`}>
+      {hasImage && <BlockImage media={media} variant="side" />}
+      <div className="min-w-0 whitespace-pre-wrap">{children}</div>
+    </div>
   );
 }
 
