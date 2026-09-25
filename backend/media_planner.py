@@ -215,61 +215,130 @@ def build_block_media_plan(
     }
 
 
+# Где картинка помогает понять, а не подсказывает ответ. Порядок — приоритет:
+# сначала слайды объяснения, потом понятия, потом сцены задач и опытов.
+ILLUSTRATED_COMPONENTS: dict[str, str] = {
+    "Presentation": "slide",
+    "ShortExplanation": "concept",
+    "KeyConcept": "concept",
+    "WorkedExample": "task_scene",
+    "PredictionLab": "experiment_setup",
+    "BranchingScenario": "situation",
+    "GuidedPractice": "task_scene",
+    "IndependentProblem": "task_scene",
+    "Timeline": "cover",
+}
+_ROLE_PRIORITY = {"slide": 0, "concept": 1, "cover": 2, "situation": 3, "experiment_setup": 3, "task_scene": 4}
+# Для задач и опытов картинка показывает условие, но не ответ и не результат.
+NO_SPOILER_ROLES = {"task_scene", "experiment_setup", "situation"}
+NO_SPOILER_RULE = "the answer, the solution, the result or the outcome of the task or experiment"
+MEDIA_LIMITS = {"micro": 3, "standard": 6, "extended": 8, "unit": 8}
+
+
+def media_limit(metadata: dict[str, Any]) -> int:
+    contract = metadata.get("topic_contract") if isinstance(metadata.get("topic_contract"), dict) else {}
+    volume = str(contract.get("volume") or metadata.get("volume") or "standard")
+    return MEDIA_LIMITS.get(volume, MEDIA_LIMITS["standard"])
+
+
+def _has_media(content: dict[str, Any]) -> bool:
+    media = content.get("media") if isinstance(content.get("media"), dict) else {}
+    return bool(media.get("url") or content.get("url") or content.get("data_url"))
+
+
+def _slot(content: dict[str, Any]) -> dict[str, Any] | None:
+    slot = content.get("media_slot")
+    return slot if isinstance(slot, dict) else None
+
+
+def _strings(value: Any) -> list[str]:
+    return [item.strip() for item in value if isinstance(item, str) and item.strip()] if isinstance(value, list) else []
+
+
+def _block_heading(content: dict[str, Any], topic: str) -> str:
+    for key in ("title", "term", "heading", "problem", "question", "context"):
+        if (value := _text(content.get(key))):
+            return value[:120]
+    return topic
+
+
 def build_lesson_media_plan(
     blocks: list[dict[str, Any]], metadata: dict[str, Any] | None = None,
-    lesson_document: dict[str, Any] | None = None,
+    lesson_document: dict[str, Any] | None = None, *, allow_video: bool = True,
 ) -> dict[str, Any]:
+    """Места под картинки урока с лимитом по объёму урока.
+
+    Если генератор разметил места (media_slot), берём только их. У старых
+    уроков разметки нет — тогда кандидаты все подходящие блоки и слайды.
+    Уже заполненные места не предлагаем повторно.
+    """
     metadata = metadata or {}
     subject = str(metadata.get("subject_name") or "")
     topic = str(metadata.get("topic_name") or "Урок")
     profile = subject_profile(subject)
-    volume = str(metadata.get("lesson_shape") or metadata.get("topic_contract", {}).get("volume") or "standard")
-    limit = {"micro": 1, "standard": 2, "extended": 3, "unit": 4}.get(volume, 2)
+    limit = media_limit(metadata)
     scenes = {}
     for episode in (lesson_document or {}).get("episodes", []):
         for scene in episode.get("scenes", []):
             scenes[scene.get("original_block_index")] = scene.get("id")
 
-    recommendations: list[dict[str, Any]] = []
-    video_used = False
+    candidates: list[dict[str, Any]] = []
     for block_index, block in enumerate(blocks):
-        if len(recommendations) >= limit:
-            break
         component = str(block.get("component") or "")
+        role = ILLUSTRATED_COMPONENTS.get(component)
         content = block.get("content") if isinstance(block.get("content"), dict) else {}
-        if component not in EXPLANATION_COMPONENTS or component == "GeneratedMedia":
+        if role is None:
             continue
-        scene_id = scenes.get(block_index)
         if component == "Presentation" and isinstance(content.get("slides"), list):
             for slide_index, raw_slide in enumerate(content["slides"]):
-                if len(recommendations) >= limit or not isinstance(raw_slide, dict) or raw_slide.get("media"):
+                if not isinstance(raw_slide, dict) or _has_media(raw_slide):
                     continue
                 heading = _text(raw_slide.get("heading")) or _text(content.get("title")) or topic
-                context = _text(raw_slide) or heading
-                goal = _text(raw_slide.get("learning_point")) or heading
-                rec = _recommendation(
-                    index=len(recommendations), block_index=block_index, component=component,
-                    heading=heading, context=context, learning_goal=goal, profile=profile,
-                    scene_id=scene_id, slide_index=slide_index,
-                    slide_id=str(raw_slide.get("id") or f"slide-{slide_index + 1}"), video_used=video_used,
-                )
-                video_used = video_used or rec["kind"] == "video"
-                recommendations.append(rec)
-        elif not content.get("url") and not content.get("data_url"):
-            heading = _text(content.get("title")) or _text(content.get("term")) or topic
-            context = _text(content) or heading
-            rec = _recommendation(
-                index=len(recommendations), block_index=block_index, component=component,
-                heading=heading, context=context, learning_goal=heading, profile=profile,
-                scene_id=scene_id, video_used=video_used,
-            )
-            video_used = video_used or rec["kind"] == "video"
-            recommendations.append(rec)
+                candidates.append({
+                    "role": role, "block_index": block_index, "slide_index": slide_index, "component": component,
+                    "slot": _slot(raw_slide), "heading": heading, "context": _text(raw_slide) or heading,
+                    "goal": _text(raw_slide.get("learning_point")) or heading,
+                    "slide_id": str(raw_slide.get("id") or f"slide-{slide_index + 1}"),
+                })
+        elif not _has_media(content):
+            heading = _block_heading(content, topic)
+            slot = _slot(content)
+            candidates.append({
+                "role": role, "block_index": block_index, "slide_index": None, "component": component,
+                "slot": slot, "heading": heading, "context": _text(content) or heading,
+                "goal": _text((slot or {}).get("learning_purpose")) or heading, "slide_id": None,
+            })
+
+    if any(item["slot"] for item in candidates):
+        candidates = [item for item in candidates if item["slot"]]
+    candidates.sort(key=lambda item: (_ROLE_PRIORITY[item["role"]], item["block_index"], item["slide_index"] or 0))
+
+    recommendations: list[dict[str, Any]] = []
+    video_used = not allow_video
+    for item in candidates[:limit]:
+        slot = item["slot"] or {}
+        rec = _recommendation(
+            index=len(recommendations), block_index=item["block_index"], component=item["component"],
+            heading=item["heading"], context=item["context"], learning_goal=item["goal"], profile=profile,
+            scene_id=scenes.get(item["block_index"]), slide_index=item["slide_index"], slide_id=item["slide_id"],
+            video_used=video_used, preferred_kind=None if allow_video else "image",
+        )
+        video_used = video_used or rec["kind"] == "video"
+        rec["media_role"] = item["role"]
+        rec["media_slot_id"] = str(slot.get("id") or rec["id"])
+        rec["must_include"] = _strings(slot.get("must_show"))
+        rec["avoid"] = [*rec["avoid"], *_strings(slot.get("must_not_show"))]
+        if item["role"] in NO_SPOILER_ROLES:
+            rec["avoid"].append(NO_SPOILER_RULE)
+        if item["slide_index"] is None:
+            rec["placement"] = "block_visual"
+        recommendations.append(rec)
 
     return {
         "subject": subject,
         "topic": topic,
         "subject_family": profile["family"],
-        "strategy": f"{profile['family']} · {len(recommendations)} контекстных материала",
+        "limit": limit,
+        "strategy": f"{profile['family']} · {len(recommendations)} из {limit} иллюстраций",
         "recommendations": recommendations,
     }

@@ -216,6 +216,17 @@ correct_segments должны дословно совпадать с предл�
 формулы или числа (они остаются в heading/body). Не выдумывай
 URL: после генерации учитель привяжет реальный asset к этому слоту.
 
+Места под иллюстрации в других блоках. В content блоков ShortExplanation, KeyConcept,
+WorkedExample, GuidedPractice, IndependentProblem, PredictionLab, BranchingScenario и Timeline
+можно добавить "media_slot": {"id": string, "role": "demonstrate"|"compare"|"show_process"|"clarify",
+"placement": "block_visual", "learning_purpose": string, "must_show": string[], "must_not_show": string[]}.
+Ставь слот только там, где сцена реально помогает понять или представить условие; всего слотов
+на урок (вместе со слайдами): micro — до 3, standard — до 6, extended и unit — до 8.
+Для задач (WorkedExample, GuidedPractice, IndependentProblem), опытов (PredictionLab) и ситуаций
+(BranchingScenario) картинка показывает только условие: must_not_show обязательно содержит
+ответ, решение и результат. Никогда не ставь media_slot в RetrievalCheck, MasteryCheck, Reflection,
+схемы, сортировку, графики и симуляции.
+
 13. Illustration:
 {"title": string, "description": string, "svg_content": string, "caption"?: string}
 svg_content — безопасный автономный inline SVG без script, event-атрибутов и внешних ресурсов.

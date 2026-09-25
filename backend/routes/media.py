@@ -94,6 +94,8 @@ class EducationalVideoInput(BaseModel):
 
 class LessonMediaPlanInput(BaseModel):
     lesson_id: int = Field(ge=1)
+    # Автоиллюстрации при генерации урока: только картинки, без видео.
+    images_only: bool = False
 
 
 class BlockMediaPlanInput(BaseModel):
@@ -118,7 +120,9 @@ async def lesson_media_plan(
         version = await db.get(LessonVersion, lesson.active_version_id)
         if version is not None and isinstance(version.lesson_document, dict):
             document = version.lesson_document
-    return build_lesson_media_plan(lesson.blocks or [], lesson.lesson_metadata or {}, document)
+    return build_lesson_media_plan(
+        lesson.blocks or [], lesson.lesson_metadata or {}, document, allow_video=not payload.images_only,
+    )
 
 
 @router.post("/block-plan")
