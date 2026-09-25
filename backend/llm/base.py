@@ -13,12 +13,20 @@ Anthropic напрямую, OpenRouter или что-то следующее. О
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Protocol, TypedDict
 
 # Нормализованные причины остановки — одинаковые у всех поставщиков.
 STOP_TOOL = "tool_use"        # инструмент заполнен, данные есть
 STOP_MAX_TOKENS = "max_tokens"  # ответ не поместился
 STOP_OTHER = "other"          # модель ответила текстом или чем-то ещё
+
+
+class SystemBlock(TypedDict):
+    """Часть системного промпта. cache=True — поставщик может закэшировать
+    её и всё, что идёт до неё (у Anthropic — cache_control: ephemeral)."""
+
+    text: str
+    cache: bool
 
 
 class LLMError(RuntimeError):
@@ -64,5 +72,9 @@ class LLMProvider(Protocol):
         tool: dict[str, Any],
         model: str,
         max_tokens: int,
+        system_blocks: list[SystemBlock] | None = None,
+        timeout: float | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> ToolResult:
+        """system_blocks, timeout и extra необязательны: старые вызовы их не передают."""
         ...

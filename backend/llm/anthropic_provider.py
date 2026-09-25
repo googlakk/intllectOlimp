@@ -12,6 +12,17 @@ from typing import Any
 from .base import STOP_MAX_TOKENS, STOP_OTHER, STOP_TOOL, LLMError, ToolResult
 
 
+def _system_param(system: str, blocks: list[dict[str, Any]] | None) -> Any:
+    """Строка, как раньше, или список блоков с кэшем для повторяющихся частей."""
+    if not blocks:
+        return system
+    parts = ([{"text": system, "cache": False}] if system else []) + list(blocks)
+    return [
+        {"type": "text", "text": part["text"], **({"cache_control": {"type": "ephemeral"}} if part.get("cache") else {})}
+        for part in parts
+    ]
+
+
 class AnthropicProvider:
     name = "anthropic"
 
@@ -42,16 +53,22 @@ class AnthropicProvider:
         tool: dict[str, Any],
         model: str,
         max_tokens: int,
+        system_blocks: list[dict[str, Any]] | None = None,
+        timeout: float | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> ToolResult:
         client = self._build_client()
+        if timeout is not None and hasattr(client, "with_options"):
+            client = client.with_options(timeout=timeout, max_retries=1)
         try:
             message = await client.messages.create(
                 model=model,
                 max_tokens=max_tokens,
-                system=system,
+                system=_system_param(system, system_blocks),
                 tools=[tool],
                 tool_choice={"type": "tool", "name": tool["name"]},
                 messages=[{"role": "user", "content": user}],
+                **(extra or {}),
             )
         except Exception as exc:  # сеть, ключ, лимиты — наверх с контекстом
             raise LLMError(f"Запрос не прошёл: {exc}", provider=self.name, model=model) from exc
@@ -65,6 +82,8 @@ class AnthropicProvider:
             usage = {
                 "input_tokens": getattr(message.usage, "input_tokens", None),
                 "output_tokens": getattr(message.usage, "output_tokens", None),
+                "cache_read_input_tokens": getattr(message.usage, "cache_read_input_tokens", None),
+                "cache_creation_input_tokens": getattr(message.usage, "cache_creation_input_tokens", None),
             }
 
         tool_block = next(

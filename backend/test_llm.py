@@ -417,3 +417,69 @@ class GatewayIntegrationTests(unittest.TestCase):
         topics = [t for s in draft["sections"] for t in s["topics"]]
         self.assertEqual(len(topics), 61)
         self.assertEqual(draft["hours_per_year"], 61)
+
+
+
+class TutorCallOptionsTests(unittest.TestCase):
+    """Кэш промпта, тайм-аут и доп. параметры для тьютора — необязательны."""
+
+    BLOCKS = [{"text": "Политика тьютора", "cache": True}, {"text": "Контекст урока", "cache": True}]
+
+    def test_anthropic_sends_cached_system_blocks_timeout_and_extra(self):
+        class WithOptions(_FakeAnthropic):
+            def with_options(self, **options):
+                self.options = options
+                return self
+
+        client = WithOptions(_AnthropicMessage([_AnthropicBlock("tool_use", input={"name": 1})], stop_reason="tool_use"))
+        run(AnthropicProvider(client=client).call_tool(
+            system="", user="u", tool=TOOL, model="m", max_tokens=100,
+            system_blocks=self.BLOCKS, timeout=20, extra={"thinking": {"type": "disabled"}},
+        ))
+        self.assertEqual(client.seen["system"], [
+            {"type": "text", "text": "Политика тьютора", "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": "Контекст урока", "cache_control": {"type": "ephemeral"}},
+        ])
+        self.assertEqual(client.seen["thinking"], {"type": "disabled"})
+        self.assertEqual(client.options, {"timeout": 20, "max_retries": 1})
+
+    def test_anthropic_without_new_options_sends_plain_system(self):
+        client = _FakeAnthropic(_AnthropicMessage([_AnthropicBlock("tool_use", input={"name": 1})], stop_reason="tool_use"))
+        run(AnthropicProvider(client=client).call_tool(system="s", user="u", tool=TOOL, model="m", max_tokens=10))
+        self.assertEqual(client.seen["system"], "s")
+        self.assertNotIn("thinking", client.seen)
+
+    def test_openrouter_caches_only_for_anthropic_models(self):
+        from llm.openrouter_provider import system_content
+        parts = system_content("", self.BLOCKS, "anthropic/claude-sonnet-5")
+        self.assertEqual(parts[0]["cache_control"], {"type": "ephemeral"})
+        self.assertEqual(system_content("", self.BLOCKS, "openai/gpt-5"), "Политика тьютора\n\nКонтекст урока")
+        self.assertEqual(system_content("s", None, "anthropic/x"), "s")
+
+    def test_router_passes_new_options_only_when_set(self):
+        class OldProvider:
+            name = "old"
+
+            async def call_tool(self, *, system, user, tool, model, max_tokens):
+                return ToolResult(data={"name": 1}, stop_reason=STOP_TOOL)
+
+        class NewProvider:
+            name = "new"
+            seen = {}
+
+            async def call_tool(self, **kwargs):
+                NewProvider.seen = kwargs
+                return ToolResult(data={"name": 1}, stop_reason=STOP_TOOL)
+
+        env = {"LLM_PROVIDER": "anthropic"}
+        self.assertTrue(run(call_tool(TASK_LESSON, system="s", user="u", tool=TOOL, max_tokens=10, provider=OldProvider(), env=env)).ok)
+        run(call_tool(TASK_LESSON, system="", user="u", tool=TOOL, max_tokens=10, provider=NewProvider(), env=env,
+                      system_blocks=self.BLOCKS, timeout=20))
+        self.assertEqual(NewProvider.seen["system_blocks"], self.BLOCKS)
+        self.assertEqual(NewProvider.seen["timeout"], 20)
+        self.assertNotIn("extra", NewProvider.seen)
+
+    def test_tutor_task_has_defaults_and_env_override(self):
+        from llm.router import TASK_TUTOR
+        self.assertEqual(resolve_route(TASK_TUTOR, env={}).model, "claude-sonnet-5")
+        self.assertEqual(resolve_route(TASK_TUTOR, env={"LLM_MODEL_TUTOR": "claude-haiku-4-5"}).model, "claude-haiku-4-5")

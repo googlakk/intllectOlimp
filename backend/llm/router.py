@@ -22,12 +22,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from .anthropic_provider import AnthropicProvider
-from .base import LLMError, LLMProvider, ToolResult
+from .base import LLMError, LLMProvider, SystemBlock, ToolResult
 from .openrouter_provider import OpenRouterProvider
 
 # Задачи, которые сейчас есть в продукте.
 TASK_KTP_COLUMNS = "ktp-columns"
 TASK_LESSON = "lesson"
+TASK_TUTOR = "tutor"
 
 # Значения по умолчанию: без единой настройки всё работает как раньше —
 # прямой Anthropic. Переход на шлюз включается переменными окружения.
@@ -39,6 +40,12 @@ DEFAULTS: dict[str, dict[str, str]] = {
     TASK_LESSON: {
         "anthropic": "claude-sonnet-4-6",
         "openrouter": "anthropic/claude-sonnet-4.6",
+    },
+    # Тьютор отвечает ученику в реальном времени: нужна сильная модель,
+    # но короткие ответы. Модель меняется переменной LLM_MODEL_TUTOR.
+    TASK_TUTOR: {
+        "anthropic": "claude-sonnet-5",
+        "openrouter": "anthropic/claude-sonnet-5",
     },
 }
 
@@ -103,6 +110,9 @@ async def call_tool(
     provider: LLMProvider | None = None,
     env: dict[str, str] | None = None,
     route: Route | None = None,
+    system_blocks: list[SystemBlock] | None = None,
+    timeout: float | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> ToolResult:
     """Единственная точка входа для приложения.
 
@@ -112,7 +122,14 @@ async def call_tool(
     # Явный маршрут — выбор учителя из проверенного каталога (catalog.py).
     route = route or resolve_route(task, env)
     engine = provider if provider is not None else build_provider(route.provider)
+    # Новые параметры передаются, только если заданы: старые поставщики и
+    # тестовые подмены их не знают.
+    optional = {
+        key: value
+        for key, value in (("system_blocks", system_blocks), ("timeout", timeout), ("extra", extra))
+        if value is not None
+    }
     return await engine.call_tool(
         system=system, user=user, tool=tool,
-        model=route.model, max_tokens=max_tokens,
+        model=route.model, max_tokens=max_tokens, **optional,
     )

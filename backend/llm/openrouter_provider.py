@@ -51,6 +51,19 @@ def parse_arguments(raw: Any) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+def system_content(system: str, blocks: list[dict[str, Any]] | None, model: str) -> Any:
+    """Для моделей Anthropic шлюз передаёт cache_control, остальным — просто текст."""
+    if not blocks:
+        return system
+    parts = ([{"text": system, "cache": False}] if system else []) + list(blocks)
+    if not model.startswith("anthropic/"):
+        return "\n\n".join(part["text"] for part in parts)
+    return [
+        {"type": "text", "text": part["text"], **({"cache_control": {"type": "ephemeral"}} if part.get("cache") else {})}
+        for part in parts
+    ]
+
+
 class OpenRouterProvider:
     name = "openrouter"
 
@@ -91,12 +104,16 @@ class OpenRouterProvider:
         tool: dict[str, Any],
         model: str,
         max_tokens: int,
+        system_blocks: list[dict[str, Any]] | None = None,
+        timeout: float | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> ToolResult:
+        # extra — параметры Anthropic (например, thinking); шлюзу они не передаются.
         payload = {
             "model": model,
             "max_tokens": max_tokens,
             "messages": [
-                {"role": "system", "content": system},
+                {"role": "system", "content": system_content(system, system_blocks, model)},
                 {"role": "user", "content": user},
             ],
             "tools": [to_openai_tool(tool)],
@@ -111,6 +128,7 @@ class OpenRouterProvider:
         try:
             response = await client.post(
                 f"{BASE_URL}/chat/completions", json=payload, headers=headers,
+                **({"timeout": timeout} if timeout is not None else {}),
             )
         except HTTPError as exc:
             raise LLMError(f"Запрос не прошёл: {exc}", provider=self.name, model=model) from exc
