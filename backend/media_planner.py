@@ -237,6 +237,22 @@ NO_SPOILER_RULE = "the answer, the solution, the result or the outcome of the ta
 MEDIA_SAFETY_CAP = 24
 
 
+# Столько пунктов «показать» и «не показывать» принимает запрос картинки
+# (routes/media.py) и столько попадает в промпт (llm/media.py).
+MEDIA_LIST_LIMIT = 6
+
+
+def _avoid_list(*, spoiler: bool, slot: list[str], profile: list[str]) -> list[str]:
+    """Запреты по важности: сначала «не показывать ответ», затем запреты
+    генератора для этого места, в конце общие запреты предмета — и не больше
+    лимита, иначе запрос отвергается, а лишнее всё равно отрезается с конца."""
+    ordered = [NO_SPOILER_RULE] if spoiler else []
+    for item in [*slot, *profile]:
+        if item not in ordered:
+            ordered.append(item)
+    return ordered[:MEDIA_LIST_LIMIT]
+
+
 def media_limit(metadata: dict[str, Any]) -> int:
     return MEDIA_SAFETY_CAP
 
@@ -329,10 +345,12 @@ def build_lesson_media_plan(
         video_used = video_used or rec["kind"] == "video"
         rec["media_role"] = item["role"]
         rec["media_slot_id"] = str(slot.get("id") or rec["id"])
-        rec["must_include"] = _strings(slot.get("must_show"))
-        rec["avoid"] = [*rec["avoid"], *_strings(slot.get("must_not_show"))]
-        if item["role"] in NO_SPOILER_ROLES:
-            rec["avoid"].append(NO_SPOILER_RULE)
+        rec["must_include"] = _strings(slot.get("must_show"))[:MEDIA_LIST_LIMIT]
+        rec["avoid"] = _avoid_list(
+            spoiler=item["role"] in NO_SPOILER_ROLES,
+            slot=_strings(slot.get("must_not_show")),
+            profile=rec["avoid"],
+        )
         if item["slide_index"] is None:
             rec["placement"] = "block_visual"
         recommendations.append(rec)

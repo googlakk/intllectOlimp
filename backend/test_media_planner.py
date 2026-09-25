@@ -89,6 +89,16 @@ class LessonIllustrationTests(unittest.TestCase):
         self.assertIn("число на весах", task["avoid"])
         self.assertTrue(any("answer" in item for item in task["avoid"]))
 
+    def test_avoid_list_fits_the_request_limit_and_keeps_the_spoiler_rule(self):
+        # Повод: задача по географии — 3 общих запрета + 4 от генератора + правило
+        # про ответ = 8, а запрос картинки принимает не больше 6.
+        blocks = [{"component": "IndependentProblem", "content": {"question": "Почему в районе Оша часты землетрясения?", "media_slot": {
+            "id": "osh", "must_not_show": ["трещину оползня", "подписи месторождений", "стрелки движения грунта", "текст с ответом"]}}}]
+        task = build_lesson_media_plan(blocks, {**self.META, "subject_name": "География"}, allow_video=False)["recommendations"][0]
+        self.assertLessEqual(len(task["avoid"]), 6)
+        self.assertIn("answer", task["avoid"][0])
+        self.assertEqual(task["avoid"][1:5], ["трещину оползня", "подписи месторождений", "стрелки движения грунта", "текст с ответом"])
+
     def test_checks_and_reflection_get_no_images(self):
         legacy = [{"component": name, "content": {"question": "?"}} for name in ("RetrievalCheck", "MasteryCheck", "Reflection", "SortAndClassify")]
         self.assertEqual(build_lesson_media_plan(legacy, self.META)["recommendations"], [])
