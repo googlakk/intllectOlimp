@@ -5,6 +5,8 @@ import type React from 'react';
 import { componentMap, preloadBlockComponent } from '@/components/blocks/BlockRenderer';
 import { BlockMedia } from '@/components/blocks/BlockMedia';
 import type { Block, LessonDocument } from '@/lib/api/types';
+import { tutorAttemptProps } from '@/features/tutor/tutorBridge';
+import { useTutorBridge } from '@/features/tutor/TutorBridgeContext';
 import { isAssessmentBlock, type AttemptsByStep, type LessonAnswers } from './studentProgress';
 import { avatarCueForBeat, lessonPositionForBlock } from './lessonExperience';
 import { AvatarCompanion } from './AvatarCompanion';
@@ -305,6 +307,7 @@ function LessonStepCard({
   activeBeatId,
   onTeachingBeatChange,
 }: LessonStepCardProps) {
+  const tutorBridge = useTutorBridge();
   const block = activeBlocks[currentStep];
   const Component = componentMap[block.component];
   if (!Component) return <div className="text-destructive">Неизвестный блок</div>;
@@ -333,6 +336,7 @@ function LessonStepCard({
       },
     }
     : {};
+  const tutorProps = tutorAttemptProps(block.component, tutorBridge, originalIndex, currentStep);
   const synchronizationProps = block.component === 'Presentation'
     ? { activeBeatId, onTeachingBeatChange }
     : {};
@@ -341,7 +345,7 @@ function LessonStepCard({
     <div key={`block-${currentStep}-${retryKeys[currentStep] || 0}`} className="w-full min-w-0">
       <BlockMedia block={block} />
       <Suspense fallback={<LessonBlockFallback />}>
-        <Component {...block.content} {...injectProps} {...synchronizationProps} />
+        <Component {...block.content} {...injectProps} {...tutorProps} {...synchronizationProps} />
       </Suspense>
 
       {isAssessment && isAnswered && !isCorrect && (

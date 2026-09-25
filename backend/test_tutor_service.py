@@ -191,6 +191,15 @@ class TutorServiceTests(unittest.TestCase):
             Harness().turn(event="message", message="?", block_index=9)
         self.assertEqual(missing.exception.status_code, 404)
 
+    def test_broken_block_keeps_frontend_indices(self):
+        # Индекс — исходный, как во фронтенде: битый блок не сдвигает остальные, а сам даёт 404.
+        broken = lesson()
+        broken["lesson"]["blocks"] = ["битый", *BLOCKS]
+        with self.assertRaises(TutorServiceError) as missing:
+            Harness(manifest=broken).turn(event="message", message="?", block_index=0)
+        self.assertEqual(missing.exception.status_code, 404)
+        self.assertEqual(Harness(manifest=broken).turn(event="idle", block_index=2)["source"], "template")
+
     def test_no_access_to_the_lesson_propagates(self):
         with self.assertRaises(LessonServiceError):
             Harness(manifest=LessonServiceError(status_code=404, detail="нет")).turn(event="message", message="?")

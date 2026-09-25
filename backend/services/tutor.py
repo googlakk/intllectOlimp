@@ -229,8 +229,9 @@ async def take_tutor_turn(
     now = now or datetime.now(timezone.utc)
 
     lesson = await _load_lesson(manifest_loader, student_id, payload.topic_id, db)
-    blocks = [block for block in lesson.get("blocks") or [] if isinstance(block, dict)]
-    if not 0 <= payload.block_index < len(blocks):
+    # Индексы — как во фронтенде (исходный индекс блока): битый блок не выкидываем, а заменяем пустым.
+    blocks = [block if isinstance(block, dict) else {} for block in lesson.get("blocks") or []]
+    if not 0 <= payload.block_index < len(blocks) or not blocks[payload.block_index]:
         raise TutorServiceError(status_code=404, detail="Задание не найдено")
     block = blocks[payload.block_index]
     metadata = lesson.get("lesson_metadata") or {}

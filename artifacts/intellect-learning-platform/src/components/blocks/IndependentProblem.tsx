@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { parseMathText } from './ShortExplanation';
 import { TaskCondition } from './BlockMedia';
 import { checkAnswer } from '@/features/interactiveEngines/scoring';
+import type { BlockAttempt } from '@/features/tutor/tutorBridge';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -17,9 +18,10 @@ export interface IndependentProblemProps {
   media?: unknown;
   difficulty: "basic" | "advanced" | "easy" | "medium" | "hard";
   onAnswer?: (isCorrect: boolean) => void;
+  onAttempt?: (attempt: BlockAttempt) => void;
 }
 
-export default function IndependentProblem({ question, type, options, correct_answer, explanation, difficulty, answer_unit, accepted_units, tolerance, media, onAnswer }: IndependentProblemProps) {
+export default function IndependentProblem({ question, type, options, correct_answer, explanation, difficulty, answer_unit, accepted_units, tolerance, media, onAnswer, onAttempt }: IndependentProblemProps) {
   const [value, setValue] = useState('');
   const [status, setStatus] = useState<'idle' | 'correct' | 'incorrect' | 'wrong_unit'>('idle');
   const [attempts, setAttempts] = useState(0);
@@ -32,6 +34,7 @@ export default function IndependentProblem({ question, type, options, correct_an
     const numeric = type !== 'multiple_choice' && (type === 'numeric' || type === 'number' || Boolean(answer_unit));
     const result = checkAnswer(value, { correct: correct_answer, numeric, unit: answer_unit, acceptedUnits: accepted_units, tolerance });
     setStatus(result);
+    onAttempt?.({ value: value.trim(), outcome: result });
     // Верное число с неверной единицей не тратит попытку: просим проверить единицы.
     if (result === 'wrong_unit') return;
     const isCorrect = result === 'correct';

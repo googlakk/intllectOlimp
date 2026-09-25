@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { parseMathText } from './ShortExplanation';
 import { TaskCondition } from './BlockMedia';
 import { checkAnswer } from '@/features/interactiveEngines/scoring';
+import type { BlockAttempt } from '@/features/tutor/tutorBridge';
 import { CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -16,9 +17,10 @@ export interface GuidedPracticeProps {
   tolerance?: number;
   media?: unknown;
   onAnswer?: (isCorrect: boolean) => void;
+  onAttempt?: (attempt: BlockAttempt) => void;
 }
 
-export default function GuidedPractice({ question, hints, input_type, correct_answer, explanation, answer_unit, accepted_units, tolerance, media, onAnswer }: GuidedPracticeProps) {
+export default function GuidedPractice({ question, hints, input_type, correct_answer, explanation, answer_unit, accepted_units, tolerance, media, onAnswer, onAttempt }: GuidedPracticeProps) {
   const [value, setValue] = useState('');
   const [status, setStatus] = useState<'idle' | 'correct' | 'incorrect' | 'wrong_unit'>('idle');
   const [hintIndex, setHintIndex] = useState(0);
@@ -30,6 +32,7 @@ export default function GuidedPractice({ question, hints, input_type, correct_an
     const numeric = input_type === 'numeric' || input_type === 'number' || Boolean(answer_unit);
     const result = checkAnswer(value, { correct: correct_answer, numeric, unit: answer_unit, acceptedUnits: accepted_units, tolerance });
     setStatus(result);
+    onAttempt?.({ value: value.trim(), outcome: result, hintsSeen: hintIndex });
     // Верное число с неверной единицей — не ошибка ученика по сути: просим проверить единицы.
     if (result !== 'wrong_unit') onAnswer?.(result === 'correct');
   };
