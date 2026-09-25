@@ -108,3 +108,14 @@
 .custom-scrollbar:hover::-webkit-scrollbar-thumb {
   background-color: hsl(var(--muted-foreground) / 0.5);
 }
+
+/* Рабочая область урока ученика: клетка, как на доске. */
+.lesson-board {
+  background-color: hsl(var(--background));
+  background-image:
+    linear-gradient(hsl(var(--primary) / 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--primary) / 0.1) 1px, transparent 1px),
+    linear-gradient(hsl(var(--primary) / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--primary) / 0.05) 1px, transparent 1px);
+  background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
+}

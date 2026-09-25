@@ -97,6 +97,7 @@ export function ActiveLessonContent({
   const block = activeBlocks[currentStep];
   const phaseLabel = PHASE_LABELS[block?.component] || 'Учебный шаг';
   const originalIndex = activeOriginalIndices[currentStep] ?? currentStep;
+  const blockIsAssessment = block ? isAssessmentBlock(block) : false;
   const position = lessonPositionForBlock(lessonDocument, originalIndex);
   const cue = avatarCueForBeat(position?.scene, activeBeatId);
 
@@ -158,14 +159,10 @@ export function ActiveLessonContent({
               answers={answers}
               attemptsByStep={attemptsByStep}
               currentStep={currentStep}
-              isCompleted={isCompleted}
-              isDiagnosticRoute={isDiagnosticRoute}
               maxOpenedStep={maxOpenedStep}
               retryKeys={retryKeys}
               onAnswer={onAnswer}
               onNavigate={onNavigate}
-              onNext={onNext}
-              onOpenSummary={onOpenSummary}
               onSaveIntermediate={onSaveIntermediate}
               onSetAnswers={onSetAnswers}
               onSetRetryKeys={onSetRetryKeys}
@@ -190,6 +187,14 @@ export function ActiveLessonContent({
           )}
         </motion.div>
       </AnimatePresence>
+      <LessonContinueBar
+        canContinue={!blockIsAssessment || answers[originalIndex] !== undefined}
+        isLastStep={currentStep === activeBlocks.length - 1}
+        isCompleted={isCompleted}
+        isDiagnosticRoute={isDiagnosticRoute}
+        onNext={onNext}
+        onOpenSummary={onOpenSummary}
+      />
     </div>
   );
 }
@@ -271,7 +276,7 @@ function FitToViewport({ children, resetKey }: { children: ReactNode; resetKey: 
 
 type LessonStepCardProps = Omit<ActiveLessonContentProps,
   'contentRef' | 'prefersReducedMotion' | 'avatarEnabled' | 'audioEnabled' |
-  'onAvatarEnabledChange' | 'onAudioEnabledChange'>;
+  'onAvatarEnabledChange' | 'onAudioEnabledChange' | 'isCompleted' | 'isDiagnosticRoute' | 'onNext' | 'onOpenSummary'>;
 
 function LessonStepCard({
   activeBlocks,
@@ -279,14 +284,9 @@ function LessonStepCard({
   answers,
   attemptsByStep,
   currentStep,
-  isCompleted,
-  isDiagnosticRoute,
-  maxOpenedStep,
   retryKeys,
   onAnswer,
   onNavigate,
-  onNext,
-  onOpenSummary,
   onSaveIntermediate,
   onSetAnswers,
   onSetRetryKeys,
@@ -331,8 +331,8 @@ function LessonStepCard({
         <Component {...block.content} {...injectProps} {...synchronizationProps} />
       </Suspense>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-        {isAssessment && isAnswered && !isCorrect && (
+      {isAssessment && isAnswered && !isCorrect && (
+        <div className="mt-5 border-t border-border pt-4">
           <AssessmentRetryPanel
             answers={answers}
             attemptsByStep={attemptsByStep}
@@ -344,28 +344,35 @@ function LessonStepCard({
             onSetRetryKeys={onSetRetryKeys}
             theoryStep={findNearestExplanation(activeBlocks, currentStep)}
           />
-        )}
+        </div>
+      )}
+    </div>
+  );
+}
 
-        {(!isAssessment || isAnswered) && (
-          <div className="flex w-full justify-end pr-20 sm:pr-0">
-            <button
-              onClick={() => {
-                if (currentStep === activeBlocks.length - 1 && isCompleted) {
-                  onOpenSummary();
-                } else {
-                  onNext();
-                }
-              }}
-              className="px-8 py-3.5 bg-primary text-primary-foreground font-bold rounded-xl shadow-sm hover:bg-primary/90 hover:-translate-y-0.5 transition-all flex items-center gap-2"
-            >
-              {currentStep === activeBlocks.length - 1
-                ? (isDiagnosticRoute ? 'Перейти к объяснению' : 'Завершить урок')
-                : 'Продолжить'}
-              <ChevronDown className="w-5 h-5 -rotate-90" />
-            </button>
-          </div>
-        )}
-      </div>
+type LessonContinueBarProps = {
+  canContinue: boolean;
+  isLastStep: boolean;
+  isCompleted: boolean;
+  isDiagnosticRoute: boolean;
+  onNext: () => void;
+  onOpenSummary: () => void;
+};
+
+/** Кнопка «Продолжить» всегда в одном месте, под шагом, независимо от высоты контента. */
+function LessonContinueBar({ canContinue, isLastStep, isCompleted, isDiagnosticRoute, onNext, onOpenSummary }: LessonContinueBarProps) {
+  return (
+    <div className="flex shrink-0 justify-end border-t border-border/60 pt-3 pr-20 sm:pr-0">
+      <button
+        type="button"
+        disabled={!canContinue}
+        title={canContinue ? undefined : 'Сначала ответьте на задание'}
+        onClick={() => (isLastStep && isCompleted ? onOpenSummary() : onNext())}
+        className="flex w-[240px] items-center justify-center gap-2 rounded-xl bg-primary px-8 py-3.5 font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {isLastStep ? (isDiagnosticRoute ? 'Перейти к объяснению' : 'Завершить урок') : 'Продолжить'}
+        <ChevronDown className="h-5 w-5 -rotate-90" />
+      </button>
     </div>
   );
 }

@@ -218,7 +218,7 @@ export function StudentLessonPageView({
       </header>
 
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        <main className={`h-full min-w-0 flex-1 flex-col px-4 py-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 2xl:px-16 ${isPlanOpen ? 'hidden lg:flex' : 'flex'} ${showSummary ? 'overflow-y-auto' : 'overflow-hidden'}`}>
+        <main className={`lesson-board h-full min-w-0 flex-1 flex-col px-4 py-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 2xl:px-16 ${isPlanOpen ? 'hidden lg:flex' : 'flex'} ${showSummary ? 'overflow-y-auto' : 'overflow-hidden'}`}>
           {saveError && (
             <div role="alert" className="mb-6 rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm font-medium text-destructive">
               Прогресс пока не сохранён: {saveError.message}
