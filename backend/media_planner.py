@@ -232,13 +232,13 @@ _ROLE_PRIORITY = {"slide": 0, "concept": 1, "cover": 2, "situation": 3, "experim
 # Для задач и опытов картинка показывает условие, но не ответ и не результат.
 NO_SPOILER_ROLES = {"task_scene", "experiment_setup", "situation"}
 NO_SPOILER_RULE = "the answer, the solution, the result or the outcome of the task or experiment"
-MEDIA_LIMITS = {"micro": 3, "standard": 6, "extended": 8, "unit": 8}
+# Картинки ставятся во все уместные места урока. Потолок только страховочный:
+# чтобы урок не ушёл случайно в десятки платных генераций.
+MEDIA_SAFETY_CAP = 24
 
 
 def media_limit(metadata: dict[str, Any]) -> int:
-    contract = metadata.get("topic_contract") if isinstance(metadata.get("topic_contract"), dict) else {}
-    volume = str(contract.get("volume") or metadata.get("volume") or "standard")
-    return MEDIA_LIMITS.get(volume, MEDIA_LIMITS["standard"])
+    return MEDIA_SAFETY_CAP
 
 
 def _has_media(content: dict[str, Any]) -> bool:
@@ -266,11 +266,12 @@ def build_lesson_media_plan(
     blocks: list[dict[str, Any]], metadata: dict[str, Any] | None = None,
     lesson_document: dict[str, Any] | None = None, *, allow_video: bool = True,
 ) -> dict[str, Any]:
-    """Места под картинки урока с лимитом по объёму урока.
+    """Места под картинки урока: все уместные блоки и слайды.
 
-    Если генератор разметил места (media_slot), берём только их. У старых
-    уроков разметки нет — тогда кандидаты все подходящие блоки и слайды.
-    Уже заполненные места не предлагаем повторно.
+    Каждый подходящий блок получает картинку; разметка генератора (media_slot)
+    уточняет, что на ней показать. В презентации, где генератор разметил
+    слайды, берём только размеченные: так он пропускает мини-проверку и
+    слайды, где картинка подсказала бы ответ. Заполненные места не повторяем.
     """
     metadata = metadata or {}
     subject = str(metadata.get("subject_name") or "")
@@ -290,8 +291,11 @@ def build_lesson_media_plan(
         if role is None:
             continue
         if component == "Presentation" and isinstance(content.get("slides"), list):
+            marked = any(isinstance(slide, dict) and _slot(slide) for slide in content["slides"])
             for slide_index, raw_slide in enumerate(content["slides"]):
                 if not isinstance(raw_slide, dict) or _has_media(raw_slide):
+                    continue
+                if marked and not _slot(raw_slide):
                     continue
                 heading = _text(raw_slide.get("heading")) or _text(content.get("title")) or topic
                 candidates.append({
@@ -309,9 +313,8 @@ def build_lesson_media_plan(
                 "goal": _text((slot or {}).get("learning_purpose")) or heading, "slide_id": None,
             })
 
-    if any(item["slot"] for item in candidates):
-        candidates = [item for item in candidates if item["slot"]]
-    candidates.sort(key=lambda item: (_ROLE_PRIORITY[item["role"]], item["block_index"], item["slide_index"] or 0))
+    # Если сработает потолок, первыми остаются места, размеченные генератором.
+    candidates.sort(key=lambda item: (item["slot"] is None, _ROLE_PRIORITY[item["role"]], item["block_index"], item["slide_index"] or 0))
 
     recommendations: list[dict[str, Any]] = []
     video_used = not allow_video

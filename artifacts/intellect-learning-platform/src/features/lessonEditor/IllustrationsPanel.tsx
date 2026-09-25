@@ -71,7 +71,6 @@ export function LessonIllustrationsPanel({ lesson, state, imageGroup, imageChoic
     staleTime: 30_000,
   });
   const missing = plan.data?.recommendations.filter((item) => item.kind === 'image').length ?? 0;
-  const limit = plan.data?.limit;
   const price = PRICE_HINT[imageChoice.value];
   const { progress } = state;
 
@@ -82,7 +81,7 @@ export function LessonIllustrationsPanel({ lesson, state, imageGroup, imageChoic
         <span>
           <span className="font-semibold">Сразу с иллюстрациями</span>
           <span className="block text-muted-foreground">
-            После черновика ИИ нарисует картинки к слайдам, понятиям и сценам задач: {limit ? `до ${limit}` : 'от 3 до 8 в зависимости от объёма урока'}{price ? `, ${price}` : ''}. Ответы на картинках не показываются.
+            После черновика ИИ нарисует картинки во все подходящие слайды и блоки: объяснения, понятия, примеры и задачи{price ? ` (${price})` : ''}. Ответы на картинках не показываются.
           </span>
         </span>
       </label>

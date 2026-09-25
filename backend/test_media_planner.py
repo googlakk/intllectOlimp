@@ -16,13 +16,13 @@ class MediaPlannerTests(unittest.TestCase):
         self.assertIn("Герой сохраняет честь", plan["recommendations"][0]["source_context"])
         self.assertIn("literary", plan["recommendations"][0]["visual_form"])
 
-    def test_process_gets_one_video_and_respects_volume_limit(self):
+    def test_process_gets_one_video_and_every_block_an_image(self):
         blocks = [{"component": "ShortExplanation", "content": {
             "title": f"Этап {index}", "text": "Процесс изменяется последовательно: сначала состояние A, затем состояние B.",
         }} for index in range(4)]
         plan = build_lesson_media_plan(blocks, {"subject_name": "Биология", "topic_name": "Фотосинтез", "topic_contract": {"volume": "micro"}})
-        self.assertEqual(plan["limit"], 3)
-        self.assertEqual(len(plan["recommendations"]), 3)
+        self.assertEqual(plan["limit"], 24)
+        self.assertEqual(len(plan["recommendations"]), 4)
         self.assertEqual(sum(item["kind"] == "video" for item in plan["recommendations"]), 1)
 
     def test_existing_slide_media_is_not_recommended_again(self):
@@ -74,10 +74,12 @@ class LessonIllustrationTests(unittest.TestCase):
             {"component": "Reflection", "content": {"prompt": "Что понял?"}},
         ]
 
-    def test_marked_slots_only_in_priority_order(self):
-        plan = build_lesson_media_plan(self.lesson(), self.META, allow_video=False)
-        order = [(item["component"], item["media_slot_id"]) for item in plan["recommendations"]]
-        self.assertEqual(order, [("Presentation", "m1"), ("KeyConcept", "kc"), ("IndependentProblem", "task")])
+    def test_every_suitable_block_gets_an_image_marked_first(self):
+        blocks = [*self.lesson(), {"component": "WorkedExample", "content": {"problem": "Найди плотность"}}]
+        plan = build_lesson_media_plan(blocks, self.META, allow_video=False)
+        order = [item["component"] for item in plan["recommendations"]]
+        # Размеченные места первыми, затем неразмеченный пример решения.
+        self.assertEqual(order, ["Presentation", "KeyConcept", "IndependentProblem", "WorkedExample"])
         self.assertTrue(all(item["kind"] == "image" for item in plan["recommendations"]))
 
     def test_task_scene_never_shows_the_answer(self):
@@ -91,11 +93,18 @@ class LessonIllustrationTests(unittest.TestCase):
         legacy = [{"component": name, "content": {"question": "?"}} for name in ("RetrievalCheck", "MasteryCheck", "Reflection", "SortAndClassify")]
         self.assertEqual(build_lesson_media_plan(legacy, self.META)["recommendations"], [])
 
-    def test_limit_depends_on_volume(self):
-        blocks = [{"component": "ShortExplanation", "content": {"title": f"Понятие {i}", "text": "Текст"}} for i in range(12)]
-        for volume, expected in (("micro", 3), ("standard", 6), ("extended", 8)):
-            plan = build_lesson_media_plan(blocks, {**self.META, "topic_contract": {"volume": volume}}, allow_video=False)
-            self.assertEqual(len(plan["recommendations"]), expected)
+    def test_slides_follow_generator_marks_within_a_presentation(self):
+        unmarked = {"component": "Presentation", "content": {"slides": [{"id": f"s{i}", "heading": f"Слайд {i}"} for i in range(5)]}}
+        plan = build_lesson_media_plan([unmarked], self.META, allow_video=False)
+        self.assertEqual(len(plan["recommendations"]), 5)
+        # В этой презентации размечен один слайд — второй (мини-проверка) пропускаем.
+        plan = build_lesson_media_plan(self.lesson(), self.META, allow_video=False)
+        self.assertEqual([item.get("slide_id") for item in plan["recommendations"] if item["component"] == "Presentation"], ["s1"])
+
+    def test_safety_cap_limits_runaway_lessons(self):
+        blocks = [{"component": "ShortExplanation", "content": {"title": f"Понятие {i}", "text": "Текст"}} for i in range(30)]
+        plan = build_lesson_media_plan(blocks, self.META, allow_video=False)
+        self.assertEqual(len(plan["recommendations"]), 24)
 
 
 if __name__ == "__main__":
