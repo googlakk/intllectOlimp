@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAvatarCueAssets } from '@/lib/api/avatar';
 import type { AvatarCue } from '@/lib/api/types';
 import { useProtectedMediaUrl } from '@/lib/useProtectedMediaUrl';
-import { activeNarrationSentence, narrationSegments, narrationSpeechText } from './avatarNarration';
+import { activeSubtitle, narrationSegments, narrationSpeechText } from './avatarNarration';
 
 /** Видео заранее не подгружаем, если ученик экономит трафик или сеть медленная: загрузится по нажатию. */
 function canPrefetchVideo(): boolean {
@@ -55,7 +55,8 @@ export function useAvatarNarration({ cue, lessonVersionId, avatarEnabled, audioE
   const protectedVideo = useProtectedMediaUrl(effectiveVideoUrl, { enabled: videoRequested && Boolean(effectiveVideoUrl) });
   const narration = narrationSpeechText(cue?.fallback_text || cue?.script || '');
   const speechSegments = useMemo(() => narrationSegments(cue?.script || ''), [cue?.script]);
-  const activeSentence = useMemo(() => activeNarrationSentence(narration, progress), [narration, progress]);
+  // Субтитры по одной короткой фразе, как в кино.
+  const activeSentence = useMemo(() => activeSubtitle(narration, progress), [narration, progress]);
 
   useEffect(() => () => { window.speechSynthesis?.cancel(); }, []);
 

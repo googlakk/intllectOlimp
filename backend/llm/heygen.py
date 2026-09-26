@@ -22,6 +22,10 @@ CATALOG_CACHE_SECONDS = float(os.getenv("HEYGEN_CATALOG_CACHE_SECONDS", "600"))
 # Без поля engine HeyGen v3 рендерит дорогим Avatar IV. Avatar III — заметно дешевле;
 # другой движок (avatar_iv) — только осознанно, через переменную окружения.
 AVATAR_ENGINES = ("avatar_iii", "avatar_iv")
+# Кадр в пропорциях самого фото и фото целиком (contain): при 16:9 HeyGen растягивает вертикальный
+# портрет на широкий кадр (cover) и срезает верх головы. В уроке аватар всё равно показывается в круге.
+AVATAR_ASPECT_RATIO = os.getenv("HEYGEN_ASPECT_RATIO", "auto").strip() or "auto"
+AVATAR_FIT = "contain"
 AVATAR_ENGINE = os.getenv("HEYGEN_AVATAR_ENGINE", "avatar_iii").strip() or "avatar_iii"
 if AVATAR_ENGINE not in AVATAR_ENGINES:
     # Опечатка в переменной превратила бы каждое видео в ошибку 400 от HeyGen.
@@ -126,7 +130,8 @@ class HeyGenProvider:
                 "type": "avatar",
                 "avatar_id": avatar_id,
                 "engine": {"type": AVATAR_ENGINE},
-                "aspect_ratio": "16:9",
+                "aspect_ratio": AVATAR_ASPECT_RATIO,
+                "fit": AVATAR_FIT,
                 "output_format": "mp4",
                 "script": script,
                 "voice_id": voice_id,

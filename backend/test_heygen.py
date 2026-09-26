@@ -100,6 +100,8 @@ class HeyGenProviderTests(unittest.TestCase):
                 self.assertEqual(body["avatar_id"], "look-1")
                 # Дешёвый движок явно: без engine HeyGen берёт дорогой Avatar IV.
                 self.assertEqual(body["engine"], {"type": "avatar_iii"})
+                # Кадр по пропорциям фото и фото целиком — иначе HeyGen срезает верх головы.
+                self.assertEqual((body["aspect_ratio"], body["fit"]), ("auto", "contain"))
                 return Response(200, json={"data": {"video_id": "video-v3", "status": "waiting"}})
             if request.method == "GET" and "/v3/videos/video-v3" in str(request.url):
                 return Response(200, json={"data": {

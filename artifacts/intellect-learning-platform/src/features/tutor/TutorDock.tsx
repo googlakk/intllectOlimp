@@ -64,13 +64,9 @@ function AvatarFace({ narration, imageUrl, withVideo, speaking }: {
       ))}
       <span className={`relative block h-full w-full overflow-hidden rounded-full bg-neutral-800 ${RING}`}>
         {video ? (
-          <>
-            {/* Кадр HeyGen — крупный план: чуть отдаляем, чтобы голова не обрезалась кругом; края — размытый портрет. */}
-            {imageUrl && <img src={imageUrl} alt="" className="absolute inset-0 h-full w-full scale-110 object-cover object-top opacity-80 blur-md" />}
-            <video ref={video.ref} src={video.src} poster={video.poster || imageUrl || undefined} playsInline preload={video.preload}
-              muted={video.muted} onPlay={video.onPlay} onPause={video.onPause} onEnded={video.onEnded} onError={video.onError}
-              onTimeUpdate={video.onTimeUpdate} className="relative h-full w-full origin-bottom scale-[0.86] object-cover object-top" />
-          </>
+          <video ref={video.ref} src={video.src} poster={video.poster || imageUrl || undefined} playsInline preload={video.preload}
+            muted={video.muted} onPlay={video.onPlay} onPause={video.onPause} onEnded={video.onEnded} onError={video.onError}
+            onTimeUpdate={video.onTimeUpdate} className="h-full w-full object-cover object-top" />
         ) : imageUrl ? (
           <img src={imageUrl} alt="" className="h-full w-full object-cover object-top" />
         ) : (
@@ -107,21 +103,6 @@ function VoiceBars() {
           transition={{ duration: 0.9, delay: index * 0.08, repeat: reduceMotion ? 0 : Infinity, ease: 'easeInOut' }} />
       ))}
     </span>
-  );
-}
-
-/** Круглая кнопка озвучки: Послушать / Загружаю / Пауза / Повторить. */
-function NarrationControl({ narration, small = false }: { narration: Narration; small?: boolean }) {
-  const label = narration.loading ? 'Загружаю' : narration.state === 'speaking' ? 'Пауза'
-    : narration.state === 'completed' ? 'Повторить' : 'Послушать';
-  return (
-    <button type="button" onClick={narration.toggle} aria-label={label} title={label}
-      className={`grid ${small ? 'h-9 w-9' : 'h-10 w-10'} shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_0_14px_hsl(var(--primary)/0.5)] transition-transform hover:scale-105`}>
-      {narration.loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-        : narration.state === 'speaking' ? <Pause className="h-4 w-4" aria-hidden />
-          : narration.state === 'completed' ? <RotateCcw className="h-4 w-4" aria-hidden />
-            : <Play className="h-4 w-4 translate-x-px fill-current" aria-hidden />}
-    </button>
   );
 }
 
@@ -187,7 +168,8 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
   const speaking = mode === 'speak' && narrator;
   const name = companion?.name || 'Рассказчик';
   const talking = narration.state === 'speaking';
-  const subtitle = talking && narration.activeSentence ? narration.activeSentence : cueText;
+  // Субтитры — по одной фразе; до начала — первая, после конца — последняя.
+  const subtitle = narration.activeSentence || cueText;
   const lastReply = useMemo(() => messages.filter((message) => message.role === 'tutor').at(-1), [messages]);
   const teasers = tutor
     ? tutorTeasers({ locked, hasOffer, lastReply: lastReply?.text })
@@ -323,7 +305,8 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
   const pressAvatar = () => {
     hoverOpened.current = false;
     if (narrator) {
-      if (speaking) { collapse(false); return; }
+      // Раскрытый аватар — как видеоплеер: нажатие ставит на паузу или продолжает.
+      if (speaking) { narration.toggle(); return; }
       setMode('speak');
       return;
     }
@@ -404,13 +387,12 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
       {/* Реплика целиком — для экранного диктора: на экране речь идёт по фразам. */}
       <p id={cueTextId} className="sr-only">{cueText}</p>
       <AnimatePresence mode="wait" initial={false}>
-        <motion.p key={subtitle} className="line-clamp-2 min-w-0 flex-1 text-[13px] leading-4 text-white/90" aria-hidden
+        <motion.p key={subtitle} className="line-clamp-2 min-w-0 flex-1 text-sm leading-[18px] text-white/90" aria-hidden
           initial={reduceMotion ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -6 }}
           transition={{ duration: 0.2 }}>
           {subtitle}
         </motion.p>
       </AnimatePresence>
-      <NarrationControl narration={narration} small />
       <button type="button" onClick={() => collapse(true)} aria-label="Закрыть реплику, вернуться к вопросу" title="Вернуться к вопросу"
         className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-white/50 hover:bg-white/10 hover:text-white">
         <X className="h-4 w-4" aria-hidden />
@@ -468,6 +450,7 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
     document.body,
   );
 
+  const playerLabel = narration.loading ? 'Загружаю' : talking ? 'Пауза' : narration.state === 'completed' ? 'Повторить' : 'Послушать';
   // Говорит — кружок растёт.
   const avatarSize = speaking ? (mobile ? 84 : 110) : 48;
 
@@ -582,9 +565,9 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
       <div className="absolute bottom-0 left-0 z-[74] flex w-full items-end gap-3">
         <motion.button ref={avatarRef} type="button" onClick={pressAvatar}
           onPointerEnter={(event) => hover(event, true)} onPointerLeave={(event) => hover(event, false)}
-          aria-label={`${narrator ? (speaking ? `${name}: вернуться к вопросу` : `${name}: реплика шага`) : 'Открыть помощника'}${hasOffer ? `. ${teaser}` : ''}`}
+          aria-label={`${narrator ? (speaking ? `${name}: ${playerLabel.toLowerCase()}` : `${name}: реплика шага`) : 'Открыть помощника'}${hasOffer ? `. ${teaser}` : ''}`}
           aria-expanded={speaking || open}
-          className="relative shrink-0 rounded-full"
+          className="group relative shrink-0 rounded-full"
           initial={false} animate={{ width: avatarSize, height: avatarSize }}
           transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 24 }}>
           {narrator || faceUrl ? (
@@ -592,6 +575,18 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
           ) : (
             <motion.span className="block h-full w-full rounded-full bg-gradient-to-br from-primary via-violet-400 to-sky-300 shadow-[0_0_14px_hsl(var(--primary)/0.55)]"
               animate={reduceMotion ? undefined : { scale: [1, 1.06, 1] }} transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }} aria-hidden />
+          )}
+          {speaking && (
+            // Значок плеера на аватаре: при наведении, а на паузе — всегда.
+            <span className={`absolute inset-0 grid place-items-center rounded-full bg-black/35 text-white transition-opacity ${
+              talking ? 'opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100' : 'opacity-100'}`} aria-hidden>
+              <span className="grid h-10 w-10 place-items-center rounded-full bg-primary/90 shadow-[0_0_14px_hsl(var(--primary)/0.6)]">
+                {narration.loading ? <Loader2 className="h-5 w-5 animate-spin" />
+                  : talking ? <Pause className="h-5 w-5" />
+                    : narration.state === 'completed' ? <RotateCcw className="h-5 w-5" />
+                      : <Play className="h-5 w-5 translate-x-px fill-current" />}
+              </span>
+            </span>
           )}
           {speaking && talking && <VoiceBars />}
           {hasOffer && <span className="absolute right-0 top-0 h-3 w-3 rounded-full border-2 border-background bg-primary" aria-hidden />}
