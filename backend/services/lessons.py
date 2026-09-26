@@ -196,7 +196,8 @@ async def attach_lesson_document(
                     {
                         "id": asset.id,
                         "kind": asset.kind,
-                        "url": asset.source_url,
+                        # Закрытое видео аватара — через сервер, он перенаправит на подписанную ссылку.
+                        "url": f"/api/avatar/assets/{asset.id}/stream" if str(asset.source_url).startswith("storage:") else asset.source_url,
                         "mime_type": asset.mime_type,
                         "duration_ms": asset.duration_ms,
                         "poster_url": (asset.metadata_json or {}).get("thumbnail_url"),

@@ -81,7 +81,7 @@ export function AvatarCompanion({
               muted={narration.video.muted}
               onPlay={narration.video.onPlay}
               onPause={narration.video.onPause}
-              onEnded={narration.video.onEnded}
+              onEnded={narration.video.onEnded} onError={narration.video.onError}
               onTimeUpdate={narration.video.onTimeUpdate}
               className="absolute left-1/2 top-0 h-full w-auto max-w-none -translate-x-1/2 object-cover drop-shadow-[0_18px_18px_rgba(15,23,42,0.24)] [mask-image:radial-gradient(ellipse_58%_68%_at_50%_48%,black_62%,rgba(0,0,0,0.82)_72%,rgba(0,0,0,0.28)_86%,transparent_100%)] [-webkit-mask-image:radial-gradient(ellipse_58%_68%_at_50%_48%,black_62%,rgba(0,0,0,0.82)_72%,rgba(0,0,0,0.28)_86%,transparent_100%)]"
             />

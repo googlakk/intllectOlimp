@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -11,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from errors import ApplicationError
+from llm import LLMError
 from llm.heygen import AVATAR_ENGINE, HeyGenProvider
 from models import AvatarProfile, GenerationJob, LessonAsset, LessonVersion
 from narration import spoken_text
@@ -20,6 +23,47 @@ from storage import SupabaseStorage
 
 class AvatarServiceError(ApplicationError):
     pass
+
+
+# Видео аватара — лицо учителя: храним в закрытой корзине, ученику — временная подписанная ссылка.
+AVATAR_VIDEO_BUCKET = os.getenv("AVATAR_VIDEO_BUCKET", "avatar-videos")
+SIGNED_URL_TTL_SEC = 3600
+# Страница держит ссылки до 25 минут (useAvatarCueAssets): отдаём только те, которым жить заметно дольше.
+SIGNED_URL_MIN_LEFT_SEC = 40 * 60
+_signed_url_cache: dict[tuple[str, str], tuple[float, str]] = {}
+
+
+def is_private_avatar_video(asset: Any) -> bool:
+    return getattr(asset, "storage_bucket", None) == AVATAR_VIDEO_BUCKET and bool(getattr(asset, "storage_path", None))
+
+
+async def avatar_video_urls(assets: list[Any], storage: SupabaseStorage | None = None) -> dict[int, str]:
+    """Прямые ссылки на видео для <video>: закрытые — подписанные (одним запросом на все), старые публичные — как есть."""
+    urls: dict[int, str] = {}
+    now = time.monotonic()
+    to_sign: list[Any] = []
+    for asset in assets:
+        if not is_private_avatar_video(asset):
+            if asset.source_url and not str(asset.source_url).startswith("storage:"):
+                urls[asset.id] = asset.source_url
+            continue
+        cached = _signed_url_cache.get((asset.storage_bucket, asset.storage_path))
+        if cached and cached[0] - now > SIGNED_URL_MIN_LEFT_SEC:
+            urls[asset.id] = cached[1]
+        else:
+            to_sign.append(asset)
+    if to_sign:
+        for key in [key for key, (expires_at, _url) in _signed_url_cache.items() if expires_at <= now]:
+            _signed_url_cache.pop(key, None)
+        signed = await (storage or SupabaseStorage()).create_signed_urls(
+            bucket=AVATAR_VIDEO_BUCKET, paths=[asset.storage_path for asset in to_sign], expires_in=SIGNED_URL_TTL_SEC,
+        )
+        for asset in to_sign:
+            url = signed.get(asset.storage_path)
+            if url:
+                _signed_url_cache[(asset.storage_bucket, asset.storage_path)] = (now + SIGNED_URL_TTL_SEC, url)
+                urls[asset.id] = url
+    return urls
 
 
 MAX_CUSTOM_AVATAR_BYTES = 10 * 1024 * 1024
@@ -269,11 +313,25 @@ async def refresh_avatar_job(job_id: int, db: AsyncSession,
         asset_url, size_bytes, bucket, path = result.video_url, None, None, None
         storage_client = storage or SupabaseStorage()
         if storage_client.configured():
-            bucket = "lesson-assets"
+            bucket = AVATAR_VIDEO_BUCKET
             path = f"lessons/{job.lesson_version_id}/{job.scene_id or 'avatar'}/{result.id}.mp4"
-            asset_url, size_bytes = await storage_client.copy_from_url(
-                source_url=result.video_url, bucket=bucket, path=path, content_type="video/mp4",
-            )
+            try:
+                _public_url, size_bytes = await storage_client.copy_from_url(
+                    source_url=result.video_url, bucket=bucket, path=path, content_type="video/mp4",
+                )
+            except LLMError as exc:
+                if "not found" not in str(exc).casefold():
+                    raise  # временный сбой: следующий опрос попробует снова
+                # Корзины нет — повтор не поможет, а ссылка HeyGen со временем истечёт: сообщаем явно.
+                job.status = "failed"
+                job.error = {"message": f"Нет закрытой корзины «{bucket}» в Supabase Storage. Создайте её и сгенерируйте реплику заново."}
+                job.completed_at = datetime.now(timezone.utc)
+                job.updated_at = job.completed_at
+                await db.commit()
+                await db.refresh(job)
+                return job
+            # Корзина закрытая: публичной ссылки нет, ученику выдаётся подписанная (avatar_video_urls).
+            asset_url = f"storage:{bucket}/{path}"
         db.add(LessonAsset(
             lesson_version_id=job.lesson_version_id,
             generation_job_id=job.id,

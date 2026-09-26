@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { getAvatarCueAsset } from '@/lib/api/avatar';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAvatarCueAssets } from '@/lib/api/avatar';
 import type { AvatarCue } from '@/lib/api/types';
 import { useProtectedMediaUrl } from '@/lib/useProtectedMediaUrl';
 import { activeNarrationSentence, narrationSegments, narrationSpeechText } from './avatarNarration';
 
-/** Видео заранее не качаем, если ученик экономит трафик или сеть медленная: скачаем по нажатию. */
+/** Видео заранее не подгружаем, если ученик экономит трафик или сеть медленная: загрузится по нажатию. */
 function canPrefetchVideo(): boolean {
   const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
   if (!connection) return true;
@@ -24,26 +24,36 @@ type Options = {
 /**
  * Озвучка реплики аватара: видео (если сгенерировано) или синтез речи браузера,
  * с текущей фразой для подписи. Общая для плашки урока и превью в редакторе.
- * Видео реплики ищется и скачивается заранее, при смене шага: по нажатию оно стартует сразу.
- * Пока видео грузится, голос браузера не включается — иначе звучат два рассказчика подряд.
+ * Ссылки на видео всех реплик приходят одним запросом при открытии урока — прямые (подписанные)
+ * ссылки хранилища: <video> играет ролик по мере загрузки, без нашего сервера.
+ * Пока видео готовится, голос браузера не включается — иначе звучат два рассказчика подряд.
  */
 export function useAvatarNarration({ cue, lessonVersionId, avatarEnabled, audioEnabled, onAudioEnabledChange }: Options) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Элемент <video> появляется, когда раскрывается панель: запуск ждёт его, а не включает голос браузера.
+  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
+  const attachVideo = useCallback((element: HTMLVideoElement | null) => {
+    videoRef.current = element;
+    setVideoElement(element);
+  }, []);
   const playbackTokenRef = useRef(0);
   const speechSegmentRef = useRef(0);
   const [state, setState] = useState<NarratorState>('ready');
   const [progress, setProgress] = useState(0);
   const [videoRequested, setVideoRequested] = useState(false);
   const [pendingVideoPlay, setPendingVideoPlay] = useState(false);
-  const [lazyVideoUrl, setLazyVideoUrl] = useState<string | undefined>(cue?.video_url);
-  const [lazyPosterUrl, setLazyPosterUrl] = useState<string | undefined | null>(cue?.poster_url);
-  const [assetLookupDone, setAssetLookupDone] = useState(Boolean(cue?.video_url));
-  // Нажали «Послушать», пока видео ещё ищется или скачивается: запустим его, как только будет готово.
+  // Нажали «Послушать», пока ссылки на видео ещё не пришли: решим, когда придут.
   const wantsPlayRef = useRef(false);
-  const lookupRunningRef = useRef(false);
-  const narration = narrationSpeechText(cue?.fallback_text || cue?.script || '');
-  const effectiveVideoUrl = lazyVideoUrl || cue?.video_url;
+  // Ссылка истекла (ноутбук спал) — один раз берём свежие ссылки, дальше голос браузера.
+  const refreshedAfterErrorRef = useRef(false);
+  const cueAssets = useAvatarCueAssets(lessonVersionId, avatarEnabled);
+  const cueAsset = cue?.id ? cueAssets.data?.find((asset) => asset.cue_id === cue.id) : undefined;
+  const effectiveVideoUrl = cueAsset?.video_url || cue?.video_url;
+  const posterUrl = cueAsset?.poster_url || cue?.poster_url;
+  const assetsLoading = avatarEnabled && Boolean(lessonVersionId) && cueAssets.isLoading;
+  // Прямая ссылка отдаётся <video> как есть; старый адрес /api/… качается целиком только по нажатию.
   const protectedVideo = useProtectedMediaUrl(effectiveVideoUrl, { enabled: videoRequested && Boolean(effectiveVideoUrl) });
+  const narration = narrationSpeechText(cue?.fallback_text || cue?.script || '');
   const speechSegments = useMemo(() => narrationSegments(cue?.script || ''), [cue?.script]);
   const activeSentence = useMemo(() => activeNarrationSentence(narration, progress), [narration, progress]);
 
@@ -59,49 +69,22 @@ export function useAvatarNarration({ cue, lessonVersionId, avatarEnabled, audioE
     setVideoRequested(false);
     setPendingVideoPlay(false);
     wantsPlayRef.current = false;
-    lookupRunningRef.current = false;
-    setLazyVideoUrl(cue?.video_url);
-    setLazyPosterUrl(cue?.poster_url);
-    setAssetLookupDone(Boolean(cue?.video_url));
-    // Готовое видео скачиваем сразу, не дожидаясь нажатия.
-    if (avatarEnabled && cue?.video_url && canPrefetchVideo()) setVideoRequested(true);
+    refreshedAfterErrorRef.current = false;
     if (videoRef.current) {
       videoRef.current.pause();
       videoRef.current.currentTime = 0;
-      videoRef.current.load();
     }
-  }, [cue?.id, cue?.beat_id, cue?.video_url, cue?.poster_url]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cue?.id, cue?.beat_id]);
 
-  // Видео реплики ищем заранее: к нажатию «Послушать» оно уже скачано.
+  // Ссылки пришли, а видео у этой реплики нет — объяснит голос браузера, если ученик уже ждёт.
   useEffect(() => {
-    if (!avatarEnabled || assetLookupDone || !lessonVersionId || !cue?.id) return undefined;
-    let cancelled = false;
-    setAssetLookupDone(true);
-    lookupRunningRef.current = true;
-    getAvatarCueAsset({ lessonVersionId, cueId: cue.id, sceneId: cue.scene_id })
-      .then((asset) => {
-        // Ответ для прошлой реплики не трогает флаг текущего поиска.
-        if (cancelled) return;
-        lookupRunningRef.current = false;
-        if (asset?.video_url) {
-          setLazyVideoUrl(asset.video_url);
-          setLazyPosterUrl(asset.poster_url);
-          if (canPrefetchVideo() || wantsPlayRef.current) setVideoRequested(true);
-        } else if (wantsPlayRef.current) {
-          wantsPlayRef.current = false;
-          setPendingVideoPlay(false);
-          speakFallback();
-        }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        lookupRunningRef.current = false;
-        if (wantsPlayRef.current) { wantsPlayRef.current = false; setPendingVideoPlay(false); speakFallback(); }
-      });
-    return () => { cancelled = true; };
-  }, [avatarEnabled, assetLookupDone, lessonVersionId, cue?.id, cue?.scene_id]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (assetsLoading || !wantsPlayRef.current || effectiveVideoUrl) return;
+    wantsPlayRef.current = false;
+    setPendingVideoPlay(false);
+    speakFallback();
+  }, [assetsLoading, effectiveVideoUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Видео не скачалось — объяснит голос браузера, если ученик уже ждёт.
+  // Видео не загрузилось — тоже голос браузера.
   useEffect(() => {
     if (!protectedVideo.error || !wantsPlayRef.current) return;
     wantsPlayRef.current = false;
@@ -110,14 +93,14 @@ export function useAvatarNarration({ cue, lessonVersionId, avatarEnabled, audioE
   }, [protectedVideo.error]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!pendingVideoPlay || !protectedVideo.url || !videoRef.current) return;
+    if (!pendingVideoPlay || !protectedVideo.url || !videoElement) return;
     wantsPlayRef.current = false;
     window.speechSynthesis?.cancel();
-    videoRef.current.muted = false;
-    void videoRef.current.play()
+    videoElement.muted = false;
+    void videoElement.play()
       .then(() => { setPendingVideoPlay(false); setState('speaking'); })
       .catch(() => { setPendingVideoPlay(false); setState('paused'); });
-  }, [pendingVideoPlay, protectedVideo.url]);
+  }, [pendingVideoPlay, protectedVideo.url, videoElement]);
 
   const pause = () => {
     playbackTokenRef.current += 1;
@@ -165,27 +148,28 @@ export function useAvatarNarration({ cue, lessonVersionId, avatarEnabled, audioE
 
   const play = async () => {
     if (!audioEnabled) onAudioEnabledChange(true);
-    const lookupPending = !effectiveVideoUrl && !assetLookupDone && Boolean(lessonVersionId && cue?.id) && avatarEnabled;
-    const lookupInFlight = !effectiveVideoUrl && assetLookupDone && avatarEnabled && lookupRunningRef.current;
-    if (lookupPending || lookupInFlight || (effectiveVideoUrl && !protectedVideo.url && !protectedVideo.error)) {
-      // Видео ещё ищется или скачивается — ждём его, без голоса браузера.
+    const element = videoRef.current;
+    const videoReady = Boolean(protectedVideo.url && element);
+    if (!videoReady && (assetsLoading || effectiveVideoUrl) && !protectedVideo.error) {
+      // Видео ещё готовится или панель только раскрывается — ждём его, без голоса браузера.
       wantsPlayRef.current = true;
       if (effectiveVideoUrl) setVideoRequested(true);
       setPendingVideoPlay(true);
       setState('paused');
       return;
     }
-    if (!protectedVideo.url || !videoRef.current) {
+    if (!videoReady || !element) {
       speakFallback();
       return;
     }
     if (state === 'completed') {
-      videoRef.current.currentTime = 0;
+      element.currentTime = 0;
       setProgress(0);
     }
-    videoRef.current.muted = false;
+    window.speechSynthesis?.cancel();
+    element.muted = false;
     try {
-      await videoRef.current.play();
+      await element.play();
       setState('speaking');
     } catch {
       setState('paused');
@@ -204,13 +188,21 @@ export function useAvatarNarration({ cue, lessonVersionId, avatarEnabled, audioE
     toggle,
     pause,
     video: protectedVideo.url ? {
-      ref: videoRef,
+      ref: attachVideo,
       src: protectedVideo.url,
-      poster: lazyPosterUrl || cue?.poster_url || undefined,
+      // Прямая ссылка: браузер заранее подгружает начало ролика, по нажатию он стартует сразу.
+      preload: canPrefetchVideo() ? 'auto' as const : 'metadata' as const,
+      poster: posterUrl || undefined,
       muted: !audioEnabled,
       onPlay: () => setState('speaking'),
       onPause: () => setState((current) => (current === 'speaking' ? 'paused' : current)),
       onEnded: () => { setProgress(1); setState('completed'); },
+      onError: () => {
+        if (refreshedAfterErrorRef.current || !cueAssets.data) return;
+        refreshedAfterErrorRef.current = true;
+        // Подписанная ссылка истекла — берём свежую; новый src ролик подхватит сам.
+        void cueAssets.refetch();
+      },
       onTimeUpdate: (event: React.SyntheticEvent<HTMLVideoElement>) => {
         const element = event.currentTarget;
         if (Number.isFinite(element.duration) && element.duration > 0) setProgress(element.currentTime / element.duration);

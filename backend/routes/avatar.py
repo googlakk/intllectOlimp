@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTask
-from starlette.responses import StreamingResponse
+from starlette.responses import RedirectResponse, StreamingResponse
 
 from database import get_db
 from auth_dependencies import require_roles
@@ -15,6 +15,8 @@ from llm._http import AsyncClient, Timeout
 from llm.heygen import HeyGenProvider, verify_webhook_signature
 from models import GenerationJob, LessonAsset
 from services.avatar import (
+    avatar_video_urls,
+    is_private_avatar_video,
     AvatarServiceError, create_custom_photo_profile, create_profile, list_avatar_jobs, list_profiles,
     refresh_avatar_job, refresh_avatar_jobs, refresh_custom_photo_profile, serialize_avatar_profile,
     serialize_generation_job, submit_avatar_job, update_profile_voice,
@@ -53,11 +55,12 @@ class AvatarVoiceInput(BaseModel):
     voice_id: str = Field(min_length=1, max_length=255)
 
 
-def serialize_avatar_cue_asset(asset: LessonAsset) -> dict[str, Any]:
+def serialize_avatar_cue_asset(asset: LessonAsset, video_url: str | None = None) -> dict[str, Any]:
+    """video_url — прямая ссылка (подписанная или публичная): <video> играет её частями, без нашего сервера."""
     metadata = asset.metadata_json or {}
     return {
         "id": asset.id,
-        "video_url": f"/api/avatar/assets/{asset.id}/stream",
+        "video_url": video_url or f"/api/avatar/assets/{asset.id}/stream",
         "poster_url": metadata.get("thumbnail_url"),
         "duration_ms": asset.duration_ms,
         "mime_type": asset.mime_type,
@@ -226,8 +229,39 @@ async def avatar_cue_asset(
     for asset in assets:
         metadata = asset.metadata_json or {}
         if metadata.get("cue_id") == cue_id:
-            return serialize_avatar_cue_asset(asset)
+            urls = await _direct_urls([asset])
+            return serialize_avatar_cue_asset(asset, urls.get(asset.id))
     return None
+
+
+async def _direct_urls(assets: list[LessonAsset]) -> dict[int, str]:
+    try:
+        return await avatar_video_urls(assets)
+    except LLMError:
+        # Хранилище не подписало ссылки — отдаём через сервер (медленнее, но урок не ломается).
+        return {}
+
+
+@asset_router.get("/cue-assets")
+async def avatar_cue_assets(
+    lesson_version_id: int = Query(ge=1),
+    user: AuthPrincipal = Depends(require_roles("admin", "teacher", "student")),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Видео всех реплик урока одним запросом: при смене шага ссылка уже есть и ролик стартует сразу."""
+    await require_lesson_version_media_access(user, lesson_version_id, db)
+    assets = (await db.scalars(select(LessonAsset).where(
+        LessonAsset.lesson_version_id == lesson_version_id,
+        LessonAsset.kind == "avatar_video",
+        LessonAsset.status == "ready",
+    ).order_by(LessonAsset.created_at.desc()))).all()
+    latest: dict[str, LessonAsset] = {}
+    for asset in assets:
+        cue = (asset.metadata_json or {}).get("cue_id")
+        if cue and cue not in latest:
+            latest[cue] = asset
+    urls = await _direct_urls(list(latest.values()))
+    return [serialize_avatar_cue_asset(asset, urls.get(asset.id)) for asset in latest.values()]
 
 
 @asset_router.get("/assets/{asset_id}/stream")
@@ -241,6 +275,12 @@ async def avatar_asset_stream(
     if asset is None or asset.kind != "avatar_video" or not asset.source_url:
         raise HTTPException(status_code=404, detail="Видео аватара не найдено")
     await require_lesson_version_media_access(user, asset.lesson_version_id, db)
+    if is_private_avatar_video(asset):
+        # Закрытая корзина: отправляем браузер по подписанной ссылке прямо в хранилище.
+        urls = await _direct_urls([asset])
+        if not urls.get(asset.id):
+            raise HTTPException(status_code=502, detail="Видео аватара временно недоступно")
+        return RedirectResponse(urls[asset.id], status_code=307)
     client = AsyncClient(timeout=Timeout(120))
     upstream_headers = {}
     if request.headers.get("range"):

@@ -34,7 +34,10 @@ class SupabaseStorage:
                 "Authorization": f"Bearer {key}", "apikey": key,
                 "Content-Type": content_type, "x-upsert": "true",
             }, content=source.content)
-            uploaded.raise_for_status()
+            if uploaded.status_code >= 400:
+                # Текст ответа хранилища нужен вызывающему: «Bucket not found» — не временный сбой.
+                raise LLMError(f"Хранилище отклонило файл ({uploaded.status_code}): {uploaded.text[:200]}",
+                               provider="supabase-storage")
             public_url = f"{base_url}/storage/v1/object/public/{bucket}/{quote(path, safe='/')}"
             return public_url, len(source.content)
         except HTTPError as exc:
@@ -62,6 +65,32 @@ class SupabaseStorage:
             return public_url, len(content)
         except HTTPError as exc:
             raise LLMError(f"Не удалось сохранить asset в Supabase Storage: {exc}", provider="supabase-storage") from exc
+        finally:
+            if owns_client:
+                await client.aclose()
+
+    async def create_signed_urls(self, *, bucket: str, paths: list[str], expires_in: int) -> dict[str, str]:
+        """Временные ссылки на чтение закрытых файлов: браузер берёт файл прямо из хранилища (с Range, через CDN)."""
+        if not paths:
+            return {}
+        base_url, key = self._credentials()
+        owns_client = self._client is None
+        client = self._client or AsyncClient(timeout=Timeout(30))
+        try:
+            response = await client.post(
+                f"{base_url}/storage/v1/object/sign/{quote(bucket)}",
+                headers={"Authorization": f"Bearer {key}", "apikey": key, "Content-Type": "application/json"},
+                json={"expiresIn": expires_in, "paths": paths},
+            )
+            response.raise_for_status()
+            signed: dict[str, str] = {}
+            for item in response.json() or []:
+                url = str((item or {}).get("signedURL") or "")
+                if url and not (item or {}).get("error"):
+                    signed[str(item.get("path"))] = f"{base_url}/storage/v1{url}"
+            return signed
+        except (HTTPError, ValueError) as exc:
+            raise LLMError(f"Не удалось подписать ссылки на файлы: {exc}", provider="supabase-storage") from exc
         finally:
             if owns_client:
                 await client.aclose()

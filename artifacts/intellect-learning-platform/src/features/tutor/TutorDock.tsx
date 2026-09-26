@@ -236,9 +236,9 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
                 exit={reduceMotion ? undefined : { height: 0, opacity: 0 }} transition={{ duration: 0.28, ease: 'easeOut' }}>
                 <div className="flex gap-3 px-4 pt-3">
                   {narration.video ? (
-                    <video ref={narration.video.ref} src={narration.video.src} poster={narration.video.poster} playsInline preload="metadata"
+                    <video ref={narration.video.ref} src={narration.video.src} poster={narration.video.poster} playsInline preload={narration.video.preload}
                       muted={narration.video.muted} onPlay={narration.video.onPlay} onPause={narration.video.onPause}
-                      onEnded={narration.video.onEnded} onTimeUpdate={narration.video.onTimeUpdate}
+                      onEnded={narration.video.onEnded} onError={narration.video.onError} onTimeUpdate={narration.video.onTimeUpdate}
                       className="h-24 w-20 shrink-0 rounded-2xl bg-black/30 object-cover" />
                   ) : companion?.previewImageUrl ? (
                     <img src={companion.previewImageUrl} alt="" className="h-20 w-16 shrink-0 rounded-2xl object-cover object-top" />

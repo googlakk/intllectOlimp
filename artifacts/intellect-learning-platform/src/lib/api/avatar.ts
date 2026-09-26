@@ -72,6 +72,9 @@ export const getAvatarCueAsset = (data: {
   if (data.sceneId) params.set('scene_id', data.sceneId);
   return request<AvatarCueAsset | null>(`/avatar/cue-asset?${params.toString()}`);
 };
+export const getAvatarCueAssets = (lessonVersionId: number) => (
+  request<AvatarCueAsset[]>(`/avatar/cue-assets?lesson_version_id=${lessonVersionId}`)
+);
 export const refreshAvatarJobs = (lessonVersionId: number) => (
   request<AvatarGenerationJob[]>(`/avatar/jobs/refresh?lesson_version_id=${lessonVersionId}`, { method: 'POST' })
 );
@@ -116,6 +119,16 @@ export const useAvatarJobs = (lessonVersionId?: number | null) => useQuery({
   queryKey: ['avatar-jobs', lessonVersionId],
   queryFn: () => getAvatarJobs(Number(lessonVersionId)),
   enabled: Boolean(lessonVersionId),
+});
+// Ссылки на видео всех реплик урока одним запросом. Сервер отдаёт ссылки, которым жить ещё 40+ минут;
+// обновляем через 25 — ссылка не истекает, пока страница её держит.
+const CUE_ASSETS_REFRESH_MS = 25 * 60 * 1000;
+export const useAvatarCueAssets = (lessonVersionId?: number | null, enabled = true) => useQuery({
+  queryKey: ['avatar-cue-assets', lessonVersionId],
+  queryFn: () => getAvatarCueAssets(Number(lessonVersionId)),
+  enabled: enabled && Boolean(lessonVersionId),
+  staleTime: CUE_ASSETS_REFRESH_MS,
+  refetchInterval: CUE_ASSETS_REFRESH_MS,
 });
 export const useRefreshAvatarJobs = () => useMutation({
   mutationFn: refreshAvatarJobs,
