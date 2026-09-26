@@ -61,9 +61,8 @@ export const processTextbook = (id: number) =>
 
 export const MAX_TEXTBOOK_BYTES = 150 * 1024 * 1024;
 
-/** Удалить запись, если файл не загрузился (сорвалась загрузка). */
-export const deleteUnuploadedTextbook = (id: number) =>
-  request<void>(`/textbooks/${id}`, { method: 'DELETE' }).catch(() => undefined);
+/** Удалить учебник целиком: файл, страницы, параграфы, элементы и привязки тем. */
+export const deleteTextbook = (id: number) => request<void>(`/textbooks/${id}`, { method: 'DELETE' });
 
 export const updateTextbookPage = (id: number, pageIndex: number, text: string) =>
   request<TextbookPageView>(`/textbooks/${id}/pages/${pageIndex}`, { method: 'PUT', body: JSON.stringify({ text }) });
@@ -75,7 +74,14 @@ export function uploadTextbookFile(url: string, file: File, onProgress?: (share:
     xhr.open('PUT', url);
     xhr.setRequestHeader('Content-Type', 'application/pdf');
     xhr.upload.onprogress = (event) => { if (event.lengthComputable) onProgress?.(event.loaded / event.total); };
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Хранилище ответило ${xhr.status}`)));
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve();
+      // Хранилище отклонило файл по размеру: у бесплатного тарифа Supabase предел файла невелик.
+      const tooLarge = xhr.status === 413 || /size|large|exceed/i.test(xhr.responseText);
+      reject(new Error(tooLarge
+        ? 'Хранилище не приняло файл: он больше допустимого размера. Сожмите PDF или увеличьте предел в Supabase → Storage → Settings.'
+        : `Хранилище ответило ${xhr.status}`));
+    };
     xhr.onerror = () => reject(new Error('Не удалось загрузить файл: проверьте соединение'));
     xhr.send(file);
   });

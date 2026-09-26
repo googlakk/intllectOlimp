@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from llm.base import STOP_TOOL, ToolResult
 from services.textbooks import (
-    IngestDeps, TextbookServiceError, TextbookSettings, create_textbook, delete_unuploaded_textbook, ingest_textbook,
+    IngestDeps, TextbookServiceError, TextbookSettings, create_textbook, delete_textbook, ingest_textbook,
     process_textbook, section_text,
 )
 from textbooks.extract import PageText
@@ -320,7 +320,7 @@ class AccessTests(unittest.TestCase):
 
 class DeleteTests(unittest.TestCase):
     class Db:
-        def __init__(self, status="uploaded"):
+        def __init__(self, status="ready"):
             self.row, self.deleted = book(), False
             self.row.status = status
 
@@ -333,15 +333,26 @@ class DeleteTests(unittest.TestCase):
         async def commit(self):
             pass
 
-    def test_book_without_file_is_deleted_but_uploaded_file_is_kept(self):
-        db = self.Db()
-        run(delete_unuploaded_textbook(1, db, user=USER, storage=Storage(size=None), settings=ON))
+    class Files(Storage):
+        removed = []
+
+        async def delete_object(self, *, bucket, path):
+            self.removed.append(path)
+
+    def test_book_and_its_file_are_deleted(self):
+        db, files = self.Db(), self.Files()
+        run(delete_textbook(1, db, user=USER, storage=files, settings=ON))
         self.assertTrue(db.deleted)
-        for db, storage in ((self.Db(), Storage(size=1000)), (self.Db(status="ready"), Storage(size=None))):
-            with self.assertRaises(TextbookServiceError) as refused:
-                run(delete_unuploaded_textbook(1, db, user=USER, storage=storage, settings=ON))
-            self.assertEqual(refused.exception.status_code, 409)
-            self.assertFalse(db.deleted)
+        self.assertEqual(files.removed, ["5/x/f.pdf"])
+
+    def test_running_book_is_not_deleted(self):
+        from datetime import datetime, timezone
+        db = self.Db(status="recognizing")
+        db.row.updated_at = datetime.now(timezone.utc)
+        with self.assertRaises(TextbookServiceError) as refused:
+            run(delete_textbook(1, db, user=USER, storage=self.Files(), settings=ON))
+        self.assertEqual(refused.exception.status_code, 409)
+        self.assertFalse(db.deleted)
 
 
 if __name__ == "__main__":

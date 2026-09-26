@@ -6,7 +6,7 @@ from auth_dependencies import require_roles
 from database import get_db
 from services.auth import AuthPrincipal
 from services.textbook_links import confirm_suggested, links_overview, set_topic_links, suggest_links
-from services.textbooks import create_textbook, delete_unuploaded_textbook, get_section, get_textbook, list_textbooks, process_textbook, set_textbook_subject, update_page
+from services.textbooks import create_textbook, delete_textbook, get_section, get_textbook, list_textbooks, process_textbook, set_textbook_subject, update_page
 
 router = APIRouter(prefix="/api/textbooks", tags=["textbooks"])
 
@@ -62,9 +62,9 @@ async def page(textbook_id: int, page_index: int, payload: PageUpdateInput,
 
 
 @router.delete("/{textbook_id}", status_code=204)
-async def delete_unuploaded(textbook_id: int, user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
-                            db: AsyncSession = Depends(get_db)):
-    await delete_unuploaded_textbook(textbook_id, db, user=user)
+async def delete(textbook_id: int, user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
+                 db: AsyncSession = Depends(get_db)):
+    await delete_textbook(textbook_id, db, user=user)
 
 
 class TopicLinksInput(BaseModel):

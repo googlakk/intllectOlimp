@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Upload } from 'lucide-react';
-import { MAX_TEXTBOOK_BYTES, createTextbook, deleteUnuploadedTextbook, processTextbook, uploadTextbookFile, useSubjects } from '@/lib/api';
+import { MAX_TEXTBOOK_BYTES, createTextbook, deleteTextbook, processTextbook, uploadTextbookFile, useSubjects } from '@/lib/api';
 
 const GRADES = [5, 6, 7, 8, 9, 10, 11];
 
@@ -36,7 +36,7 @@ export function TextbookUpload({ onDone }: { onDone: (id: number) => void }) {
       await uploadTextbookFile(upload_url, file, setProgress);
     } catch (reason) {
       // Файл не дошёл до хранилища — убираем пустую запись, чтобы не копились «загруженные» книги без файла.
-      if (textbookId !== null) await deleteUnuploadedTextbook(textbookId);
+      if (textbookId !== null) await deleteTextbook(textbookId).catch(() => undefined);
       setProgress(null);
       setError(reason instanceof Error ? reason.message : 'Не удалось загрузить учебник');
       return;

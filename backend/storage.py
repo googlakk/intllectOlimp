@@ -135,3 +135,22 @@ class SupabaseStorage:
         finally:
             if owns_client:
                 await client.aclose()
+
+    async def delete_object(self, *, bucket: str, path: str) -> None:
+        """Удалить файл; если его и не было (сорвалась загрузка) — не ошибка."""
+        base_url, key = self._credentials()
+        owns_client = self._client is None
+        client = self._client or AsyncClient(timeout=Timeout(30))
+        try:
+            response = await client.request(
+                "DELETE", f"{base_url}/storage/v1/object/{quote(bucket)}",
+                headers={"Authorization": f"Bearer {key}", "apikey": key, "Content-Type": "application/json"},
+                json={"prefixes": [path]},
+            )
+            if response.status_code not in (200, 204, 404):
+                response.raise_for_status()
+        except HTTPError as exc:
+            raise LLMError(f"Не удалось удалить файл из хранилища: {exc}", provider="supabase-storage") from exc
+        finally:
+            if owns_client:
+                await client.aclose()

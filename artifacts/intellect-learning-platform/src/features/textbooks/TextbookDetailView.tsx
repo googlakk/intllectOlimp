@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, RotateCw } from 'lucide-react';
-import { processTextbook, setTextbookSubject, updateTextbookPage, useSubjects, useTextbook, useTextbookSection, type TextbookPageView } from '@/lib/api';
+import { ArrowLeft, RotateCw, Trash2 } from 'lucide-react';
+import { deleteTextbook, processTextbook, setTextbookSubject, updateTextbookPage, useSubjects, useTextbook, useTextbookSection, type TextbookPageView } from '@/lib/api';
 import { TopicLinksPanel } from './TopicLinksPanel';
 import { parseMathText } from '@/components/blocks/ShortExplanation';
 import { ITEM_KIND_LABELS, textbookStatusView } from './textbookStatus';
@@ -41,6 +41,17 @@ export function TextbookDetailView({ id, onBack }: { id: number; onBack: () => v
     }
   };
 
+  const remove = async () => {
+    if (!window.confirm(`Удалить учебник «${textbook.title}»? Удалятся файл, распознанный текст, параграфы и привязки тем КТП.`)) return;
+    try {
+      await deleteTextbook(textbook.id);
+      await queryClient.invalidateQueries({ queryKey: ['textbooks'] });
+      onBack();
+    } catch (reason) {
+      setRunError(reason instanceof Error ? reason.message : 'Не удалось удалить учебник');
+    }
+  };
+
   if (sectionId !== null) return <SectionView textbookId={id} sectionId={sectionId} onBack={() => setSectionId(null)} />;
 
   return (
@@ -61,6 +72,9 @@ export function TextbookDetailView({ id, onBack }: { id: number; onBack: () => v
             <RotateCw className="h-4 w-4" aria-hidden /> Запустить обработку
           </button>
         )}
+        <button type="button" onClick={remove} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-destructive/30 px-4 text-sm font-semibold text-destructive hover:bg-destructive/10">
+          <Trash2 className="h-4 w-4" aria-hidden /> Удалить
+        </button>
         {runError && <p role="alert" className="w-full text-sm text-destructive">{runError}</p>}
       </div>
 

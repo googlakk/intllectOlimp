@@ -183,6 +183,7 @@ class SqlTextbookStore:
 
 class FileStorage(Protocol):
     async def create_signed_upload(self, *, bucket: str, path: str) -> str: ...
+    async def delete_object(self, *, bucket: str, path: str) -> None: ...
     async def object_size(self, *, bucket: str, path: str) -> int | None: ...
     async def download_bytes(self, *, bucket: str, path: str) -> bytes: ...
 
@@ -533,23 +534,22 @@ async def process_textbook(textbook_id: int, db: AsyncSession, *, user: AuthPrin
     return {"textbook": serialize_textbook(book), "started": started}
 
 
-async def delete_unuploaded_textbook(textbook_id: int, db: AsyncSession, *, user: AuthPrincipal,
-                                     storage: FileStorage | None = None, settings: TextbookSettings | None = None) -> None:
-    """Удалить запись, если файл так и не загрузился (сорвалась загрузка). Обработанные книги так не удаляются."""
+async def delete_textbook(textbook_id: int, db: AsyncSession, *, user: AuthPrincipal,
+                          storage: FileStorage | None = None, settings: TextbookSettings | None = None) -> None:
+    """Удалить учебник целиком: файл в хранилище, страницы, параграфы, элементы и привязки тем.
+    Во время обработки удалять нельзя — сначала дождаться окончания (или остановки)."""
     settings = settings or textbook_settings()
     book = _require_access(await _guarded(db, db.get(Textbook, textbook_id)), user)
-    if book.status != "uploaded":
-        raise TextbookServiceError(409, "Удалить можно только книгу, файл которой не загрузился")
+    if book.status in RUNNING_STATUSES and not _stalled(book):
+        raise TextbookServiceError(409, "Идёт обработка — удалить учебник можно после её окончания")
     if storage is None:
         from storage import SupabaseStorage
         storage = SupabaseStorage()
     try:
-        size = await storage.object_size(bucket=settings.bucket, path=book.storage_path)
+        await storage.delete_object(bucket=settings.bucket, path=book.storage_path)
     except Exception as exc:
-        raise TextbookServiceError(503, "Хранилище учебников недоступно") from exc
-    if size is not None:
-        raise TextbookServiceError(409, "Файл уже загружен — запустите обработку")
-    await _guarded(db, db.delete(book))
+        raise TextbookServiceError(503, "Хранилище учебников недоступно — попробуйте позже") from exc
+    await _guarded(db, db.delete(book))  # страницы, параграфы, элементы и привязки удаляются каскадом
     await _guarded(db, db.commit())
 
 
