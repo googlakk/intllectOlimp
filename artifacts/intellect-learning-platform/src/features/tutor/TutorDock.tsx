@@ -10,10 +10,10 @@ import { tutorTeasers } from './tutorRules';
 import type { LessonTutor } from './useLessonTutor';
 
 /**
- * Состояния помощника:
+ * Состояния помощника — одновременно только одно:
  * stage — открытие урока: крупный аватар поверх урока ждёт нажатия, потом говорит с субтитрами;
- * idle  — после реплики: маленький аватар и поле «Задайте вопрос…»;
- * speak — наведение или новая реплика: пузырь над аватаром с текстом и «Повторить»;
+ * idle  — маленький аватар и поле «Задайте вопрос…» с живыми подсказками;
+ * speak — рассказчик говорит: кружок увеличивается, в строке вместо поля — его речь;
  * open  — разговор с тьютором.
  */
 type DockMode = 'idle' | 'stage' | 'speak' | 'open';
@@ -36,9 +36,10 @@ const SPEAK_IDLE_MS = 9000;
 const SPEAK_DONE_MS = 2500;
 // Крупная сцена после реплики сворачивается в маленький аватар.
 const STAGE_DONE_MS = 1200;
+const TEASER_MS = 5000;
 const STUCK_MESSAGE = 'Не понимаю, что делать';
-// Золотое кольцо рассказчика — как в макете: персонаж урока, а не кнопка интерфейса.
-const RING = 'ring-2 ring-amber-300/80 shadow-[0_0_24px_rgba(251,191,36,0.35)]';
+// Кольцо рассказчика — фирменный цвет платформы.
+const RING = 'ring-2 ring-primary/80 shadow-[0_0_22px_hsl(var(--primary)/0.45)]';
 
 type Narration = ReturnType<typeof useAvatarNarration>;
 
@@ -50,16 +51,16 @@ function writeFlag(key: string): void {
 }
 
 /** Лицо рассказчика в круге: видео реплики, если оно есть, иначе портрет. Говорит — расходятся кольца. */
-function AvatarFace({ narration, imageUrl, size, withVideo, speaking }: {
-  narration: Narration; imageUrl?: string | null; size: string; withVideo: boolean; speaking: boolean;
+function AvatarFace({ narration, imageUrl, withVideo, speaking }: {
+  narration: Narration; imageUrl?: string | null; withVideo: boolean; speaking: boolean;
 }) {
   const reduceMotion = useReducedMotion();
   const video = withVideo ? narration.video : null;
   return (
-    <span className={`relative grid shrink-0 place-items-center rounded-full ${size}`} aria-hidden>
+    <span className="relative grid h-full w-full place-items-center rounded-full" aria-hidden>
       {speaking && !reduceMotion && [0, 0.6].map((delay) => (
-        <motion.span key={delay} className="absolute inset-0 rounded-full border-2 border-amber-300/60"
-          animate={{ scale: [1, 1.18], opacity: [0.7, 0] }} transition={{ duration: 1.6, delay, repeat: Infinity, ease: 'easeOut' }} />
+        <motion.span key={delay} className="absolute inset-0 rounded-full border-2 border-primary/60"
+          animate={{ scale: [1, 1.22], opacity: [0.7, 0] }} transition={{ duration: 1.6, delay, repeat: Infinity, ease: 'easeOut' }} />
       ))}
       <span className={`relative block h-full w-full overflow-hidden rounded-full bg-neutral-800 ${RING}`}>
         {video ? (
@@ -69,21 +70,21 @@ function AvatarFace({ narration, imageUrl, size, withVideo, speaking }: {
         ) : imageUrl ? (
           <img src={imageUrl} alt="" className="h-full w-full object-cover object-top" />
         ) : (
-          <span className="grid h-full w-full place-items-center text-amber-200"><UserRound className="h-1/2 w-1/2" /></span>
+          <span className="grid h-full w-full place-items-center bg-primary text-white"><UserRound className="h-1/2 w-1/2" /></span>
         )}
       </span>
     </span>
   );
 }
 
-/** Звуковая волна под субтитрами: движется, пока рассказчик говорит. */
+/** Звуковая волна под субтитрами сцены: движется, пока рассказчик говорит. */
 function Waveform({ active }: { active: boolean }) {
   const reduceMotion = useReducedMotion();
   const bars = [3, 5, 8, 12, 7, 14, 9, 16, 10, 6, 12, 8, 5, 3];
   return (
     <span className="mt-3 flex h-5 items-center justify-center gap-[3px]" aria-hidden>
       {bars.map((height, index) => (
-        <motion.span key={index} className="w-[3px] rounded-full bg-amber-300/80" style={{ height }}
+        <motion.span key={index} className="w-[3px] rounded-full bg-primary" style={{ height }}
           animate={active && !reduceMotion ? { scaleY: [0.35, 1, 0.5, 0.9, 0.35] } : { scaleY: 0.3 }}
           transition={{ duration: 1.1, delay: index * 0.06, repeat: active && !reduceMotion ? Infinity : 0, ease: 'easeInOut' }} />
       ))}
@@ -91,26 +92,46 @@ function Waveform({ active }: { active: boolean }) {
   );
 }
 
-/** Кнопка озвучки: Послушать / Загружаю / Пауза / Повторить. */
-function NarrationButton({ narration, onClick }: { narration: Narration; onClick: () => void }) {
+/** Круглая кнопка озвучки: Послушать / Загружаю / Пауза / Повторить. */
+function NarrationControl({ narration }: { narration: Narration }) {
+  const label = narration.loading ? 'Загружаю' : narration.state === 'speaking' ? 'Пауза'
+    : narration.state === 'completed' ? 'Повторить' : 'Послушать';
   return (
-    <button type="button" onClick={onClick}
-      className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-amber-300/70 px-4 text-sm font-semibold text-amber-100 transition-colors hover:bg-amber-300/10">
-      {narration.loading ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Загружаю…</>
-        : narration.state === 'speaking' ? <><Pause className="h-4 w-4" aria-hidden /> Пауза</>
-          : narration.state === 'completed' ? <><RotateCcw className="h-4 w-4" aria-hidden /> Повторить</>
-            : <><Play className="h-4 w-4 fill-current" aria-hidden /> Послушать</>}
+    <button type="button" onClick={narration.toggle} aria-label={label} title={label}
+      className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_0_14px_hsl(var(--primary)/0.5)] transition-transform hover:scale-105">
+      {narration.loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        : narration.state === 'speaking' ? <Pause className="h-4 w-4" aria-hidden />
+          : narration.state === 'completed' ? <RotateCcw className="h-4 w-4" aria-hidden />
+            : <Play className="h-4 w-4 translate-x-px fill-current" aria-hidden />}
     </button>
+  );
+}
+
+/** Сменяющиеся подсказки в пустом поле — помощник выглядит живым. */
+function LiveTeaser({ text }: { text: string }) {
+  const reduceMotion = useReducedMotion();
+  return (
+    <span className="pointer-events-none absolute inset-0 flex items-center overflow-hidden text-sm text-white/50" aria-hidden>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span key={text} className="truncate"
+          initial={reduceMotion ? false : { y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+          exit={reduceMotion ? undefined : { y: -12, opacity: 0 }} transition={{ duration: 0.3 }}>
+          {text}
+        </motion.span>
+      </AnimatePresence>
+    </span>
   );
 }
 
 /**
  * Помощник урока внизу слева: рассказчик (аватар) и тьютор — один персонаж.
- * На открытии урока рассказчик выходит крупно, дальше живёт маленьким аватаром у поля вопроса.
+ * На открытии урока рассказчик выходит крупно, дальше живёт аватаром у поля вопроса:
+ * когда он говорит, кружок растёт, а в строке вместо поля идёт его речь.
  */
 export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion?: CompanionInput }) {
   const [mode, setMode] = useState<DockMode>('idle');
   const [draft, setDraft] = useState('');
+  const [inputFocused, setInputFocused] = useState(false);
   const [teaserIndex, setTeaserIndex] = useState(0);
   const [announcement, setAnnouncement] = useState('');
   const reduceMotion = useReducedMotion();
@@ -131,9 +152,11 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
   const hasOffer = tutor?.hasOffer ?? false;
   const seenOffer = tutor?.seenOffer;
   const open = mode === 'open';
-  const speaking = mode === 'speak';
   const staged = mode === 'stage';
   const hovered = useRef(false);
+  // Реплику открыло наведение мыши — только её и закрывает уход мыши.
+  const hoverOpened = useRef(false);
+  const leaveTimer = useRef<number | null>(null);
   const narration = useAvatarNarration({
     cue: companion?.cue, lessonVersionId: companion?.lessonVersionId,
     avatarEnabled: companion?.avatarEnabled ?? false, audioEnabled: companion?.audioEnabled ?? false,
@@ -142,14 +165,17 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
   const cueText = companion?.avatarEnabled ? narration.narration : '';
   const faceUrl = companion?.avatarEnabled ? companion?.previewImageUrl : null;
   const narrator = Boolean(cueText);
+  const speaking = mode === 'speak' && narrator;
   const name = companion?.name || 'Рассказчик';
   const talking = narration.state === 'speaking';
   const subtitle = talking && narration.activeSentence ? narration.activeSentence : cueText;
   const lastReply = useMemo(() => messages.filter((message) => message.role === 'tutor').at(-1), [messages]);
-  const teasers = tutorTeasers({ locked, hasOffer, lastReply: lastReply?.text });
+  const teasers = tutor
+    ? tutorTeasers({ locked, hasOffer, lastReply: lastReply?.text })
+    : [narrator ? `${name}: нажми, чтобы послушать` : 'Рассказчик урока'];
   const teaser = teasers[teaserIndex % teasers.length];
 
-  // Первая реплика урока — крупная сцена; новая реплика на следующих шагах — пузырь над аватаром.
+  // Первая реплика урока — крупная сцена; новая реплика на следующих шагах — рассказчик говорит у поля.
   const cueKey = `${companion?.cue?.id ?? ''}:${companion?.cue?.beat_id ?? ''}`;
   // Сама выходит один раз на реплику: при возврате на шаг — только по нажатию.
   const shownCues = useRef(new Set<string>());
@@ -157,6 +183,9 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
   const stageKey = `intellect-avatar-stage:${companion?.lessonVersionId ?? ''}`;
   const stageShown = useRef(readFlag(stageKey));
   useEffect(() => {
+    // Новый шаг: отложенное «сворачивание по уходу мыши» к нему не относится.
+    hoverOpened.current = false;
+    if (leaveTimer.current) { window.clearTimeout(leaveTimer.current); leaveTimer.current = null; }
     const firstTime = Boolean(cueText) && !shownCues.current.has(cueKey);
     if (firstTime) shownCues.current.add(cueKey);
     if (firstTime && !stageShown.current) {
@@ -165,8 +194,10 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
       setMode((current) => (current === 'open' ? current : 'stage'));
       return;
     }
-    // На шаге без реплики пузырь и сцена уходят.
-    setMode((current) => (current === 'open' ? current : firstTime ? 'speak' : current === 'speak' || current === 'stage' ? 'idle' : current));
+    // Ученик пишет вопрос — реплику не навязываем; на шаге без реплики рассказчик замолкает.
+    const typing = Boolean(draft) || inputFocused;
+    setMode((current) => (current === 'open' ? current
+      : firstTime && !typing ? 'speak' : current === 'speak' || current === 'stage' ? 'idle' : current));
   }, [cueKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Свернуть; с клавиатуры фокус возвращается на аватар, чтобы ученик не потерял место.
@@ -181,7 +212,7 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
     if (!speaking && !staged && (talking || narration.loading)) narration.pause();
   }, [mode, talking, narration.loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Пузырь сам сворачивается, если его не слушают; сцена — после конца реплики.
+  // Реплика сама уступает место полю, если её не слушают; сцена — после конца реплики.
   useEffect(() => {
     if (staged) {
       if (narration.state !== 'completed') return undefined;
@@ -197,10 +228,10 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
     return () => window.clearTimeout(timer);
   }, [speaking, staged, talking, narration.loading, narration.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Подсказки тьютора в поле ввода сменяют друг друга — помощник выглядит живым, но не мешает.
+  // Подсказки в поле сменяют друг друга — помощник выглядит живым, но не мешает.
   useEffect(() => {
     if (mode !== 'idle' || reduceMotion || teasers.length < 2) return undefined;
-    const timer = window.setInterval(() => setTeaserIndex((index) => index + 1), 5000);
+    const timer = window.setInterval(() => setTeaserIndex((index) => index + 1), TEASER_MS);
     return () => window.clearInterval(timer);
   }, [mode, reduceMotion, teasers.length]);
 
@@ -242,7 +273,7 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
     requestAnimationFrame(() => setAnnouncement(reply.text));
   }, [messages, pending, open]);
 
-  // Esc сворачивает сцену, пузырь и чат; щелчок мимо сворачивает чат.
+  // Esc сворачивает сцену, речь и чат; щелчок мимо сворачивает чат.
   useEffect(() => {
     if (!open && !speaking && !staged) return undefined;
     const escape = (event: KeyboardEvent) => {
@@ -264,31 +295,41 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
   }, [open, speaking, staged]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openChat = () => {
+    if (talking || narration.loading) narration.pause();
     setMode('open');
     // На итоговом задании поле закрыто — фокус на кнопку «Свернуть».
     requestAnimationFrame(() => (locked ? collapseRef.current : inputRef.current)?.focus({ preventScroll: true }));
   };
-  // Нажатие на аватар: у рассказчика — пузырь с репликой, иначе — чат тьютора.
+  // Нажатие на аватар: у рассказчика — его реплика у поля, иначе — чат тьютора.
   const pressAvatar = () => {
-    if (narrator) { setMode(speaking ? 'idle' : 'speak'); return; }
+    hoverOpened.current = false;
+    if (narrator) {
+      if (speaking) { collapse(false); return; }
+      setMode('speak');
+      return;
+    }
     if (tutor) openChat();
   };
 
-  // Наведение мышью на аватар раскрывает пузырь; уход — сворачивает, если реплика не звучит.
-  // Закрываем с задержкой: курсор успевает перейти через зазор с аватара на пузырь.
-  const leaveTimer = useRef<number | null>(null);
+  // Наведение мышью на аватар выводит реплику, если ученик сейчас не пишет вопрос.
+  // Закрываем с задержкой: курсор успевает перейти на кнопки строки.
   useEffect(() => () => { if (leaveTimer.current) window.clearTimeout(leaveTimer.current); }, []);
   const hover = (event: ReactPointerEvent, entering: boolean) => {
     if (event.pointerType !== 'mouse') return;
     hovered.current = entering;
     if (leaveTimer.current) { window.clearTimeout(leaveTimer.current); leaveTimer.current = null; }
-    if (!narrator) return;
-    if (entering) { setMode((current) => (current === 'idle' ? 'speak' : current)); return; }
+    if (!narrator || draft || inputFocused) return;
+    if (entering) {
+      if (mode === 'idle') { hoverOpened.current = true; setMode('speak'); }
+      return;
+    }
+    if (!hoverOpened.current) return;
     leaveTimer.current = window.setTimeout(() => {
       leaveTimer.current = null;
-      if (hovered.current || talking || narration.loading || rootRef.current?.contains(document.activeElement)) return;
+      if (!hoverOpened.current || hovered.current || talking || narration.loading || rootRef.current?.contains(document.activeElement)) return;
+      hoverOpened.current = false;
       setMode((current) => (current === 'speak' ? 'idle' : current));
-    }, 250);
+    }, 300);
   };
 
   const submit = (event: FormEvent) => {
@@ -302,25 +343,69 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
   const ask = (action: () => void) => { action(); setMode('open'); };
 
   const questionForm = (
-          <form onSubmit={submit}
-            className="flex h-12 min-w-0 flex-1 items-center gap-2 rounded-full border border-white/10 bg-neutral-900/95 pl-4 pr-1.5 text-white shadow-lg backdrop-blur-xl">
-            <input
-              ref={inputRef}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onFocus={() => setMode('open')}
-              disabled={locked}
-              maxLength={500}
-              placeholder={locked ? 'На итоговом задании помощник молчит' : hasOffer ? teaser : 'Задайте вопрос…'}
-              aria-label="Сообщение помощнику"
-              aria-controls={chatId}
-              className="h-10 min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/50 focus:outline-none disabled:cursor-not-allowed"
-            />
-            <button type="submit" disabled={pending || locked || !draft.trim()} aria-label="Отправить"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40">
-              <Send className="h-4 w-4" aria-hidden />
-            </button>
-          </form>
+    <form onSubmit={submit}
+      className="flex h-12 min-w-0 flex-1 items-center gap-2 rounded-full border border-white/10 bg-neutral-900/95 pl-4 pr-1.5 text-white shadow-lg backdrop-blur-xl">
+      <span className="relative h-10 min-w-0 flex-1">
+        {!draft && !inputFocused && !locked && <LiveTeaser text={teaser} />}
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onFocus={() => { setInputFocused(true); setMode('open'); }}
+          onBlur={() => setInputFocused(false)}
+          disabled={locked}
+          maxLength={500}
+          placeholder={locked ? 'На итоговом задании помощник молчит' : inputFocused ? 'Задайте вопрос…' : ''}
+          aria-label="Сообщение помощнику"
+          aria-controls={chatId}
+          className="h-10 w-full bg-transparent text-sm text-white placeholder:text-white/50 focus:outline-none disabled:cursor-not-allowed"
+        />
+      </span>
+      <button type="submit" disabled={pending || locked || !draft.trim()} aria-label="Отправить"
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40">
+        <Send className="h-4 w-4" aria-hidden />
+      </button>
+    </form>
+  );
+
+  // Речь рассказчика вместо поля: субтитры, полоса прогресса и управление. Поле вернётся после реплики.
+  const speechLine = (
+    <motion.section key="speech" aria-label={`Реплика: ${name}`}
+      // Курсор на строке речи — она не сворачивается; уход — как уход с аватара.
+      onPointerEnter={(event) => {
+        if (event.pointerType !== 'mouse') return;
+        hovered.current = true;
+        if (leaveTimer.current) { window.clearTimeout(leaveTimer.current); leaveTimer.current = null; }
+      }}
+      onPointerLeave={(event) => hover(event, false)}
+      className="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-[26px] border border-primary/30 bg-neutral-900/95 py-2 pl-4 pr-2 text-white shadow-lg backdrop-blur-xl"
+      initial={reduceMotion ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+      exit={reduceMotion ? undefined : { opacity: 0, y: 6 }} transition={{ duration: 0.2 }}>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-300">{name}</p>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.p key={subtitle} className="line-clamp-3 text-sm leading-snug"
+            initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={reduceMotion ? undefined : { opacity: 0 }}
+            transition={{ duration: 0.2 }}>
+            {subtitle}
+          </motion.p>
+        </AnimatePresence>
+        <span className="mt-1.5 block h-1 overflow-hidden rounded-full bg-white/10" aria-hidden>
+          <span className="block h-full rounded-full bg-primary transition-[width] duration-300 ease-linear"
+            style={{ width: `${Math.round((narration.state === 'completed' ? 1 : narration.progress) * 100)}%` }} />
+        </span>
+      </div>
+      <NarrationControl narration={narration} />
+      <button type="button" onClick={() => { narration.pause(); companion?.onAvatarEnabledChange(false); setMode('idle'); }}
+        aria-label="Не показывать рассказчика" title="Не показывать рассказчика"
+        className="hidden h-10 w-10 shrink-0 place-items-center rounded-full text-white/50 hover:bg-white/10 hover:text-white sm:grid">
+        <EyeOff className="h-4 w-4" aria-hidden />
+      </button>
+      <button type="button" onClick={() => collapse(true)} aria-label="Закрыть реплику, вернуться к вопросу" title="Вернуться к вопросу"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-white/50 hover:bg-white/10 hover:text-white">
+        <X className="h-4 w-4" aria-hidden />
+      </button>
+    </motion.section>
   );
 
   const stage = typeof document !== 'undefined' && createPortal(
@@ -339,16 +424,15 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
             // Уходя, сцена «улетает» к маленькому аватару внизу слева.
             exit={reduceMotion ? undefined : { scale: 0.3, x: '-38vw', y: '38vh', opacity: 0 }}
             transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}>
-            <p className="mb-4 text-sm font-semibold uppercase tracking-wider text-amber-200/80">{name}</p>
-            <div className="relative">
-              <AvatarFace narration={narration} imageUrl={faceUrl} withVideo speaking={talking}
-                size="h-[min(62vw,320px)] w-[min(62vw,320px)]" />
+            <p className="mb-4 text-sm font-semibold uppercase tracking-wider text-indigo-300">{name}</p>
+            <div className="relative h-[min(62vw,320px)] w-[min(62vw,320px)]">
+              <AvatarFace narration={narration} imageUrl={faceUrl} withVideo speaking={talking} />
               {!talking && narration.state !== 'completed' && (
                 <button ref={stageStartRef} type="button" onClick={narration.toggle}
-                  className="absolute -bottom-6 left-1/2 inline-flex min-h-[56px] -translate-x-1/2 items-center gap-3 whitespace-nowrap rounded-full border border-amber-300/70 bg-neutral-900/95 px-6 text-sm font-medium text-white shadow-2xl hover:bg-neutral-800">
+                  className="absolute -bottom-6 left-1/2 inline-flex min-h-[56px] -translate-x-1/2 items-center gap-3 whitespace-nowrap rounded-full border border-primary/70 bg-neutral-900/95 px-6 text-sm font-medium text-white shadow-2xl hover:bg-neutral-800">
                   {narration.loading
-                    ? <><Loader2 className="h-5 w-5 animate-spin text-amber-200" aria-hidden /> Загружаю…</>
-                    : <><Mic className="h-5 w-5 text-amber-200" aria-hidden /> Нажмите, чтобы начать</>}
+                    ? <><Loader2 className="h-5 w-5 animate-spin text-primary" aria-hidden /> Загружаю…</>
+                    : <><Mic className="h-5 w-5 text-primary" aria-hidden /> Нажмите, чтобы начать</>}
                 </button>
               )}
             </div>
@@ -374,47 +458,15 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
     document.body,
   );
 
+  // Говорит — кружок растёт.
+  const avatarSize = speaking ? (mobile ? 64 : 84) : 48;
+
   return (
-    <div ref={rootRef} className="relative h-12 w-full lg:w-[min(520px,100%)]" aria-live="off">
+    <div ref={rootRef} className="relative h-12 w-full lg:w-[min(560px,100%)]" aria-live="off">
       <p className="sr-only" aria-live="polite">{announcement}</p>
       {stage}
 
       <AnimatePresence initial={false}>
-        {/* Пузырь рассказчика над аватаром: текст реплики и «Повторить». */}
-        {speaking && narrator && (
-          <motion.section key="bubble" aria-label={`Реплика: ${name}`}
-            className="absolute bottom-[calc(100%+14px)] left-0 z-[75] w-[min(480px,calc(100vw-2rem))]"
-            onPointerEnter={(event) => hover(event, true)} onPointerLeave={(event) => hover(event, false)}
-            initial={reduceMotion ? false : { opacity: 0, y: 10, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={reduceMotion ? undefined : { opacity: 0, y: 10, scale: 0.96 }} transition={{ duration: 0.22, ease: 'easeOut' }}
-            style={{ transformOrigin: '24px 100%' }}>
-            <div className="relative flex gap-4 rounded-3xl border border-amber-200/15 bg-neutral-900/95 p-4 text-white shadow-2xl backdrop-blur-xl">
-              <AvatarFace narration={narration} imageUrl={faceUrl} withVideo speaking={talking} size="h-24 w-24 sm:h-28 sm:w-28" />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-amber-200/70">{name}</p>
-                  <button type="button" onClick={() => collapse(true)} aria-label="Свернуть"
-                    className="-mr-2 -mt-2 grid h-10 w-10 shrink-0 place-items-center rounded-full text-white/50 hover:bg-white/10 hover:text-white">
-                    <ChevronDown className="h-5 w-5" />
-                  </button>
-                </div>
-                <p className="line-clamp-4 text-sm leading-relaxed">{subtitle}</p>
-                {talking && <Waveform active />}
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <NarrationButton narration={narration} onClick={narration.toggle} />
-                  <button type="button" onClick={() => { narration.pause(); companion?.onAvatarEnabledChange(false); setMode('idle'); }}
-                    aria-label="Не показывать рассказчика" title="Не показывать рассказчика"
-                    className="grid h-11 w-11 place-items-center rounded-full text-white/50 hover:bg-white/10 hover:text-white">
-                    <EyeOff className="h-4 w-4" aria-hidden />
-                  </button>
-                </div>
-              </div>
-              {/* Хвостик пузыря — к аватару внизу. */}
-              <span className="absolute -bottom-2 left-4 h-4 w-4 rotate-45 border-b border-r border-amber-200/15 bg-neutral-900" aria-hidden />
-            </div>
-          </motion.section>
-        )}
-
         {open && tutor && (
           <motion.section key="chat" id={chatId} aria-label="Помощник"
             className="absolute bottom-[calc(100%+14px)] left-0 z-[75] w-[min(680px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-white/10 bg-neutral-900/95 text-white shadow-2xl backdrop-blur-xl"
@@ -502,34 +554,54 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
         )}
       </AnimatePresence>
 
-      {/* Строка помощника: маленький аватар и поле вопроса. */}
-      <div className="flex h-12 items-center gap-3">
-        <button ref={avatarRef} type="button" onClick={pressAvatar}
+      {/* Строка помощника: аватар и поле вопроса — или речь рассказчика, но не всё сразу. */}
+      {/* Телефон: «Продолжить» всегда доступна — речь встаёт строкой над рядом во всю ширину. */}
+      <AnimatePresence initial={false}>
+        {speaking && mobile && (
+          <motion.div key="speech-mobile" className="absolute bottom-[calc(100%+10px)] left-0 z-[75] flex w-[calc(100vw-2rem)]">
+            {speechLine}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <div className="absolute bottom-0 left-0 z-[74] flex w-full items-end gap-3">
+        <motion.button ref={avatarRef} type="button" onClick={pressAvatar}
           onPointerEnter={(event) => hover(event, true)} onPointerLeave={(event) => hover(event, false)}
-          aria-label={`${narrator ? `${name}: реплика шага` : 'Открыть помощника'}${hasOffer ? `. ${teaser}` : ''}`} aria-expanded={speaking || open}
-          className="relative h-12 w-12 shrink-0 rounded-full">
+          aria-label={`${narrator ? (speaking ? `${name}: вернуться к вопросу` : `${name}: реплика шага`) : 'Открыть помощника'}${hasOffer ? `. ${teaser}` : ''}`}
+          aria-expanded={speaking || open}
+          className="relative shrink-0 rounded-full"
+          initial={false} animate={{ width: avatarSize, height: avatarSize }}
+          transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 24 }}>
           {narrator || faceUrl ? (
-            <AvatarFace narration={narration} imageUrl={faceUrl} withVideo={false} speaking={false} size="h-12 w-12" />
+            <AvatarFace narration={narration} imageUrl={faceUrl} withVideo={speaking} speaking={speaking && talking} />
           ) : (
-            <span className="block h-12 w-12 rounded-full bg-gradient-to-br from-primary via-violet-400 to-sky-300 shadow-[0_0_14px_rgba(124,92,255,0.55)]" aria-hidden />
+            <motion.span className="block h-full w-full rounded-full bg-gradient-to-br from-primary via-violet-400 to-sky-300 shadow-[0_0_14px_hsl(var(--primary)/0.55)]"
+              animate={reduceMotion ? undefined : { scale: [1, 1.06, 1] }} transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }} aria-hidden />
           )}
-          {hasOffer && <span className="absolute right-0 top-0 h-3 w-3 rounded-full border-2 border-background bg-amber-400" aria-hidden />}
-        </button>
-        {tutor ? (
-          mobile ? (
-            // Телефон: строку делит «Продолжить» — поле ввода живёт в раскрытом чате во всю ширину.
-            <button type="button" onClick={openChat} aria-expanded={open} aria-controls={chatId}
-              className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full border border-white/10 bg-neutral-900/95 px-4 text-sm font-semibold text-white/85 shadow-lg">
-              <MessageCircle className="h-4 w-4 shrink-0 text-amber-200" aria-hidden /> Спросить
-            </button>
-          ) : questionForm
-        ) : narrator ? (
-          <button type="button" onClick={() => { setMode('speak'); narration.toggle(); }}
-            className="flex h-12 min-w-0 flex-1 items-center gap-2 rounded-full border border-white/10 bg-neutral-900/95 px-4 text-left text-sm text-white/75 shadow-lg">
-            <Play className="h-4 w-4 shrink-0 fill-current text-amber-200" aria-hidden />
-            <span className="truncate">{name}: нажми, чтобы послушать</span>
-          </button>
-        ) : null}
+          {hasOffer && <span className="absolute right-0 top-0 h-3 w-3 rounded-full border-2 border-background bg-primary" aria-hidden />}
+        </motion.button>
+        <AnimatePresence mode="wait" initial={false}>
+          {speaking ? (mobile ? null : speechLine) : tutor ? (
+            mobile ? (
+              <motion.button key="ask" type="button" onClick={openChat} aria-expanded={open} aria-controls={chatId}
+                initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={reduceMotion ? undefined : { opacity: 0 }}
+                className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full border border-white/10 bg-neutral-900/95 px-4 text-sm font-semibold text-white/85 shadow-lg">
+                <MessageCircle className="h-4 w-4 shrink-0 text-primary" aria-hidden /> Спросить
+              </motion.button>
+            ) : (
+              <motion.div key="form" className="flex min-w-0 flex-1"
+                initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={reduceMotion ? undefined : { opacity: 0 }}>
+                {questionForm}
+              </motion.div>
+            )
+          ) : narrator ? (
+            <motion.button key="listen" type="button" onClick={() => { setMode('speak'); narration.toggle(); }}
+              initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={reduceMotion ? undefined : { opacity: 0 }}
+              className="relative flex h-12 min-w-0 flex-1 items-center gap-2 rounded-full border border-white/10 bg-neutral-900/95 px-4 text-left text-sm text-white/75 shadow-lg">
+              <Play className="h-4 w-4 shrink-0 fill-current text-primary" aria-hidden />
+              <span className="truncate">{name}: нажми, чтобы послушать</span>
+            </motion.button>
+          ) : null}
+        </AnimatePresence>
       </div>
     </div>
   );

@@ -185,6 +185,8 @@ export function useAvatarNarration({ cue, lessonVersionId, avatarEnabled, audioE
     loading: pendingVideoPlay && state !== 'speaking',
     narration,
     activeSentence,
+    // Доля сказанного 0…1 — для полосы прогресса.
+    progress,
     toggle,
     pause,
     video: protectedVideo.url ? {
