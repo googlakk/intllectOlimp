@@ -42,7 +42,7 @@ def _preprocess(source: str) -> str:
     text = _latin_letters(source).strip().strip("$")
     # Смешанные числа: 2\frac{1}{2} и «2 1/2» — это 2 + 1/2 (только числа, иначе 2·x/3 — умножение).
     text = re.sub(r"(\d+)\s*\\d?frac\s*\{\s*(\d+)\s*\}\s*\{\s*(\d+)\s*\}", r"(\1+\2/\3)", text)
-    text = re.sub(r"(?<![\d.,/])(\d+)\s+(\d+)\s*/\s*(\d+)(?![\d.,])", r"(\1+\2/\3)", text)
+    text = re.sub(r"(?<![\d.,/])(\d{1,3}(?:\s\d{3})+|\d+)\s+(\d+)\s*/\s*(\d+)(?![\d.,])", r"(\1+\2/\3)", text)
     text = re.sub(r"[½⅓⅔¼¾⅕⅙⅛]", lambda match: _UNICODE_FRACTIONS[match.group(0)], text)
     text = re.sub(r"\\div", "/", text)
     for _ in range(10):

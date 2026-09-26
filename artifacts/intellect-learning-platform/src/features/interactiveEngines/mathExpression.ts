@@ -48,7 +48,7 @@ function preprocess(source: string): string {
   // Смешанные числа: 2\frac{1}{2} и «2 1/2» — это 2 + 1/2 (только числа, иначе 2·x/3 — умножение).
   text = text
     .replace(/(\d+)\s*\\d?frac\s*\{\s*(\d+)\s*\}\s*\{\s*(\d+)\s*\}/g, '($1+$2/$3)')
-    .replace(/(?<![\d.,/])(\d+)\s+(\d+)\s*\/\s*(\d+)(?![\d.,])/g, '($1+$2/$3)')
+    .replace(/(?<![\d.,/])(\d{1,3}(?:\s\d{3})+|\d+)\s+(\d+)\s*\/\s*(\d+)(?![\d.,])/g, '($1+$2/$3)')
     .replace(/[½⅓⅔¼¾⅕⅙⅛]/g, (char) => UNICODE_FRACTIONS[char])
     .replace(/\\div/g, '/');
   // \frac{a}{b} → ((a)/(b)), \sqrt{a} → √(a); вложенные — повторяем, пока меняется.

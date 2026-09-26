@@ -682,6 +682,15 @@
       },
       "expected": "correct",
       "note": "\\div"
+    },
+    {
+      "answer": "1 000 1/2",
+      "spec": {
+        "correct": "1000,5",
+        "numeric": true
+      },
+      "expected": "correct",
+      "note": "тысячи с пробелом и смешанное число"
     }
   ]
 }
