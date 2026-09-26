@@ -197,6 +197,17 @@
       "status": "ok",
       "done": true,
       "note": "кириллическая х у ученика"
+    },
+    {
+      "kind": "expression",
+      "start": "\\dfrac{y}{y^{2}-5y}",
+      "final_answer": [
+        "\\dfrac{1}{y-5}"
+      ],
+      "line": "1/(y-5)",
+      "status": "ok",
+      "done": true,
+      "note": "dfrac со степенью во вложенном знаменателе (реальный отчёт учителя)"
     }
   ]
 }

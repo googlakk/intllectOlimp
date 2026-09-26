@@ -43,6 +43,61 @@ export function extractTask(source: string): string {
 const UNICODE_FRACTIONS: Record<string, string> = { '½': '(1/2)', '⅓': '(1/3)', '⅔': '(2/3)', '¼': '(1/4)', '¾': '(3/4)', '⅕': '(1/5)', '⅙': '(1/6)', '⅛': '(1/8)' };
 
 /** LaTeX и «красивые» знаки → простая запись. */
+/** text[openIndex] === '{': содержимое до парной '}' (с учётом вложенности) и индекс после неё. */
+function consumeBraces(text: string, openIndex: number): [string, number] | null {
+  let depth = 0;
+  for (let j = openIndex; j < text.length; j += 1) {
+    if (text[j] === '{') depth += 1;
+    else if (text[j] === '}') {
+      depth -= 1;
+      if (depth === 0) return [text.slice(openIndex + 1, j), j + 1];
+    }
+  }
+  return null;
+}
+
+/**
+ * \frac{a}{b} -> ((a)/(b)), \dfrac и \tfrac тоже, \sqrt{a} -> корень(a) — с учётом вложенных скобок
+ * в числителе/знаменателе/подкоренном выражении (пример: dfrac от y на y в квадрате минус 5y).
+ */
+function convertLatexCommands(text: string): string {
+  let out = '';
+  let i = 0;
+  while (i < text.length) {
+    const match = /^\\(d?frac|tfrac|sqrt)/.exec(text.slice(i));
+    if (match) {
+      const command = match[1];
+      let j = i + match[0].length;
+      while (j < text.length && /\s/.test(text[j])) j += 1;
+      if (text[j] === '{') {
+        const first = consumeBraces(text, j);
+        if (first) {
+          const [firstText, j2] = first;
+          if (command === 'sqrt') {
+            out += `√(${convertLatexCommands(firstText)})`;
+            i = j2;
+            continue;
+          }
+          let k = j2;
+          while (k < text.length && /\s/.test(text[k])) k += 1;
+          if (text[k] === '{') {
+            const second = consumeBraces(text, k);
+            if (second) {
+              const [secondText, k2] = second;
+              out += `((${convertLatexCommands(firstText)})/(${convertLatexCommands(secondText)}))`;
+              i = k2;
+              continue;
+            }
+          }
+        }
+      }
+    }
+    out += text[i];
+    i += 1;
+  }
+  return out;
+}
+
 function preprocess(source: string): string {
   let text = latinLetters(source.trim()).replace(/^\$+|\$+$/g, '');
   // Смешанные числа: 2\frac{1}{2} и «2 1/2» — это 2 + 1/2 (только числа, иначе 2·x/3 — умножение).
@@ -52,13 +107,7 @@ function preprocess(source: string): string {
     .replace(/[½⅓⅔¼¾⅕⅙⅛]/g, (char) => UNICODE_FRACTIONS[char])
     .replace(/\\div/g, '/');
   // \frac{a}{b} → ((a)/(b)), \sqrt{a} → √(a); вложенные — повторяем, пока меняется.
-  for (let guard = 0; guard < 10; guard += 1) {
-    const next = text
-      .replace(/\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '(($1)/($2))')
-      .replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)');
-    if (next === text) break;
-    text = next;
-  }
+  text = convertLatexCommands(text);
   return text
     .replace(/\\cdot|\\times/g, '*')
     .replace(/\\left|\\right|\\,|\\!|\\ /g, '')

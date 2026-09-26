@@ -38,6 +38,56 @@ def extract_task(source: str) -> str:
 _UNICODE_FRACTIONS = {"½": "(1/2)", "⅓": "(1/3)", "⅔": "(2/3)", "¼": "(1/4)", "¾": "(3/4)", "⅕": "(1/5)", "⅙": "(1/6)", "⅛": "(1/8)"}
 
 
+def _consume_braces(text: str, open_index: int) -> tuple[str, int] | None:
+    """text[open_index] == '{': содержимое до парной '}' (с учётом вложенности) и индекс после неё."""
+    depth = 0
+    j = open_index
+    while j < len(text):
+        if text[j] == "{":
+            depth += 1
+        elif text[j] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_index + 1:j], j + 1
+        j += 1
+    return None
+
+
+def _convert_latex_commands(text: str) -> str:
+    r"""\frac{a}{b} -> ((a)/(b)), \dfrac и \tfrac тоже, \sqrt{a} -> корень(a) — с учётом вложенных скобок
+    в числителе/знаменателе/подкоренном выражении (пример: dfrac от y на y в квадрате минус 5y)."""
+    out: list[str] = []
+    i = 0
+    while i < len(text):
+        match = re.match(r"\\(d?frac|tfrac|sqrt)", text[i:])
+        if match:
+            command = match.group(1)
+            j = i + match.end()
+            while j < len(text) and text[j].isspace():
+                j += 1
+            if j < len(text) and text[j] == "{":
+                first = _consume_braces(text, j)
+                if first is not None:
+                    first_text, j2 = first
+                    if command == "sqrt":
+                        out.append(f"√({_convert_latex_commands(first_text)})")
+                        i = j2
+                        continue
+                    k = j2
+                    while k < len(text) and text[k].isspace():
+                        k += 1
+                    if k < len(text) and text[k] == "{":
+                        second = _consume_braces(text, k)
+                        if second is not None:
+                            second_text, k2 = second
+                            out.append(f"(({_convert_latex_commands(first_text)})/({_convert_latex_commands(second_text)}))")
+                            i = k2
+                            continue
+        out.append(text[i])
+        i += 1
+    return "".join(out)
+
+
 def _preprocess(source: str) -> str:
     text = _latin_letters(source).strip().strip("$")
     # Смешанные числа: 2\frac{1}{2} и «2 1/2» — это 2 + 1/2 (только числа, иначе 2·x/3 — умножение).
@@ -45,12 +95,7 @@ def _preprocess(source: str) -> str:
     text = re.sub(r"(?<![\d.,/])(\d{1,3}(?:\s\d{3})+|\d+)\s+(\d+)\s*/\s*(\d+)(?![\d.,])", r"(\1+\2/\3)", text)
     text = re.sub(r"[½⅓⅔¼¾⅕⅙⅛]", lambda match: _UNICODE_FRACTIONS[match.group(0)], text)
     text = re.sub(r"\\div", "/", text)
-    for _ in range(10):
-        following = re.sub(r"\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}", r"((\1)/(\2))", text)
-        following = re.sub(r"\\sqrt\s*\{([^{}]*)\}", r"√(\1)", following)
-        if following == text:
-            break
-        text = following
+    text = _convert_latex_commands(text)
     text = re.sub(r"\\cdot|\\times", "*", text)
     text = re.sub(r"\\left|\\right|\\,|\\!|\\ ", "", text)
     text = re.sub(r"sqrt", "√", text, flags=re.IGNORECASE)
