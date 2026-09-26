@@ -144,6 +144,7 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
   const stageStartRef = useRef<HTMLButtonElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const chatId = useId();
+  const cueTextId = useId();
   const endRef = useRef<HTMLDivElement>(null);
   const announced = useRef(new Set<string>());
   const locked = tutor?.locked ?? false;
@@ -370,7 +371,7 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
 
   // Речь рассказчика вместо поля: субтитры, полоса прогресса и управление. Поле вернётся после реплики.
   const speechLine = (
-    <motion.section key="speech" aria-label={`Реплика: ${name}`}
+    <motion.section key="speech" aria-label={`Реплика: ${name}`} aria-describedby={cueTextId}
       // Курсор на строке речи — она не сворачивается; уход — как уход с аватара.
       onPointerEnter={(event) => {
         if (event.pointerType !== 'mouse') return;
@@ -382,7 +383,9 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
       initial={reduceMotion ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
       exit={reduceMotion ? undefined : { opacity: 0, y: 6 }} transition={{ duration: 0.2 }}>
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-300">{name}</p>
+        {/* Реплика целиком — для экранного диктора: субтитры меняются по фразам. */}
+        <p id={cueTextId} className="sr-only">{cueText}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-300" aria-hidden>{name}</p>
         <AnimatePresence mode="wait" initial={false}>
           <motion.p key={subtitle} className="line-clamp-3 text-sm leading-snug"
             initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={reduceMotion ? undefined : { opacity: 0 }}
