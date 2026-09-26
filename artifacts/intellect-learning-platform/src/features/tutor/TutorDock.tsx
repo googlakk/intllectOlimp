@@ -129,17 +129,17 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
 
   // Ушли из реплики (открыли чат, сменился шаг) — озвучку на паузу: иначе она звучит без кнопок.
   useEffect(() => {
-    if (mode !== 'speak' && narration.state === 'speaking') narration.pause();
-  }, [mode, narration.state]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (mode !== 'speak' && (narration.state === 'speaking' || narration.loading)) narration.pause();
+  }, [mode, narration.state, narration.loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!speaking || narration.state === 'speaking') return;
+    if (!speaking || narration.state === 'speaking' || narration.loading) return;
     const timer = window.setTimeout(() => {
       // Не сворачиваем под курсором и под фокусом клавиатуры.
       if (!hovered.current && !rootRef.current?.contains(document.activeElement)) setMode('idle');
     }, narration.state === 'completed' ? SPEAK_DONE_MS : SPEAK_IDLE_MS);
     return () => window.clearTimeout(timer);
-  }, [speaking, narration.state]);
+  }, [speaking, narration.state, narration.loading]);
 
   // Реплики в покое сменяют друг друга — помощник выглядит живым, но не мешает.
   useEffect(() => {
@@ -253,7 +253,8 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
                 <div className="flex flex-wrap items-center gap-1.5 px-4 pb-2 pt-2">
                   <button type="button" onClick={narration.toggle}
                     className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full bg-white px-4 text-xs font-semibold text-neutral-900">
-                    {narration.state === 'speaking' ? <><Pause className="h-3.5 w-3.5" aria-hidden /> Пауза</>
+                    {narration.loading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Загружаю…</>
+                      : narration.state === 'speaking' ? <><Pause className="h-3.5 w-3.5" aria-hidden /> Пауза</>
                       : narration.state === 'completed' ? <><RotateCcw className="h-3.5 w-3.5" aria-hidden /> Ещё раз</>
                         : <><Play className="h-3.5 w-3.5" aria-hidden /> Послушать</>}
                   </button>

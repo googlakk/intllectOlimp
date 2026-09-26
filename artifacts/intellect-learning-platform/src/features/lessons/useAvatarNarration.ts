@@ -4,6 +4,13 @@ import type { AvatarCue } from '@/lib/api/types';
 import { useProtectedMediaUrl } from '@/lib/useProtectedMediaUrl';
 import { activeNarrationSentence, narrationSegments, narrationSpeechText } from './avatarNarration';
 
+/** Видео заранее не качаем, если ученик экономит трафик или сеть медленная: скачаем по нажатию. */
+function canPrefetchVideo(): boolean {
+  const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+  if (!connection) return true;
+  return !connection.saveData && !['slow-2g', '2g'].includes(connection.effectiveType ?? '');
+}
+
 export type NarratorState = 'ready' | 'speaking' | 'paused' | 'completed';
 
 type Options = {
@@ -17,6 +24,8 @@ type Options = {
 /**
  * Озвучка реплики аватара: видео (если сгенерировано) или синтез речи браузера,
  * с текущей фразой для подписи. Общая для плашки урока и превью в редакторе.
+ * Видео реплики ищется и скачивается заранее, при смене шага: по нажатию оно стартует сразу.
+ * Пока видео грузится, голос браузера не включается — иначе звучат два рассказчика подряд.
  */
 export function useAvatarNarration({ cue, lessonVersionId, avatarEnabled, audioEnabled, onAudioEnabledChange }: Options) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -29,6 +38,9 @@ export function useAvatarNarration({ cue, lessonVersionId, avatarEnabled, audioE
   const [lazyVideoUrl, setLazyVideoUrl] = useState<string | undefined>(cue?.video_url);
   const [lazyPosterUrl, setLazyPosterUrl] = useState<string | undefined | null>(cue?.poster_url);
   const [assetLookupDone, setAssetLookupDone] = useState(Boolean(cue?.video_url));
+  // Нажали «Послушать», пока видео ещё ищется или скачивается: запустим его, как только будет готово.
+  const wantsPlayRef = useRef(false);
+  const lookupRunningRef = useRef(false);
   const narration = narrationSpeechText(cue?.fallback_text || cue?.script || '');
   const effectiveVideoUrl = lazyVideoUrl || cue?.video_url;
   const protectedVideo = useProtectedMediaUrl(effectiveVideoUrl, { enabled: videoRequested && Boolean(effectiveVideoUrl) });
@@ -46,18 +58,61 @@ export function useAvatarNarration({ cue, lessonVersionId, avatarEnabled, audioE
     speechSegmentRef.current = 0;
     setVideoRequested(false);
     setPendingVideoPlay(false);
+    wantsPlayRef.current = false;
+    lookupRunningRef.current = false;
     setLazyVideoUrl(cue?.video_url);
     setLazyPosterUrl(cue?.poster_url);
     setAssetLookupDone(Boolean(cue?.video_url));
+    // Готовое видео скачиваем сразу, не дожидаясь нажатия.
+    if (avatarEnabled && cue?.video_url && canPrefetchVideo()) setVideoRequested(true);
     if (videoRef.current) {
       videoRef.current.pause();
       videoRef.current.currentTime = 0;
       videoRef.current.load();
     }
-  }, [cue?.id, cue?.beat_id, cue?.video_url, cue?.poster_url]);
+  }, [cue?.id, cue?.beat_id, cue?.video_url, cue?.poster_url]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Видео реплики ищем заранее: к нажатию «Послушать» оно уже скачано.
+  useEffect(() => {
+    if (!avatarEnabled || assetLookupDone || !lessonVersionId || !cue?.id) return undefined;
+    let cancelled = false;
+    setAssetLookupDone(true);
+    lookupRunningRef.current = true;
+    getAvatarCueAsset({ lessonVersionId, cueId: cue.id, sceneId: cue.scene_id })
+      .then((asset) => {
+        // Ответ для прошлой реплики не трогает флаг текущего поиска.
+        if (cancelled) return;
+        lookupRunningRef.current = false;
+        if (asset?.video_url) {
+          setLazyVideoUrl(asset.video_url);
+          setLazyPosterUrl(asset.poster_url);
+          if (canPrefetchVideo() || wantsPlayRef.current) setVideoRequested(true);
+        } else if (wantsPlayRef.current) {
+          wantsPlayRef.current = false;
+          setPendingVideoPlay(false);
+          speakFallback();
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        lookupRunningRef.current = false;
+        if (wantsPlayRef.current) { wantsPlayRef.current = false; setPendingVideoPlay(false); speakFallback(); }
+      });
+    return () => { cancelled = true; };
+  }, [avatarEnabled, assetLookupDone, lessonVersionId, cue?.id, cue?.scene_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Видео не скачалось — объяснит голос браузера, если ученик уже ждёт.
+  useEffect(() => {
+    if (!protectedVideo.error || !wantsPlayRef.current) return;
+    wantsPlayRef.current = false;
+    setPendingVideoPlay(false);
+    speakFallback();
+  }, [protectedVideo.error]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!pendingVideoPlay || !protectedVideo.url || !videoRef.current) return;
+    wantsPlayRef.current = false;
+    window.speechSynthesis?.cancel();
     videoRef.current.muted = false;
     void videoRef.current.play()
       .then(() => { setPendingVideoPlay(false); setState('speaking'); })
@@ -66,6 +121,7 @@ export function useAvatarNarration({ cue, lessonVersionId, avatarEnabled, audioE
 
   const pause = () => {
     playbackTokenRef.current += 1;
+    wantsPlayRef.current = false;
     setPendingVideoPlay(false);  // видео не должно стартовать само, когда панель откроют снова
     window.speechSynthesis?.cancel();
     videoRef.current?.pause();
@@ -109,24 +165,12 @@ export function useAvatarNarration({ cue, lessonVersionId, avatarEnabled, audioE
 
   const play = async () => {
     if (!audioEnabled) onAudioEnabledChange(true);
-    if (!effectiveVideoUrl && !assetLookupDone && lessonVersionId && cue?.id) {
-      setAssetLookupDone(true);
-      try {
-        const asset = await getAvatarCueAsset({ lessonVersionId, cueId: cue.id, sceneId: cue.scene_id });
-        if (asset?.video_url) {
-          setLazyVideoUrl(asset.video_url);
-          setLazyPosterUrl(asset.poster_url);
-          setVideoRequested(true);
-          setPendingVideoPlay(true);
-          setState('paused');
-          return;
-        }
-      } catch {
-        // Видео недоступно — объяснит синтез речи браузера.
-      }
-    }
-    if (effectiveVideoUrl && !protectedVideo.url && !protectedVideo.error) {
-      setVideoRequested(true);
+    const lookupPending = !effectiveVideoUrl && !assetLookupDone && Boolean(lessonVersionId && cue?.id) && avatarEnabled;
+    const lookupInFlight = !effectiveVideoUrl && assetLookupDone && avatarEnabled && lookupRunningRef.current;
+    if (lookupPending || lookupInFlight || (effectiveVideoUrl && !protectedVideo.url && !protectedVideo.error)) {
+      // Видео ещё ищется или скачивается — ждём его, без голоса браузера.
+      wantsPlayRef.current = true;
+      if (effectiveVideoUrl) setVideoRequested(true);
       setPendingVideoPlay(true);
       setState('paused');
       return;
@@ -148,10 +192,13 @@ export function useAvatarNarration({ cue, lessonVersionId, avatarEnabled, audioE
     }
   };
 
-  const toggle = () => { if (state === 'speaking') pause(); else void play(); };
+  // Повторное нажатие во время загрузки отменяет ожидание.
+  const toggle = () => { if (state === 'speaking' || (pendingVideoPlay && wantsPlayRef.current)) pause(); else void play(); };
 
   return {
     state,
+    // Нажали «Послушать», видео ещё готовится.
+    loading: pendingVideoPlay && state !== 'speaking',
     narration,
     activeSentence,
     toggle,
