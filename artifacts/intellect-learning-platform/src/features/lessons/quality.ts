@@ -140,7 +140,8 @@ export function getLessonQualityState(
   const coverage = buildCoverage(objectives, blocks, qualityReport);
   const blockingIssues = buildBlockingIssues(qualityReport, hasObjectiveContract, blocks.length);
   const warningMessages = groupedMessages(qualityReport?.warnings || []);
-  const canOverride = blockingIssues.length > 0 && hasObjectiveContract && qualityReport?.overridable === true;
+  // Любые недочёты можно подтвердить галочкой; отчёта нет (старый урок) — тоже.
+  const canOverride = blockingIssues.length > 0 && blocks.length > 0 && qualityReport?.overridable !== false;
   const canPublish = (blockingIssues.length === 0 || (canOverride && errorsOverridden))
     && (warningMessages.length === 0 || warningsAcknowledged);
 

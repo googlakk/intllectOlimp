@@ -731,17 +731,7 @@ def _cause_role(value: Any) -> str | None:
 
 
 # Растёт, когда проверки становятся точнее: неопубликуемый урок со старым отчётом пересчитывается при открытии.
-QUALITY_CHECKS_VERSION = 2
-
-# Ошибки, при которых ученику засчитали бы неверный ответ или блок не откроется: их не подтвердить галочкой.
-HARD_ERROR_CODES = frozenset({
-    "answer_not_in_options", "arithmetic_answer_mismatch", "empty_mastery_check", "invalid_content",
-    "invalid_mastery_options", "invalid_mastery_question", "invalid_mastery_type", "invalid_options",
-    "missing_mastery_answer", "unknown_component",
-    # Сломанный интерактив засчитал бы ученику ошибку, в которой тот не виноват: только исправить или перегенерировать.
-    "step_solver_invalid", "function_explorer_invalid", "cause_effect_map_invalid", "chronology_line_invalid",
-})
-
+QUALITY_CHECKS_VERSION = 3
 
 def component_content_warnings(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Проверка данных интерактивов, которые модель могла собрать неаккуратно.
@@ -835,9 +825,8 @@ def quality_report(
     coverage["publishable"] = not coverage["errors"] and not coverage["gaps"] and bool(objectives)
     # Учитель может опубликовать под свою ответственность, если ошибки не ломают проверку ответов.
     coverage["checks_version"] = QUALITY_CHECKS_VERSION
-    coverage["overridable"] = bool(objectives) and not any(
-        isinstance(error, dict) and error.get("code") in HARD_ERROR_CODES for error in coverage["errors"]
-    )
+    # Любые недочёты учитель или админ может подтвердить и опубликовать урок под свою ответственность.
+    coverage["overridable"] = bool(normalized_blocks)
     return {
         "objectives": objectives,
         "normalized_blocks": normalized_blocks,

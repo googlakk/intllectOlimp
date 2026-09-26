@@ -120,9 +120,8 @@ describe('publishing over soft errors', () => {
     expect(getLessonQualityState(soft, false, true).canPublish).toBe(true);
   });
 
-  it('keeps broken answers blocking', () => {
-    const hard = lesson({ publishable: false, overridable: false });
-    expect(getLessonQualityState(hard, false, true).canOverride).toBe(false);
-    expect(getLessonQualityState(hard, false, true).canPublish).toBe(false);
+  it('lets the teacher confirm any errors, including old reports without the flag', () => {
+    const old = lesson({ publishable: false });
+    expect(getLessonQualityState(old, false, true).canPublish).toBe(true);
   });
 });
