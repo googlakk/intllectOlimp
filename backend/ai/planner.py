@@ -171,6 +171,8 @@ def build_component_plan(shape: LessonShape, objectives: list[dict[str, Any]], f
     """profile — профиль предмета (ai/subject_profiles.py): уточняет блоки обычного урока."""
     ids = _objective_ids(objectives)
     subject_plan = (profile or {}).get("plan") or {}
+    # Тексты шагов профиля; по умолчанию — исторические, как было до других профилей.
+    actions = (profile or {}).get("actions") or {}
     plan: list[dict[str, Any]] = []
 
     if shape == "assessment_only":
@@ -215,21 +217,22 @@ def build_component_plan(shape: LessonShape, objectives: list[dict[str, Any]], f
         plan.append(_step("explain", "explanation", [objective_id], explain_allowed, "Понять новое понятие или явление"))
         if subject_plan:
             plan.append(_step("model", "explanation", [objective_id], subject_plan.get("model") or ["WorkedExample"],
-                              "Разобрать пример: как рассуждать по шагам"))
+                              actions.get("model", "Разобрать пример: как рассуждать по шагам")))
             if position == 0 and len(ids) > 1 and subject_plan.get("chronology"):
                 # Один раз на урок — порядок событий и связь причин со следствиями.
                 # При одной цели хронологию даёт лента времени в объяснении: урок не вылезает из бюджета.
                 plan.append(_step("practice", "practice", [objective_id], subject_plan["chronology"],
                                   "Выстроить события по времени и связать причины со следствиями"))
-            # Первая цель — работа с источником, чтобы она гарантированно была в уроке.
-            if position == 0 and subject_plan.get("source"):
-                practice = subject_plan["source"]
+            # Первая цель — фирменная практика предмета (у истории — источник), чтобы она гарантированно была в уроке.
+            first_practice = subject_plan.get("source") or subject_plan.get("first_practice")
+            if position == 0 and first_practice:
+                practice = first_practice
             elif position == 1 and subject_plan.get("signature_practice"):
                 practice = subject_plan["signature_practice"]
             else:
                 practice = subject_plan["practice"]
             plan.append(_step("practice", "practice", [objective_id], practice,
-                              "Найти доказательство в источнике и объяснить причины и последствия"))
+                              actions.get("practice", "Найти доказательство в источнике и объяснить причины и последствия")))
             continue
         if shape != "procedure_mastery":
             plan.append(_step("model", "explanation", [objective_id], ["WorkedExample"], "Разобрать пример применения"))
@@ -248,9 +251,11 @@ def build_component_plan(shape: LessonShape, objectives: list[dict[str, Any]], f
         # При одной цели шага хронологии нет, а практика — источник: фирменный блок предмета ставим сюда.
         text = objectives[0].get("text") or ""
         allowed = next(components for pattern, components in single_apply if pattern is None or pattern.search(text))
-        plan.append(_step("apply", "practice", ids, allowed, "Применить к новой ситуации: связать события, причины и итоги"))
+        plan.append(_step("apply", "practice", ids, allowed,
+                          actions.get("apply", "Применить к новой ситуации: связать события, причины и итоги")))
     elif subject_plan.get("apply"):
-        plan.append(_step("apply", "practice", ids, subject_plan["apply"], "Применить к новой ситуации: решение, аргумент, оценка"))
+        plan.append(_step("apply", "practice", ids, subject_plan["apply"],
+                          actions.get("apply", "Применить к новой ситуации: решение, аргумент, оценка")))
     elif shape in {"extended_concept", "process_inquiry", "source_argument"} or len(ids) > 1:
         plan.append(_step("apply", "practice", ids, ["IndependentProblem", "ArgumentBuilder", "DataInvestigation", "ProcessBuilder"], "Связать цели и перенести знания"))
     else:

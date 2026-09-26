@@ -710,7 +710,7 @@ async def with_textbook_warnings(report: dict[str, Any], db: AsyncSession, topic
                                  subject_name: str | None = None) -> dict[str, Any]:
     """Добавить к проверке качества проверку по учебнику и по профилю предмета (например, у истории —
     хронология, источник, причины и последствия)."""
-    from ai.subject_profiles import subject_warnings
+    from ai.subject_profiles import subject_warnings, textbook_source_warnings
     from ai.textbook_grounding import textbook_warnings
     from services.textbook_context import load_textbook_context, subject_has_textbook
 
@@ -719,7 +719,8 @@ async def with_textbook_warnings(report: dict[str, Any], db: AsyncSession, topic
     available = bool(context) or await subject_has_textbook(db, topic)
     quality = report["quality_report"]
     quality["warnings"] = (list(quality.get("warnings") or []) + textbook_warnings(report["normalized_blocks"], context, available)
-                           + subject_warnings(report["normalized_blocks"], subject_name, getattr(topic, "lesson_type", "study")))
+                           + subject_warnings(report["normalized_blocks"], subject_name, getattr(topic, "lesson_type", "study"))
+                           + textbook_source_warnings(report["normalized_blocks"], subject_name, context))
     return report
 
 

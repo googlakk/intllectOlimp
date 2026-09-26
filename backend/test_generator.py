@@ -168,7 +168,8 @@ class ShowPathTests(unittest.TestCase):
             return ToolResult(data={"blocks": [GOOD_BLOCK]}, stop_reason=STOP_TOOL)
 
         with patch("llm.call_tool", fake_call_tool):
-            asyncio.run(generate_lesson("Степень с натуральным показателем", "Алгебра", "Вычислять степени", None, None, grade=7))
+            # Геометрия — семейство без своего профиля (у алгебры ход мысли задаёт профиль предмета).
+            asyncio.run(generate_lesson("Смежные углы", "Геометрия", "Находить смежные углы", None, None, grade=7))
         self.assertIn("Как показывать ход мысли: " + SUBJECT_FAMILY_PROFILES["mathematical"]["show_path"], prompts[0])
 
 

@@ -150,3 +150,79 @@ class ContentErrorsTests(unittest.TestCase):
         report = quality_report([bad], "Знать хронологию")["quality_report"]
         self.assertIn("chronology_line_invalid", [error["code"] for error in report["errors"]])
         self.assertFalse(report["publishable"])
+
+
+def math_plan(objectives="Выносить множитель из-под знака корня. Вносить множитель под знак корня."):
+    return build_topic_contract(topic_name="Преобразование выражений с квадратными корнями", subject_name="Алгебра",
+                                learning_objectives=objectives, skills=None, resources=None, grade=8, hours=1, lesson_type="study")
+
+
+class MathProfileTests(unittest.TestCase):
+    def test_math_subjects_are_recognised_but_not_geometry(self):
+        for name in ("Алгебра", "Математика", "Алгебра и начала анализа"):
+            self.assertEqual(subject_profile(name)["id"], "math")
+        self.assertIsNone(subject_profile("Геометрия"))
+
+    def test_math_plan_has_worked_example_step_practice_and_error_analysis(self):
+        plan = math_plan()
+        self.assertEqual(plan["topic_contract"]["subject_profile"], "math")
+        steps = plan["component_plan"]
+        self.assertTrue(any(step["allowed_components"] == ["WorkedExample"] for step in steps))
+        practices = [step["allowed_components"] for step in steps if step["role"] == "practice"]
+        self.assertEqual(practices[:2], [["GuidedPractice"], ["MisconceptionDebugger"]])
+        self.assertTrue(all("источник" not in step["cognitive_action"] for step in steps))
+        for step in steps:
+            if step["evidence_stage"]:
+                self.assertTrue(set(step["allowed_components"]) <= STAGE_COMPONENTS[step["evidence_stage"]], step)
+        self.assertLessEqual(len(steps), plan["topic_contract"]["block_budget"]["max"])
+
+    def test_function_topic_applies_on_a_graph(self):
+        plan = math_plan("Строить график функции y = √x")
+        apply = next(step for step in plan["component_plan"] if step["role"] == "apply")
+        self.assertEqual(apply["allowed_components"], ["InteractiveGraph"])
+
+    def test_math_warnings(self):
+        blocks = [{"component": "Presentation", "content": {"slides": [], "objective_ids": ["a", "b"]}}]
+        self.assertEqual([w["code"] for w in subject_warnings(blocks, "Алгебра")],
+                         ["math_without_worked_example", "math_without_step_practice",
+                          "math_without_error_analysis", "math_without_check"])
+        complete = [
+            {"component": "WorkedExample", "content": {"objective_ids": ["a"], "steps": [{"description": "Проверка: подставим x = 4"}]}},
+            {"component": "GuidedPractice", "content": {"question": "Вынесите множитель: $\\sqrt{12}$"}},
+            {"component": "MisconceptionDebugger", "content": {"objective_ids": ["b"], "claim": "√(9+16) = 7"}},
+        ]
+        self.assertEqual(subject_warnings(complete, "Алгебра"), [])
+        # Одна цель: без «найди ошибку» не ругаем — в таком уроке нет для него шага.
+        single = [complete[0], complete[1]]
+        self.assertEqual(subject_warnings(single, "Алгебра"), [])
+
+    def test_tasks_must_come_from_the_textbook_when_linked(self):
+        from ai.subject_profiles import textbook_source_warnings
+        blocks = [
+            {"component": "WorkedExample", "content": {"source_ref": {"kind": "section", "page": 12}}},
+            {"component": "GuidedPractice", "content": {"question": "?"}},
+            {"component": "IndependentProblem", "content": {"source_ref": {"kind": "analog", "item_id": 7}}},
+            {"component": "MisconceptionDebugger", "content": {}},
+        ]
+        context = {"sections": [{"items": [{"id": 7}]}]}
+        self.assertEqual([w["blocks"] for w in textbook_source_warnings(blocks, "Алгебра", context)], [[1]])
+        # Задачи из параграфа не извлечены — учителю нечем исправить, молчим.
+        self.assertEqual(textbook_source_warnings(blocks, "Алгебра", {"sections": [{"items": []}]}), [])
+        self.assertEqual(textbook_source_warnings(blocks, "Алгебра", None), [])
+        self.assertEqual(textbook_source_warnings(blocks, "История Кыргызстана", context), [])
+
+    def test_math_rules_reach_the_generator_prompt(self):
+        from ai.generator import generate_lesson
+        from llm import ToolResult
+        from llm.base import STOP_TOOL
+
+        prompts = []
+
+        async def fake_call_tool(task, **kwargs):
+            prompts.append(kwargs["user"])
+            return ToolResult(data={"blocks": [{"component": "ShortExplanation", "content": {"objective_ids": ["obj-1"]}}]}, stop_reason=STOP_TOOL)
+
+        with patch("llm.call_tool", fake_call_tool):
+            asyncio.run(generate_lesson("Квадратные корни", "Алгебра", "Вычислять квадратные корни", None, None, grade=8))
+        self.assertIn("Профиль предмета «Математика»", prompts[0])
+        self.assertIn("меняй только числа и буквы", prompts[0])

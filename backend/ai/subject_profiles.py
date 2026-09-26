@@ -90,7 +90,98 @@ HISTORY: dict[str, Any] = {
     ),
 }
 
-SUBJECT_PROFILES: tuple[dict[str, Any], ...] = (HISTORY,)
+# Алгебра и школьная математика — разобранные примеры с постепенным убиранием шагов
+# (Sweller 1985; Renkl & Atkinson 2003), перемешанная практика (Rohrer & Taylor 2007),
+# разбор ошибок (Booth et al. 2013). Геометрия — отдельный профиль: чертёж и доказательство.
+MATH: dict[str, Any] = {
+    "id": "math",
+    "label": "Математика",
+    "keywords": (re.compile(r"(?<![а-яё])(математ|алгебр|арифмет)"),),
+    "core": "понимать, почему преобразование верно, и уверенно выполнять его, различая типы задач",
+    "route": (
+        "задача-крючок (зачем это нужно) → правило с объяснением «почему» (сначала на числах, потом в общем виде) "
+        "→ разобранный пример → ученик решает по шагам сам → разбор типичной ошибки → самостоятельная задача "
+        "вперемешку с прошлым типом → проверка ответа подстановкой или оценкой"
+    ),
+    "show_path": (
+        "что дано и что нужно получить → раскрой запись (степень — это умножение, дробь — деление на части) → какое правило подходит "
+        "и почему → одно преобразование на шаг с его названием "
+        "→ ограничения (знаменатель не равен нулю, под корнем неотрицательное число) → ответ → проверка подстановкой"
+    ),
+    "rules": (
+        "Определения, формулы и обозначения — только как в учебнике.",
+        "Примеры и задачи — такие же, как в учебнике, или их аналоги: тот же тип задачи, то же число действий и такие же "
+        "«красивые» ответы; меняй только числа и буквы. Не придумывай задачи другого вида, чем в учебнике.",
+        "Каждое правило сначала покажи на числах, потом запиши в общем виде.",
+        "Один шаг решения — одно преобразование, у шага есть название («выносим множитель из-под корня»).",
+        "Называй ограничения: знаменатель не равен нулю, под знаком корня — неотрицательное число.",
+        "В разобранном примере покажи проверку ответа подстановкой или оценкой.",
+        "Все формулы записывай в LaTeX между $…$.",
+        "Хотя бы одно задание «найди ошибку» (MisconceptionDebugger) на типичное заблуждение.",
+    ),
+    "misconceptions": (
+        "√(a+b) = √a + √b",
+        "(a+b)² = a² + b²",
+        "в дроби сокращают слагаемые, а не множители",
+        "−x всегда отрицательно",
+        "√(x²) = x при любом x",
+        "при умножении или делении неравенства на отрицательное число знак не меняют",
+        "делят уравнение на выражение с переменной и теряют корень",
+    ),
+    "plan": {
+        "explain": ["Presentation", "ShortExplanation"],
+        "model": ["WorkedExample"],
+        # Фирменный шаг — один допустимый блок, иначе модель выбирает привычный.
+        "first_practice": ["GuidedPractice"],
+        "signature_practice": ["MisconceptionDebugger"],
+        "practice": ["GuidedPractice", "SortAndClassify"],
+        "apply": ["IndependentProblem"],
+    },
+    "actions": {
+        "model": "Разобрать пример как в учебнике: одно преобразование на шаг, с названием и проверкой",
+        "practice": "Решить аналог примера по шагам и найти типичную ошибку",
+        "apply": "Самостоятельно решить задачу учебника другого вида вперемешку с прошлыми",
+    },
+    # Темы про функции — задание на график, иначе — самостоятельная задача.
+    "single_objective_apply": (
+        (re.compile(r"функци|график", re.IGNORECASE), ["InteractiveGraph"]),
+        (None, ["IndependentProblem"]),
+    ),
+    "check_lesson_types": ("study", None, ""),
+    # Тема привязана к параграфу — у каждого примера и задачи должна быть ссылка на учебник (source_ref).
+    # «Найди ошибку» строится на заблуждении, а не на задаче книги — его не проверяем.
+    "textbook_sourced": frozenset({"WorkedExample", "GuidedPractice", "IndependentProblem"}),
+    "checks": (
+        {
+            "code": "math_without_worked_example",
+            "components": {"WorkedExample"},
+            "message": "В уроке математики нет разобранного примера по шагам",
+        },
+        {
+            "code": "math_without_step_practice",
+            "components": {"GuidedPractice"},
+            "message": "В уроке математики нет задания, где ученик сам решает по шагам",
+        },
+        {
+            "code": "math_without_error_analysis",
+            "components": None,
+            "satisfied_by": {"MisconceptionDebugger"},
+            # В уроке с одной целью отдельного шага «найди ошибку» нет — бюджет урока не вмещает.
+            "min_objectives": 2,
+            "text": re.compile(r"найди(те)? ошибк|где ошибк|ошибся|ошиблась|неверно решил", re.IGNORECASE),
+            "message": "В уроке математики нет задания на разбор типичной ошибки",
+        },
+        {
+            "code": "math_without_check",
+            # Проверку ответа показывают в разобранном примере; «проверь себя» в заданиях не в счёт.
+            "components": {"WorkedExample"},
+            "text": re.compile(r"подстав|проверка|проверим", re.IGNORECASE),
+            "message": "В уроке математики нет проверки ответа подстановкой или оценкой",
+        },
+    ),
+}
+
+SUBJECT_PROFILES: tuple[dict[str, Any], ...] = (HISTORY, MATH)
 
 
 def subject_profile(subject_name: str | None) -> dict[str, Any] | None:
@@ -138,8 +229,12 @@ def subject_warnings(blocks: list[dict[str, Any]], subject_name: str | None, les
     if not profile or not blocks or lesson_type not in profile.get("check_lesson_types", ("study",)):
         return []
     warnings = []
+    objective_count = len({objective for block in blocks if isinstance(block, dict) and isinstance(block.get("content"), dict)
+                           for objective in block["content"].get("objective_ids") or []})
     for check in profile["checks"]:
         pattern = check.get("text")
+        if objective_count < check.get("min_objectives", 0):
+            continue
         components = check["components"] or _TASK_COMPONENTS
         found = any(block.get("component") in check.get("satisfied_by", ()) for block in blocks if isinstance(block, dict)) or any(
             block.get("component") in components
@@ -149,3 +244,27 @@ def subject_warnings(blocks: list[dict[str, Any]], subject_name: str | None, les
         if not found:
             warnings.append({"code": check["code"], "message": check["message"]})
     return warnings
+
+
+def _has_textbook_ref(block: dict[str, Any]) -> bool:
+    ref = block.get("content", {}).get("source_ref") if isinstance(block.get("content"), dict) else None
+    if not isinstance(ref, dict):
+        return False
+    # Разобранный пример может идти по тексту параграфа, без отдельного элемента.
+    return ref.get("item_id") is not None or (block.get("component") == "WorkedExample" and ref.get("kind") == "section")
+
+
+def textbook_source_warnings(blocks: list[dict[str, Any]], subject_name: str | None,
+                             context: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Примеры и задачи не по учебнику — одним предупреждением. Проверяем, только если у темы есть
+    параграф с разобранными задачами: иначе учителю нечем исправить."""
+    components = (subject_profile(subject_name) or {}).get("textbook_sourced")
+    has_items = any(section.get("items") for section in (context or {}).get("sections") or [])
+    if not components or not has_items:
+        return []
+    missing = [index for index, block in enumerate(blocks)
+               if isinstance(block, dict) and block.get("component") in components and not _has_textbook_ref(block)]
+    if not missing:
+        return []
+    return [{"code": "task_without_textbook_source", "blocks": missing,
+             "message": f"Без ссылки на учебник: {len(missing)} из примеров и задач — замените задачами книги или их аналогами"}]
