@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from errors import ApplicationError
-from llm.heygen import HeyGenProvider
+from llm.heygen import AVATAR_ENGINE, HeyGenProvider
 from models import AvatarProfile, GenerationJob, LessonAsset, LessonVersion
 from narration import spoken_text
 from services.lessons import (LessonServiceError, clear_lesson_manifest_cache_for_version, ensure_lesson_media_draft)
@@ -220,6 +220,9 @@ async def submit_avatar_job(payload: Any, db: AsyncSession,
     ))
     if existing is not None:
         return existing
+    if request["api_version"] == "v3":
+        # Движок — не часть отпечатка (готовый ролик не рендерим заново), но видно, чем рендерили.
+        request["engine"] = AVATAR_ENGINE
     settings = profile.voice_settings or {}
     submitted = await (provider or HeyGenProvider()).create_video(
         avatar_id=profile.provider_avatar_id,

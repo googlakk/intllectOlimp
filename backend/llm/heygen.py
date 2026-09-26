@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass, field
@@ -18,6 +19,14 @@ from llm._http import AsyncClient, HTTPError, Timeout
 BASE_URL = os.getenv("HEYGEN_BASE_URL", "https://api.heygen.com").rstrip("/")
 TIMEOUT = float(os.getenv("HEYGEN_TIMEOUT", "120"))
 CATALOG_CACHE_SECONDS = float(os.getenv("HEYGEN_CATALOG_CACHE_SECONDS", "600"))
+# Без поля engine HeyGen v3 рендерит дорогим Avatar IV. Avatar III — заметно дешевле;
+# другой движок (avatar_iv) — только осознанно, через переменную окружения.
+AVATAR_ENGINES = ("avatar_iii", "avatar_iv")
+AVATAR_ENGINE = os.getenv("HEYGEN_AVATAR_ENGINE", "avatar_iii").strip() or "avatar_iii"
+if AVATAR_ENGINE not in AVATAR_ENGINES:
+    # Опечатка в переменной превратила бы каждое видео в ошибку 400 от HeyGen.
+    logging.getLogger(__name__).warning("HEYGEN_AVATAR_ENGINE=%r не поддерживается, используем avatar_iii", AVATAR_ENGINE)
+    AVATAR_ENGINE = "avatar_iii"
 _CATALOG_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
 
@@ -116,6 +125,7 @@ class HeyGenProvider:
             body = await self._request("POST", "/v3/videos", {
                 "type": "avatar",
                 "avatar_id": avatar_id,
+                "engine": {"type": AVATAR_ENGINE},
                 "aspect_ratio": "16:9",
                 "output_format": "mp4",
                 "script": script,

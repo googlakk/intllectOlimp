@@ -98,6 +98,8 @@ class HeyGenProviderTests(unittest.TestCase):
             if request.method == "POST" and str(request.url).endswith("/v3/videos"):
                 body = json.loads(request.content)
                 self.assertEqual(body["avatar_id"], "look-1")
+                # Дешёвый движок явно: без engine HeyGen берёт дорогой Avatar IV.
+                self.assertEqual(body["engine"], {"type": "avatar_iii"})
                 return Response(200, json={"data": {"video_id": "video-v3", "status": "waiting"}})
             if request.method == "GET" and "/v3/videos/video-v3" in str(request.url):
                 return Response(200, json={"data": {
