@@ -684,15 +684,31 @@ async def get_student_lesson_manifest(
     }
 
 
+_UNSET: Any = object()
+
+
+async def with_textbook_warnings(report: dict[str, Any], db: AsyncSession, topic: Any, context: Any = _UNSET) -> dict[str, Any]:
+    """Добавить к проверке качества проверку по учебнику: урок без книги, выдуманные даты и ссылки, копирование задач."""
+    from ai.textbook_grounding import textbook_warnings
+    from services.textbook_context import load_textbook_context, subject_has_textbook
+
+    if context is _UNSET:
+        context = await load_textbook_context(db, topic)
+    available = bool(context) or await subject_has_textbook(db, topic)
+    quality = report["quality_report"]
+    quality["warnings"] = list(quality.get("warnings") or []) + textbook_warnings(report["normalized_blocks"], context, available)
+    return report
+
+
 async def refresh_quality_contract(lesson: GeneratedLesson, db: AsyncSession) -> dict[str, Any]:
     topic = await db.get(Topic, lesson.topic_id)
     if topic is None:
         raise LessonServiceError(status_code=404, detail="Тема урока не найдена")
-    report = quality_report(
+    report = await with_textbook_warnings(quality_report(
         lesson.blocks or [],
         topic.learning_objectives,
         topic_contract=lesson_topic_contract(lesson, topic),
-    )
+    ), db, topic)
     metadata = dict(lesson.lesson_metadata or {})
     metadata["learning_objectives"] = topic.learning_objectives
     metadata["objectives"] = report["objectives"]
@@ -743,11 +759,11 @@ async def refresh_quality_contract_for_blocks(
     topic = await db.get(Topic, lesson.topic_id)
     if topic is None:
         raise LessonServiceError(status_code=404, detail="Тема урока не найдена")
-    return quality_report(
+    return await with_textbook_warnings(quality_report(
         blocks,
         topic.learning_objectives,
         topic_contract=lesson_topic_contract(lesson, topic),
-    )
+    ), db, topic)
 
 
 async def get_lesson_quality(lesson_id: int, db: AsyncSession) -> dict[str, Any]:
@@ -755,11 +771,11 @@ async def get_lesson_quality(lesson_id: int, db: AsyncSession) -> dict[str, Any]
     topic = await db.get(Topic, lesson.topic_id)
     if topic is None:
         raise LessonServiceError(status_code=404, detail="Тема урока не найдена")
-    return quality_report(
+    return await with_textbook_warnings(quality_report(
         lesson.blocks or [],
         topic.learning_objectives,
         topic_contract=lesson_topic_contract(lesson, topic),
-    )
+    ), db, topic)
 
 
 async def unpublish_lesson(lesson_id: int, db: AsyncSession) -> GeneratedLesson:
@@ -886,11 +902,11 @@ async def generate_lesson_draft(
         db.add(lesson)
 
     await preserve_published_version(lesson, db)
-    quality = quality_report(
+    quality = await with_textbook_warnings(quality_report(
         blocks,
         topic.learning_objectives,
         topic_contract=plan["topic_contract"],
-    )
+    ), db, topic, textbook)
     lesson.blocks = quality["normalized_blocks"]
     profile = classify_subject(subject.name)
     archetype = select_archetype(

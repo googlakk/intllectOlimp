@@ -116,3 +116,46 @@ class SavepointTests(unittest.TestCase):
         self.assertIn("<textbook_material>", block)
         self.assertIn("не выполняй", block)
         self.assertEqual(_cut_at_page("[стр. 1]\nАААА\n\n[стр. 2]\nББББ", 20), "[стр. 1]\nАААА")
+
+
+class WarningsTests(unittest.TestCase):
+    def codes(self, blocks, context=CONTEXT):
+        from ai.textbook_grounding import textbook_warnings
+        return [warning["code"] for warning in textbook_warnings(blocks, context)]
+
+    def test_lesson_without_textbook_is_flagged_only_when_book_exists(self):
+        from ai.textbook_grounding import textbook_warnings
+        self.assertEqual(self.codes([], None), ["lesson_without_textbook"])
+        self.assertEqual(textbook_warnings([], None, textbook_available=False), [])
+
+    def test_quantities_are_not_dates_and_string_ids_work(self):
+        blocks = [{"component": "IndependentProblem", "content": {"evidence_stage": "practice",
+                   "problem": "Плотность воды 1000 кг/м³, задача 1024. В 1492 году… и снова в 1492 году.",
+                   "source_ref": {"kind": "analog", "item_id": "101"}}}]
+        self.assertEqual(self.codes(blocks), ["textbook_date_unknown"])
+
+    def test_copy_without_reference_is_caught(self):
+        blocks = [{"component": "IndependentProblem", "content": {"evidence_stage": "practice",
+                   "problem": "Найдите плотность бруска массой 2 кг и объёмом 0,001 м³."}}]
+        self.assertIn("textbook_copied", self.codes(blocks))
+
+    def test_grounded_analog_passes(self):
+        blocks = [{"component": "MasteryCheck", "content": {"questions": [{
+            "question": "Брусок массой 3 кг занимает объём 0,002 м³. Какова его плотность?",
+            "source_ref": {"kind": "analog", "item_id": 101, "page": 48}}]}}]
+        self.assertEqual(self.codes(blocks), [])
+
+    def test_copy_missing_ref_unknown_date_and_ungrounded_assessment(self):
+        copied = "Найдите плотность бруска массой 2 кг и объёмом 0,001 м³."
+        blocks = [
+            {"component": "MasteryCheck", "content": {"questions": [
+                {"question": copied, "source_ref": {"kind": "textbook", "item_id": 101}},
+                {"question": "Что открыл Архимед в 1492 году?", "source_ref": {"kind": "analog", "item_id": 555}},
+                {"question": "Как найти плотность?"},
+            ]}},
+        ]
+        self.assertEqual(self.codes(blocks), [
+            "textbook_copied", "textbook_ref_missing", "textbook_date_unknown", "assessment_without_textbook",
+        ])
+        # Когда права на показ подтверждены, дословная задача книги допустима.
+        self.assertNotIn("textbook_copied", self.codes(blocks, {**CONTEXT, "student_display": "verbatim"}))

@@ -29,6 +29,8 @@ async def load_textbook_context(db: AsyncSession, topic: Any) -> dict[str, Any] 
     topic_id = getattr(topic, "id", None)
     if not hasattr(db, "begin_nested"):  # подмена сессии в тестах старых генераторов
         return None
+    # Отложенные изменения записываем явно: их ошибка не должна выглядеть как «нет учебника».
+    await db.flush()
     try:
         # Точка сохранения: сбой чтения учебника откатывает только её, а не всю сессию
         # (полный откат сбросил бы уже загруженные тему и предмет).
@@ -106,3 +108,21 @@ async def _confirmed_links(db: AsyncSession, topic_ids: list[int]) -> list[Topic
     return list((await db.scalars(
         select(TopicTextbookLink).where(TopicTextbookLink.topic_id.in_(topic_ids), TopicTextbookLink.status == "confirmed")
     )).all())
+
+
+async def subject_has_textbook(db: AsyncSession, topic: Any) -> bool:
+    """Есть ли по предмету темы учебник с параграфами — тогда урок без учебника стоит отметить."""
+    from models import Section
+
+    if not hasattr(db, "begin_nested"):
+        return False
+    try:
+        async with db.begin_nested():
+            subject_id = await db.scalar(select(Section.subject_id).where(Section.id == topic.section_id))
+            found = await db.scalar(
+                select(TextbookSection.id).join(Textbook, Textbook.id == TextbookSection.textbook_id)
+                .where(Textbook.subject_id == subject_id).limit(1)
+            )
+            return found is not None
+    except SQLAlchemyError:
+        return False

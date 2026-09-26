@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 PRIMARY_TEXT_LIMIT = 40_000
@@ -120,3 +121,89 @@ def lesson_textbook_metadata(context: dict[str, Any] | None) -> dict[str, Any] |
             for position, section in enumerate(context.get("sections") or [])
         ],
     }
+
+
+# ---------- Проверка урока по учебнику (после генерации и после правок учителя) ----------
+
+SHINGLE = 8
+COPY_SHARE = 0.6
+# Год — только рядом со словом «год/г./гг.» («в 1709 году», «1916 г.»): «1000 кг/м³» и «задача 1024» — не даты.
+_YEAR = re.compile(r"(?<!\d)(1[0-9]{3}|20[0-9]{2})(?:\s*[-–—]\s*\d{2,4})?\s*(?:г\.|гг\.|год|году|года|годах|годы|жыл)", re.IGNORECASE)
+_TEXT_FIELDS = ("question", "problem", "prompt", "text", "body", "definition", "explanation", "title")
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[а-яёa-z0-9]+", text.casefold().replace("ё", "е"))
+
+
+def _shingles(text: str) -> set[tuple[str, ...]]:
+    words = _words(text)
+    return {tuple(words[i:i + SHINGLE]) for i in range(len(words) - SHINGLE + 1)}
+
+
+def copied_share(text: str, source: str) -> float:
+    """Доля 8-словных фрагментов текста, совпадающих с источником: 1.0 — дословная копия."""
+    own = _shingles(text)
+    return len(own & _shingles(source)) / len(own) if own else 0.0
+
+
+def _block_texts(content: dict[str, Any]) -> list[tuple[int | None, str, Any]]:
+    """(номер вопроса, текст, source_ref) для блока и вопросов MasteryCheck."""
+    items: list[tuple[int | None, str, Any]] = [
+        (None, " ".join(str(content[key]) for key in _TEXT_FIELDS if isinstance(content.get(key), str)), content.get("source_ref")),
+    ]
+    for number, question in enumerate(content.get("questions") or []):
+        if isinstance(question, dict):
+            text = " ".join(str(question[key]) for key in _TEXT_FIELDS if isinstance(question.get(key), str))
+            items.append((number, text, question.get("source_ref")))
+    return items
+
+
+def _item_key(value: Any) -> Any:
+    """Модель иногда пишет id строкой: «123» → 123."""
+    return int(value) if isinstance(value, str) and value.strip().isdigit() else value
+
+
+def textbook_warnings(blocks: list[dict[str, Any]], context: dict[str, Any] | None,
+                      textbook_available: bool = True) -> list[dict[str, Any]]:
+    """Предупреждения учителю: урок без учебника, выдуманные ссылки и даты, копирование задач книги.
+
+    textbook_available=False — по предмету учебник не загружен: «без учебника» не шумим.
+    """
+    if not context:
+        return [{"code": "lesson_without_textbook",
+                 "message": "Урок создан без учебника — привяжите тему к параграфу или проверьте факты, определения и задачи"}] \
+            if textbook_available else []
+    items = {item["id"]: item for section in context.get("sections") or [] for item in section.get("items") or []}
+    book_text = "\n".join(
+        [str(section.get("text") or "") for section in context.get("sections") or []]
+        + [f"{item.get('text') or ''} {item.get('answer') or ''}" for item in items.values()]
+    )
+    book_years = set(_YEAR.findall(book_text))
+    refs_only = context.get("student_display") != "verbatim"
+    item_texts = [str(item.get("text") or "") for item in items.values()]
+    warnings: list[dict[str, Any]] = []
+    seen_years: set[str] = set()
+    for index, block in enumerate(blocks):
+        content = block.get("content") if isinstance(block, dict) else None
+        if not isinstance(content, dict):
+            continue
+        assessment = block.get("component") == "MasteryCheck" or content.get("evidence_stage") == "assessment"
+        for question, text, ref in _block_texts(content):
+            where = {"block": index, **({"question": question} if question is not None else {})}
+            item_id = _item_key(ref.get("item_id")) if isinstance(ref, dict) else None
+            if item_id is not None and item_id not in items:
+                warnings.append({"code": "textbook_ref_missing", **where,
+                                 "message": "Ссылка на задачу учебника не найдена в параграфе — проверьте задание"})
+            if assessment and text.strip() and (question is not None or block.get("component") != "MasteryCheck") and not isinstance(ref, dict):
+                warnings.append({"code": "assessment_without_textbook", **where,
+                                 "message": "Итоговое задание не опирается на учебник"})
+            # Копирование ищем по всем задачам параграфа: модель могла не сослаться или сослаться не на ту.
+            if refs_only and text.strip() and max((copied_share(text, source) for source in item_texts), default=0.0) >= COPY_SHARE:
+                warnings.append({"code": "textbook_copied", **where,
+                                 "message": "Задание почти дословно повторяет задачу учебника, а показ текста книги ученикам не разрешён"})
+            for year in sorted(set(_YEAR.findall(text)) - book_years - seen_years):
+                seen_years.add(year)
+                warnings.append({"code": "textbook_date_unknown", **where,
+                                 "message": f"Дата {year} не найдена в параграфе учебника — проверьте"})
+    return warnings
