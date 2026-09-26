@@ -67,8 +67,9 @@ class FakeLockedManifestSession(FakeManifestSession):
             status="published",
         )
         self.rows = [
+            # Закрытый урок не кэшируется: второй запрос снова идёт в базу и снова получает отказ.
             (lesson, 7, 7, "locked", True, None, None),
-            (7, "locked", None),
+            (lesson, 7, 7, "locked", True, None, None),
         ]
         self.execute_calls = 0
         self.scalars_calls = 0
@@ -103,16 +104,15 @@ class LessonManifestCacheTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(db.scalars_calls, 0)
         self.assertEqual(second["lesson"]["blocks"][0]["content"]["text"], "Cached")
 
-    async def test_locked_graph_state_still_returns_published_manifest(self):
+    async def test_locked_topic_is_not_served_even_from_cache(self):
+        # Темы открываются строго по порядку: закрытую не отдаём и по прямой ссылке.
+        from services.lessons import LessonServiceError
+
         db = FakeLockedManifestSession()
-
-        first = await get_student_lesson_manifest(topic_id=2, student_id=7, db=db)  # type: ignore[arg-type]
-        second = await get_student_lesson_manifest(topic_id=2, student_id=7, db=db)  # type: ignore[arg-type]
-
-        self.assertEqual(first["lesson"]["id"], 10)
-        self.assertEqual(second["lesson"]["id"], 10)
-        self.assertEqual(db.execute_calls, 1)
-        self.assertEqual(second["lesson"]["blocks"][0]["content"]["text"], "Soft gate")
+        for _ in range(2):
+            with self.assertRaises(LessonServiceError) as ctx:
+                await get_student_lesson_manifest(topic_id=2, student_id=7, db=db)  # type: ignore[arg-type]
+            self.assertEqual(ctx.exception.status_code, 403)
 
     async def test_student_manifest_state_cache_can_be_cleared_per_student_topic(self):
         remember_student_manifest_state(7, 2, {

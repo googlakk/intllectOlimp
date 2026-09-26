@@ -10,7 +10,7 @@ import {
 } from '@/lib/api';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useParams, Link } from 'wouter';
-import { ChevronDown, PlayCircle, Clock, Loader2, ArrowLeft, ChevronRight, BookOpen, CheckCircle2, Sparkles, RotateCcw, Hourglass } from 'lucide-react';
+import { ChevronDown, PlayCircle, Clock, Loader2, ArrowLeft, ChevronRight, BookOpen, CheckCircle2, Sparkles, RotateCcw, Hourglass, Lock } from 'lucide-react';
 
 function SectionItem({
   section,
@@ -60,7 +60,8 @@ function SectionItem({
             const mastered = topic.state === 'mastered';
             const needsPractice = topic.mastery_status === 'needs_practice' && topic.attempts > 0;
             const lessonReady = topic.lesson_status === 'published';
-            const clickable = lessonReady;
+            // Темы открываются строго по порядку: закрытую открыть нельзя.
+            const clickable = lessonReady && !locked;
             const statusLabel = mastered
               ? 'Освоено'
               : needsPractice
@@ -70,21 +71,21 @@ function SectionItem({
                   : !lessonReady
                     ? 'Готовится'
                     : locked
-                      ? 'Можно пройти'
+                      ? 'Закрыто'
                       : topic.state === 'available'
                       ? 'Начать'
                       : 'Начать';
             const content = (
                 <div className={`group flex items-center justify-between p-4 md:p-5 rounded-xl border transition-all ${!clickable ? 'border-border bg-muted/30 text-muted-foreground' : 'bg-card border-border hover:border-primary/40 hover:shadow-sm cursor-pointer'}`}>
                   <div className="flex items-center gap-5">
-                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${mastered ? 'bg-emerald-500/10 text-emerald-600' : needsPractice || (locked && lessonReady) ? 'bg-amber-500/10 text-amber-700' : !clickable ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground'}`}>
-                      {mastered ? <CheckCircle2 className="w-6 h-6" /> : needsPractice ? <RotateCcw className="w-5 h-5" /> : !lessonReady ? <Hourglass className="w-5 h-5" /> : <PlayCircle className="w-6 h-6" />}
+                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${mastered ? 'bg-emerald-500/10 text-emerald-600' : needsPractice ? 'bg-amber-500/10 text-amber-700' : !clickable ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground'}`}>
+                      {mastered ? <CheckCircle2 className="w-6 h-6" /> : needsPractice ? <RotateCcw className="w-5 h-5" /> : !lessonReady ? <Hourglass className="w-5 h-5" /> : locked ? <Lock className="w-5 h-5" aria-hidden /> : <PlayCircle className="w-6 h-6" />}
                     </div>
                     <div className="min-w-0">
                       <div className="font-semibold text-foreground text-lg mb-1">{topic.name}</div>
                       <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground font-medium">
                         <span className="flex items-center gap-1.5"><Clock className="w-4 h-4" /> {topic.hours} ч</span>
-                        <span className={`px-2 py-0.5 rounded ${mastered ? 'bg-emerald-500/10 text-emerald-700' : needsPractice || (locked && lessonReady) ? 'bg-amber-500/10 text-amber-700' : topic.state === 'available' && lessonReady ? 'bg-primary/10 text-primary' : 'bg-muted'}`}>
+                        <span className={`px-2 py-0.5 rounded ${mastered ? 'bg-emerald-500/10 text-emerald-700' : needsPractice ? 'bg-amber-500/10 text-amber-700' : topic.state === 'available' && lessonReady ? 'bg-primary/10 text-primary' : 'bg-muted'}`}>
                           {statusLabel}
                         </span>
                       </div>

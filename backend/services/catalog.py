@@ -69,7 +69,7 @@ async def list_subjects(
     statement = select(Subject)
     if student_id is not None:
         student = await get_student_for_access(student_id, db)
-        statement = statement.where(Subject.grade <= student.grade)
+        statement = statement.where(Subject.grade == student.grade)
     elif max_grade is not None:
         statement = statement.where(Subject.grade <= max_grade)
     rows = (await db.scalars(statement.order_by(Subject.grade, Subject.name))).all()

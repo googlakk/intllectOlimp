@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from services.curriculum_graph import (
+    CurriculumGraphError,
     canonical_skill_key,
     cached_curriculum_map,
     clear_curriculum_map_cache,
@@ -222,11 +223,25 @@ class CurriculumAccessGuardTests(unittest.IsolatedAsyncioTestCase):
         refresh.assert_not_awaited()
         self.assertEqual(db.commits, 0)
 
-    async def test_locked_materialized_access_is_a_soft_gate(self):
-        db = FakeAccessSession([
-            1,
-            SimpleNamespace(state="locked"),
-        ])
+    async def test_locked_access_rejects_progress_after_fresh_recount(self):
+        # Темы открываются строго по порядку: «закрыто» перепроверяется пересчётом, потом отказ.
+        db = FakeAccessSession([1, SimpleNamespace(state="locked"), None, "locked"])
+
+        with patch("services.curriculum_graph.refresh_student_access", new=AsyncMock()) as refresh:
+            with self.assertRaises(CurriculumGraphError) as ctx:
+                await require_curriculum_topic_access(7, 2, db)  # type: ignore[arg-type]
+
+        self.assertEqual(ctx.exception.status_code, 403)
+        refresh.assert_awaited_once()
+
+    async def test_stale_locked_access_opens_after_recount(self):
+        db = FakeAccessSession([1, SimpleNamespace(state="locked"), None, "available"])
+
+        with patch("services.curriculum_graph.refresh_student_access", new=AsyncMock()):
+            await require_curriculum_topic_access(7, 2, db)  # type: ignore[arg-type]
+
+    async def test_started_topic_is_never_rejected(self):
+        db = FakeAccessSession([1, SimpleNamespace(state="locked"), 55])
 
         with patch("services.curriculum_graph.refresh_student_access", new=AsyncMock()) as refresh:
             await require_curriculum_topic_access(7, 2, db)  # type: ignore[arg-type]
@@ -270,7 +285,7 @@ class CurriculumMapFastPathTests(unittest.IsolatedAsyncioTestCase):
         refresh.assert_awaited_once()
         self.assertEqual(db.flushes, 1)
         self.assertEqual(result["topics"][0]["state"], "locked")
-        self.assertIn("Можно продолжить", result["topics"][0]["reason"])
+        self.assertIn("закрыта", result["topics"][0]["reason"])
 
     async def test_curriculum_map_uses_short_lived_cache(self):
         db = FakeCurriculumMapSession(materialized_access=1)
@@ -435,3 +450,6 @@ class AccessRefreshTests(unittest.IsolatedAsyncioTestCase):
                   if isinstance(statement, Insert) and statement.table.name == 'student_topic_access']
         self.assertEqual(len(access), 1)
         self.assertEqual(len(access[0].compile().params) // 8, 40)
+        # Граф не построен — темы не закрываются навсегда.
+        states = {value for key, value in access[0].compile().params.items() if key.startswith('state_m')}
+        self.assertEqual(states, {'available'})

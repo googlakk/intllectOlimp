@@ -42,8 +42,17 @@ class GradeAccessTests(unittest.TestCase):
 
         self.assertEqual(topic.id, 4)
 
-    def test_allows_younger_curriculum_for_older_student(self):
+    def test_hides_younger_curriculum_from_older_student(self):
+        # Ученик видит только предметы своего класса.
         db = FakeSession(student_grade=9, subject_grade=7)
+
+        with self.assertRaises(GradeAccessError) as ctx:
+            run(require_topic_access(1, 4, db))
+
+        self.assertEqual(ctx.exception.status_code, 404)
+
+    def test_allows_own_grade_curriculum(self):
+        db = FakeSession(student_grade=7, subject_grade=7)
 
         topic = run(require_topic_access(1, 4, db))
 

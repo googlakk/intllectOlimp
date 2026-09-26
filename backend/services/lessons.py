@@ -483,6 +483,23 @@ def require_available_student_lesson(archived: bool, progress: dict[str, Any] | 
         raise LessonServiceError(status_code=404, detail="Занятие убрано из программы")
 
 
+def require_open_topic(access_state: str | None) -> None:
+    """Темы открываются строго по порядку: закрытую нельзя открыть и по прямой ссылке."""
+    if access_state == "locked":
+        raise LessonServiceError(status_code=403, detail="Тема пока закрыта: сначала пройдите предыдущую тему.")
+
+
+async def _refreshed_access_state(student_id: int, topic_id: int, db: AsyncSession) -> str | None:
+    from services.curriculum_graph import refresh_student_access
+
+    await refresh_student_access(student_id, db)
+    # Сохраняем пересчёт: иначе строки доступа откатываются, а блокировка ученика держится до конца запроса.
+    await db.commit()
+    return await db.scalar(select(StudentTopicAccess.state).where(
+        StudentTopicAccess.student_id == student_id, StudentTopicAccess.topic_id == topic_id,
+    ))
+
+
 async def create_lesson_draft(topic_id: int, teacher_id: int, db: AsyncSession) -> GeneratedLesson:
     topic = await db.get(Topic, topic_id)
     if topic is None:
@@ -548,10 +565,13 @@ async def get_student_lesson_manifest(
     cached = cached_lesson_manifest(topic_id)
     if cached is not None:
         student_state = cached_student_manifest_state(student_id, topic_id)
-        if student_state is not None:
-            if cached["subject_grade"] > student_state["student_grade"]:
+        # Кэш процесса мог не узнать, что тема уже открылась (другой воркер): «закрыто» перепроверяем по базе.
+        if student_state is not None and student_state.get("access_state") != "locked":
+            if cached["subject_grade"] != student_state["student_grade"]:
                 raise LessonServiceError(status_code=404, detail="Предмет недоступен для класса ученика")
             require_available_student_lesson(cached.get("archived", False), student_state.get("progress"), cached.get("published", True))
+            if cached["has_graph"]:
+                require_open_topic(student_state.get("access_state"))
             return {
                 "lesson": await student_version_payload(cached["lesson"], student_state.get("progress"), db),
                 "progress": student_state.get("progress"),
@@ -578,15 +598,10 @@ async def get_student_lesson_manifest(
         if row is None:
             raise LessonServiceError(status_code=404, detail="Ученик не найден")
         student_grade, access_state, progress = row
-        if cached["subject_grade"] > student_grade:
+        if cached["subject_grade"] != student_grade:
             raise LessonServiceError(status_code=404, detail="Предмет недоступен для класса ученика")
         if cached["has_graph"] and access_state is None:
-            from services.curriculum_graph import refresh_student_access
-
-            await refresh_student_access(student_id, db)
-            # Сохраняем пересчёт: иначе строки доступа откатываются, а блокировка ученика держится до конца запроса.
-            await db.commit()
-            access_state = "available"
+            access_state = await _refreshed_access_state(student_id, topic_id, db)
         progress_payload = serialize_progress(progress) if progress is not None else None
         remember_student_manifest_state(student_id, topic_id, {
             "student_grade": student_grade,
@@ -594,6 +609,8 @@ async def get_student_lesson_manifest(
             "progress": progress_payload,
         })
         require_available_student_lesson(cached.get("archived", False), progress_payload, cached.get("published", True))
+        if cached["has_graph"]:
+            require_open_topic(access_state)
         return {
             "lesson": await student_version_payload(cached["lesson"], progress_payload, db),
             "progress": progress_payload,
@@ -634,20 +651,17 @@ async def get_student_lesson_manifest(
         raise LessonServiceError(status_code=404, detail="Опубликованный урок пока не готов")
 
     lesson, subject_grade, student_grade, access_state, has_graph, version_document, progress = row
-    if subject_grade > student_grade:
+    if subject_grade != student_grade:
         raise LessonServiceError(status_code=404, detail="Предмет недоступен для класса ученика")
     if has_graph and access_state is None:
-        from services.curriculum_graph import refresh_student_access
-
-        await refresh_student_access(student_id, db)
-        # Сохраняем пересчёт: иначе строки доступа откатываются, а блокировка ученика держится до конца запроса.
-        await db.commit()
-        access_state = "available"
+        access_state = await _refreshed_access_state(student_id, topic_id, db)
 
     topic = await db.get(Topic, topic_id)
     archived = bool(getattr(topic, "archived_at", None))
     progress_payload = serialize_progress(progress) if progress is not None else None
     require_available_student_lesson(archived, progress_payload, lesson.status == "published")
+    if has_graph:
+        require_open_topic(access_state)
     # Never serve mutable draft blocks or metadata to a student.
     published_id = getattr(lesson, "published_version_id", None) or lesson.active_version_id
     await attach_lesson_document(lesson, db, version_document=version_document,

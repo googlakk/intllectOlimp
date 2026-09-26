@@ -26,7 +26,7 @@ async def require_subject_access(
     subject = await db.get(Subject, subject_id)
     if subject is None:
         raise GradeAccessError(status_code=404, detail="Предмет не найден")
-    if subject.grade > student.grade:
+    if subject.grade != student.grade:
         raise GradeAccessError(
             status_code=404,
             detail="Предмет недоступен для класса ученика",

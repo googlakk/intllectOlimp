@@ -657,6 +657,10 @@ async def refresh_student_access(
     can still be opened.
     """
     clear_curriculum_map_cache(student_id)
+    from services.lessons import clear_student_manifest_state_cache
+
+    # Пройденная тема открывает следующую: закэшированное «закрыто» у других тем устарело.
+    clear_student_manifest_state_cache(student_id)
     student = await db.get(Student, student_id)
     if student is None:
         raise CurriculumGraphError(status_code=404, detail="Ученик не найден")
@@ -670,7 +674,7 @@ async def refresh_student_access(
             select(Topic, Section, Subject)
             .join(Section, Section.id == Topic.section_id)
             .join(Subject, Subject.id == Section.subject_id)
-            .where(Subject.grade <= student.grade, Topic.archived_at.is_(None))
+            .where(Subject.grade == student.grade, Topic.archived_at.is_(None))
             .order_by(Subject.id, Section.sort_order, Topic.sort_order, Topic.id)
         )
     ).all()
@@ -694,6 +698,11 @@ async def refresh_student_access(
     skill_scores = {row.skill_id: float(row.mastery_score) for row in mastery_rows}
     prerequisites = list((await db.scalars(
         select(TopicSkill).where(TopicSkill.topic_id.in_(topic_ids), TopicSkill.role == "prerequisite")
+    )).all())
+    # Порядок задаёт граф темы. Тема без графа (граф предмета ещё не построен) не закрывается:
+    # сервер её не проверяет, и ученик не должен видеть «Закрыто» навсегда.
+    graph_topic_ids = set((await db.scalars(
+        select(TopicSkill.topic_id).where(TopicSkill.topic_id.in_(topic_ids)).distinct()
     )).all())
     prereqs_by_topic: dict[int, list[TopicSkill]] = defaultdict(list)
     for item in prerequisites:
@@ -721,11 +730,12 @@ async def refresh_student_access(
     now = datetime.now(timezone.utc)
     new_gates: list[dict[str, Any]] = []
     access_values: list[dict[str, Any]] = []
+    topic_names = {topic.id: topic.name for topic, _section, _subject in topic_rows}
     for topic, _section, subject in topic_rows:
         progress = progress_by_topic.get(topic.id)
         state = "locked"
         readiness = 0.0
-        reason = "Можно продолжить, но лучше повторить базовые навыки перед темой."
+        reason = "Тема пока закрыта: сначала пройдите предыдущие темы."
         unlocked_by: int | None = None
 
         if topic.id in mastered_topics:
@@ -762,6 +772,10 @@ async def refresh_student_access(
                 if edge.relation in {"transfer", "cross_subject"}
                 and edge.from_topic_id in mastered_topics
             ]
+            if progression_edges and not progression_unlocks:
+                previous = topic_names.get(progression_edges[0].from_topic_id)
+                if previous:
+                    reason = f"Откроется, когда будет пройдена тема «{previous}»."
             if progression_unlocks:
                 _best, progression_readiness, progression_reason = max(
                     progression_unlocks,
@@ -779,6 +793,8 @@ async def refresh_student_access(
             elif not progression_edges and prereqs and readiness >= 1.0:
                 state, reason = "available", "Необходимые навыки уже освоены."
 
+        if state == "locked" and topic.id not in graph_topic_ids:
+            state, readiness, reason = "available", 1.0, "Тема доступна."
         access_values.append({
             "student_id": student_id,
             "topic_id": topic.id,
@@ -872,7 +888,7 @@ async def get_student_curriculum_map(
                 Progress,
                 (Progress.topic_id == Topic.id) & (Progress.student_id == student_id),
             )
-            .where(Subject.grade <= student.grade, Topic.archived_at.is_(None))
+            .where(Subject.grade == student.grade, Topic.archived_at.is_(None))
             .order_by(Subject.grade, Subject.name, Section.sort_order, Topic.sort_order, Topic.id)
         )
         if subject_id is not None:
@@ -902,7 +918,7 @@ async def get_student_curriculum_map(
             "grade": subject.grade,
             "state": access.state if access is not None else "locked",
             "readiness_score": float(access.readiness_score) if access is not None else 0.0,
-            "reason": access.reason if access is not None else "Можно продолжить, но лучше повторить базовые навыки перед темой.",
+            "reason": access.reason if access is not None else "Тема пока закрыта: сначала пройдите предыдущие темы.",
             "unlocked_by_topic_id": access.unlocked_by_topic_id if access is not None else None,
             "lesson_status": "published" if lesson_status == "published" else "preparing",
             "mastery_status": progress.mastery_status if progress is not None else None,
@@ -925,11 +941,24 @@ async def require_curriculum_topic_access(student_id: int, topic_id: int, db: As
             StudentTopicAccess.topic_id == topic_id,
         )
     )
-    if access is not None:
+    if access is not None and access.state != "locked":
         return
-
+    # Начатую тему не закрываем: ученик не должен потерять попытку.
+    started = await db.scalar(select(Progress.id).where(
+        Progress.student_id == student_id, Progress.topic_id == topic_id,
+    ).limit(1))
+    if started is not None:
+        return
+    # Нет строки или «закрыто» (могло устареть) — пересчитываем и решаем по свежим данным.
     await refresh_student_access(student_id, db)
     await db.commit()
+    state = await db.scalar(select(StudentTopicAccess.state).where(
+        StudentTopicAccess.student_id == student_id,
+        StudentTopicAccess.topic_id == topic_id,
+    ))
+    # Темы открываются строго по порядку: прогресс по закрытой теме не принимаем.
+    if state == "locked":
+        raise CurriculumGraphError(status_code=403, detail="Тема пока закрыта: сначала пройдите предыдущую тему.")
 
 
 async def get_subject_graph(subject_id: int, db: AsyncSession) -> dict[str, Any]:
