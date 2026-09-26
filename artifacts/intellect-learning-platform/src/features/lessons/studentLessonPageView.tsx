@@ -223,22 +223,25 @@ export function StudentLessonPageView({
           <span className="h-2 w-2 rounded-full bg-primary" />
           Урок идёт
         </div>
-        {showLessonRail && (
-          <LessonPlanDock
-            activeBlocks={activeBlocks}
-            activeOriginalIndices={activeOriginalIndices}
-            answers={answers}
-            currentStep={currentStep}
-            isCompleted={isCompleted}
-            maxOpenedStep={maxOpenedStep}
-            lessonDocument={lessonDocument}
-            onNavigate={onNavigate}
-            onOpenSummary={onOpenSummary}
-          />
-        )}
       </header>
 
       <div className="lesson-board relative flex min-h-0 flex-1 overflow-hidden">
+        {/* План урока — плашка под шапкой, в правом верхнем углу поля урока. */}
+        {showLessonRail && (
+          <div className="absolute right-3 top-3 z-[65] md:right-4">
+            <LessonPlanDock
+              activeBlocks={activeBlocks}
+              activeOriginalIndices={activeOriginalIndices}
+              answers={answers}
+              currentStep={currentStep}
+              isCompleted={isCompleted}
+              maxOpenedStep={maxOpenedStep}
+              lessonDocument={lessonDocument}
+              onNavigate={onNavigate}
+              onOpenSummary={onOpenSummary}
+            />
+          </div>
+        )}
         <main className={`h-full min-w-0 flex-1 flex-col px-4 py-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 2xl:px-16 flex ${showSummary ? 'overflow-y-auto' : 'overflow-hidden'}`}>
           {saveError && (
             <div role="alert" className="mb-6 rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm font-medium text-destructive">
@@ -252,10 +255,10 @@ export function StudentLessonPageView({
         {showLessonRail && avatarCue && (
           <aside
             aria-label="Дополнительные инструменты урока"
-            className="hidden h-full w-full shrink-0 flex-col gap-4 overflow-hidden p-3 lg:flex lg:w-[340px] lg:py-4 lg:pr-4 xl:w-[360px]"
+            className="hidden h-full w-full shrink-0 flex-col gap-4 overflow-hidden p-3 lg:flex lg:w-[340px] lg:pb-4 lg:pr-4 lg:pt-[4.25rem] xl:w-[360px]"
           >
             {avatarCue && (
-              <div className={`hidden min-h-0 overflow-y-auto rounded-2xl border border-border bg-card p-3 shadow-md lg:flex lg:flex-col lg:justify-center h-full`}>
+              <div className={`hidden min-h-0 overflow-y-auto rounded-2xl border border-border bg-card p-3 shadow-md lg:flex lg:flex-col`}>
                 <AvatarCompanion
                   cue={avatarCue}
                   previewImageUrl={lessonDocument?.avatar.preview_image_url}

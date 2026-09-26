@@ -128,29 +128,15 @@ export function ActiveLessonContent({
 
   return (
     <div ref={contentRef} tabIndex={-1} className="flex min-h-0 flex-1 flex-col outline-none" aria-live="polite">
-      <div className="mb-3 flex shrink-0 items-center gap-3">
+      {/* Прогресс показывает плашка плана справа сверху; строка держит под неё место. */}
+      <div className="mb-3 flex min-h-11 shrink-0 items-center gap-3 pr-[calc(min(300px,100vw-9rem)+1.5rem)]">
         <div className="flex min-w-0 flex-1 items-baseline gap-3">
-          <p className="shrink-0 text-xs font-bold uppercase tracking-wider text-primary">{phaseLabel}</p>
+          <p className="min-w-0 truncate text-xs font-bold uppercase tracking-wider text-primary">{phaseLabel}</p>
           {position && (
             <div className="hidden min-w-0 truncate text-sm font-semibold text-foreground md:block">
               {plainLessonText(position.episode.title)}
             </div>
           )}
-        </div>
-        <p className="shrink-0 text-xs font-semibold text-muted-foreground">
-          {currentStep + 1} / {activeBlocks.length}
-        </p>
-        <div
-          className="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-muted sm:w-36"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={activeBlocks.length}
-          aria-valuenow={currentStep + 1}
-        >
-          <div
-            className="h-full rounded-full bg-primary transition-all"
-            style={{ width: `${((currentStep + 1) / activeBlocks.length) * 100}%` }}
-          />
         </div>
       </div>
       <AnimatePresence mode="wait">
