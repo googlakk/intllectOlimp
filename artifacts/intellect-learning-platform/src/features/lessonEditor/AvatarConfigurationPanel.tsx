@@ -457,6 +457,10 @@ export default function AvatarConfigurationPanel({ lesson }: AvatarConfiguration
       {selectedProfile && selectedProfileStatus === 'failed' && (
         <p className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-destructive"><CircleAlert className="h-4 w-4" />HeyGen не смог создать аватара. Загрузите другое фото с одним человеком анфас.</p>
       )}
+      {completedJobs > 0 && lesson.published_version_id && lesson.active_version_id !== lesson.published_version_id && (
+        // Видео пишутся в черновик: опубликованная версия, которую видит ученик, не меняется сама.
+        <p className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-amber-700"><CircleAlert className="h-4 w-4 shrink-0" />Видео аватара готовы в черновике. Ученики увидят их после «Обновить публикацию» на шаге «Проверка и публикация».</p>
+      )}
       {status && <p className="mt-3 text-sm font-medium text-muted-foreground" aria-live="polite">{status}</p>}
       {jobs.data?.some((job) => job.status === 'failed') && (
         <div className="mt-3 text-sm text-destructive">Не удалось создать: {jobs.data.filter((job) => job.status === 'failed').map((job) => jobCueId(job) || `задача ${job.id}`).join(', ')}</div>
