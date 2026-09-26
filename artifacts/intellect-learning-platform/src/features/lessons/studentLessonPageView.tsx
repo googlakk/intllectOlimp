@@ -6,10 +6,9 @@ import type { AttemptsByStep, LessonAnswers } from './studentProgress';
 import { ActiveLessonContent } from './studentLessonContent';
 import { LessonTitlePage } from './LessonTitlePage';
 import type { LessonIntro } from './lessonIntro';
-import { AvatarCompanion } from './AvatarCompanion';
 import { LessonPlanDock } from './LessonPlanDock';
 import type { LessonTutor } from '@/features/tutor/useLessonTutor';
-import { avatarCueForBeat, defaultBeatId, lessonPositionForBlock } from './lessonExperience';
+import { defaultBeatId, lessonPositionForBlock } from './lessonExperience';
 import {
   EmptyLessonState,
   LessonCompletionSummary,
@@ -123,7 +122,6 @@ export function StudentLessonPageView({
   const effectiveBeatId = lessonPosition?.scene.teaching_beats?.some((beat) => beat.id === activeBeatId)
     ? activeBeatId
     : sceneDefaultBeatId;
-  const avatarCue = avatarCueForBeat(lessonPosition?.scene, effectiveBeatId);
   const showIntro = Boolean(intro && onStartLesson && !isLoading && !loadError && !isEmpty && !showSummary);
   const showLessonRail = !isLoading && !isEmpty && !showSummary && !showIntro;
   const handleTeachingBeatChange = useCallback((beatId: string) => setActiveBeatId(beatId), []);
@@ -252,27 +250,6 @@ export function StudentLessonPageView({
           {content}
         </main>
 
-        {showLessonRail && avatarCue && (
-          <aside
-            aria-label="Дополнительные инструменты урока"
-            className="hidden h-full w-full shrink-0 flex-col gap-4 overflow-hidden p-3 lg:flex lg:w-[340px] lg:pb-4 lg:pr-4 lg:pt-[4.25rem] xl:w-[360px]"
-          >
-            {avatarCue && (
-              <div className={`hidden min-h-0 overflow-y-auto rounded-2xl border border-border bg-card p-3 shadow-md lg:flex lg:flex-col`}>
-                <AvatarCompanion
-                  cue={avatarCue}
-                  previewImageUrl={lessonDocument?.avatar.preview_image_url}
-                  companionName={lessonDocument?.avatar.profile_name}
-                  lessonVersionId={lessonVersionId}
-                  avatarEnabled={avatarEnabled}
-                  audioEnabled={audioEnabled}
-                  onAvatarEnabledChange={onAvatarEnabledChange}
-                  onAudioEnabledChange={onAudioEnabledChange}
-                />
-              </div>
-            )}
-          </aside>
-        )}
       </div>
     </div>
   );

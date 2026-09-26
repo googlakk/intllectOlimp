@@ -1,11 +1,31 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ArrowLeft, ChevronDown, ChevronRight, Lightbulb, Loader2, Send } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, EyeOff, Lightbulb, Loader2, Pause, Play, RotateCcw, Send } from 'lucide-react';
+import type { AvatarCue } from '@/lib/api/types';
+import { useAvatarNarration } from '@/features/lessons/useAvatarNarration';
 import { parseMathText } from '@/components/blocks/ShortExplanation';
 import { tutorTeasers } from './tutorRules';
 import type { LessonTutor } from './useLessonTutor';
 
-type DockMode = 'idle' | 'peek' | 'open';
+type DockMode = 'idle' | 'peek' | 'open' | 'speak';
+
+/** Рассказчик урока (аватар): реплика сценария на текущем шаге. */
+export type CompanionInput = {
+  cue?: AvatarCue;
+  previewImageUrl?: string | null;
+  name?: string;
+  lessonVersionId?: number | null;
+  avatarEnabled: boolean;
+  audioEnabled: boolean;
+  onAvatarEnabledChange: (enabled: boolean) => void;
+  onAudioEnabledChange: (enabled: boolean) => void;
+};
+
+const EMPTY: never[] = [];
+// Реплика аватара сама сворачивается: не мешает, если ученик её не слушает.
+// На телефоне она выезжает над строкой с «Продолжить», чтобы кнопку не закрывать.
+const SPEAK_IDLE_MS = 9000;
+const SPEAK_DONE_MS = 2500;
 
 const STUCK_MESSAGE = 'Не понимаю, что делать';
 const TEASER_MS = 5000;
@@ -16,11 +36,24 @@ const WIDTH: Record<DockMode, string> = {
   peek: 'w-full lg:w-[min(560px,100%)]',
   // На телефоне чат во всю ширину экрана, а не только своей части строки.
   open: 'w-[calc(100vw-2rem)] lg:w-[min(680px,100%)]',
+  speak: 'w-[calc(100vw-2rem)] lg:w-[min(520px,100%)]',
 };
 
 /** «Живой» значок помощника: мягко дышит, при предложении помощи — светится. */
-function TutorOrb({ calling }: { calling: boolean }) {
+function TutorOrb({ calling, imageUrl, speaking = false }: { calling: boolean; imageUrl?: string | null; speaking?: boolean }) {
   const reduceMotion = useReducedMotion();
+  if (imageUrl) {
+    // Лицо рассказчика вместо шарика: говорит — вокруг пульсирует кольцо.
+    return (
+      <span className="relative grid h-9 w-9 shrink-0 place-items-center" aria-hidden>
+        {(calling || speaking) && !reduceMotion && (
+          <motion.span className="absolute inset-0 rounded-full bg-primary/50"
+            animate={{ scale: [1, 1.45], opacity: [0.6, 0] }} transition={{ duration: 1.4, repeat: Infinity, ease: 'easeOut' }} />
+        )}
+        <img src={imageUrl} alt="" className="relative h-8 w-8 rounded-full object-cover object-top ring-2 ring-primary/70" />
+      </span>
+    );
+  }
   return (
     <span className="relative grid h-8 w-8 shrink-0 place-items-center" aria-hidden>
       {calling && !reduceMotion && (
@@ -43,7 +76,7 @@ function TutorOrb({ calling }: { calling: boolean }) {
  * Помощник урока — плашка внизу, как у ассистентов в приложениях:
  * в покое показывает короткие реплики, при наведении расширяется, в разговоре раскрывается в чат.
  */
-export function TutorDock({ tutor }: { tutor: LessonTutor }) {
+export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion?: CompanionInput }) {
   const [mode, setMode] = useState<DockMode>('idle');
   const [draft, setDraft] = useState('');
   const [teaserIndex, setTeaserIndex] = useState(0);
@@ -56,11 +89,51 @@ export function TutorDock({ tutor }: { tutor: LessonTutor }) {
   const chatId = useId();
   const endRef = useRef<HTMLDivElement>(null);
   const announced = useRef(new Set<string>());
-  const { locked, pending, messages, hasOffer, seenOffer } = tutor;
+  const locked = tutor?.locked ?? false;
+  const pending = tutor?.pending ?? false;
+  const messages = tutor?.messages ?? EMPTY;
+  const hasOffer = tutor?.hasOffer ?? false;
+  const seenOffer = tutor?.seenOffer;
   const open = mode === 'open';
+  const speaking = mode === 'speak';
+  const hovered = useRef(false);
+  const narration = useAvatarNarration({
+    cue: companion?.cue, lessonVersionId: companion?.lessonVersionId,
+    avatarEnabled: companion?.avatarEnabled ?? false, audioEnabled: companion?.audioEnabled ?? false,
+    onAudioEnabledChange: companion?.onAudioEnabledChange ?? (() => undefined),
+  });
+  const cueText = companion?.avatarEnabled ? narration.narration : '';
+  const faceUrl = companion?.avatarEnabled ? companion?.previewImageUrl : null;
   const lastReply = useMemo(() => messages.filter((message) => message.role === 'tutor').at(-1), [messages]);
-  const teasers = tutorTeasers({ locked, hasOffer, lastReply: lastReply?.text });
+  const teasers = tutor
+    ? tutorTeasers({ locked, hasOffer, lastReply: lastReply?.text })
+    : [cueText ? `${companion?.name || 'Рассказчик'}: нажми, чтобы послушать` : 'Рассказчик урока'];
   const teaser = teasers[teaserIndex % teasers.length];
+
+  // Новый шаг со своей репликой — рассказчик выходит сказать её, потом сам сворачивается.
+  const cueKey = `${companion?.cue?.id ?? ''}:${companion?.cue?.beat_id ?? ''}`;
+  // Сама выезжает один раз на реплику: при возврате на шаг — только по нажатию.
+  const shownCues = useRef(new Set<string>());
+  useEffect(() => {
+    const firstTime = Boolean(cueText) && !shownCues.current.has(cueKey);
+    if (firstTime) shownCues.current.add(cueKey);
+    // На шаге без реплики плашка возвращается в обычный вид.
+    setMode((current) => (current === 'open' ? current : firstTime ? 'speak' : current === 'speak' ? 'idle' : current));
+  }, [cueKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ушли из реплики (открыли чат, сменился шаг) — озвучку на паузу: иначе она звучит без кнопок.
+  useEffect(() => {
+    if (mode !== 'speak' && narration.state === 'speaking') narration.pause();
+  }, [mode, narration.state]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!speaking || narration.state === 'speaking') return;
+    const timer = window.setTimeout(() => {
+      // Не сворачиваем под курсором и под фокусом клавиатуры.
+      if (!hovered.current && !rootRef.current?.contains(document.activeElement)) setMode('idle');
+    }, narration.state === 'completed' ? SPEAK_DONE_MS : SPEAK_IDLE_MS);
+    return () => window.clearTimeout(timer);
+  }, [speaking, narration.state]);
 
   // Реплики в покое сменяют друг друга — помощник выглядит живым, но не мешает.
   useEffect(() => {
@@ -70,7 +143,7 @@ export function TutorDock({ tutor }: { tutor: LessonTutor }) {
   }, [mode, reduceMotion, teasers.length]);
 
   useEffect(() => {
-    if (open && hasOffer) seenOffer();
+    if (open && hasOffer) seenOffer?.();
   }, [hasOffer, open, seenOffer]);
 
   // Диктор читает только реплику, пришедшую сейчас, а не восстановленный диалог.
@@ -86,12 +159,18 @@ export function TutorDock({ tutor }: { tutor: LessonTutor }) {
 
   // Свернуть; с клавиатуры фокус возвращается на плашку, чтобы ученик не потерял место.
   const collapse = (returnFocus: boolean) => {
+    if (narration.state === 'speaking') narration.pause();
     setMode('idle');
     if (returnFocus) requestAnimationFrame(() => idleRef.current?.focus({ preventScroll: true }));
   };
 
-  // Щелчок мимо или Esc сворачивают чат.
+  // Щелчок мимо или Esc сворачивают чат; Esc сворачивает и реплику рассказчика.
   useEffect(() => {
+    if (speaking) {
+      const escapeSpeech = (event: KeyboardEvent) => { if (event.key === 'Escape') collapse(true); };
+      document.addEventListener('keydown', escapeSpeech);
+      return () => document.removeEventListener('keydown', escapeSpeech);
+    }
     if (!open) return;
     const outside = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) collapse(false);
@@ -103,9 +182,15 @@ export function TutorDock({ tutor }: { tutor: LessonTutor }) {
       document.removeEventListener('pointerdown', outside);
       document.removeEventListener('keydown', escape);
     };
-  }, [open]);
+  }, [open, speaking]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const expand = () => {
+    if (!tutor) {
+      // Без тьютора плашка — рассказчик: нажатие включает реплику.
+      setMode('speak');
+      narration.toggle();
+      return;
+    }
     setMode('open');
     // На итоговом задании поле закрыто — фокус на кнопку «Свернуть».
     requestAnimationFrame(() => (locked ? collapseRef.current : inputRef.current)?.focus({ preventScroll: true }));
@@ -114,13 +199,15 @@ export function TutorDock({ tutor }: { tutor: LessonTutor }) {
   // Наведение — только мышью: на телефоне касание сразу открывает чат.
   const hover = (event: ReactPointerEvent, entering: boolean) => {
     if (event.pointerType !== 'mouse') return;
+    hovered.current = entering;
+    if (!tutor) return;
     setMode((current) => (entering ? (current === 'idle' ? 'peek' : current) : (current === 'peek' && !draft ? 'idle' : current)));
   };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!draft.trim() || pending) return;
-    tutor.sendMessage(draft);
+    tutor?.sendMessage(draft);
     setDraft('');
     setMode('open');
   };
@@ -131,13 +218,51 @@ export function TutorDock({ tutor }: { tutor: LessonTutor }) {
     <div ref={rootRef} className="relative h-12 w-full" aria-live="off">
       <p className="sr-only" aria-live="polite">{announcement}</p>
       <div
-        className={`absolute bottom-0 left-0 z-[75] transition-[width] duration-300 ease-out motion-reduce:transition-none ${WIDTH[mode]}`}
+        className={`absolute left-0 z-[75] transition-[width] duration-300 ease-out motion-reduce:transition-none ${WIDTH[mode]} ${mode === 'speak' ? 'bottom-[calc(100%+0.5rem)] lg:bottom-0' : 'bottom-0'}`}
         onPointerEnter={(event) => hover(event, true)}
         onPointerLeave={(event) => hover(event, false)}
       >
         <div className="overflow-hidden rounded-[26px] border border-white/10 bg-neutral-900/95 text-white shadow-2xl backdrop-blur-xl">
           <AnimatePresence initial={false}>
-            {open && (
+            {speaking && cueText && (
+              <motion.section key="speech" aria-label={`Реплика: ${companion?.name || 'рассказчик'}`}
+                initial={reduceMotion ? false : { height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
+                exit={reduceMotion ? undefined : { height: 0, opacity: 0 }} transition={{ duration: 0.28, ease: 'easeOut' }}>
+                <div className="flex gap-3 px-4 pt-3">
+                  {narration.video ? (
+                    <video ref={narration.video.ref} src={narration.video.src} poster={narration.video.poster} playsInline preload="metadata"
+                      muted={narration.video.muted} onPlay={narration.video.onPlay} onPause={narration.video.onPause}
+                      onEnded={narration.video.onEnded} onTimeUpdate={narration.video.onTimeUpdate}
+                      className="h-24 w-20 shrink-0 rounded-2xl bg-black/30 object-cover" />
+                  ) : companion?.previewImageUrl ? (
+                    <img src={companion.previewImageUrl} alt="" className="h-20 w-16 shrink-0 rounded-2xl object-cover object-top" />
+                  ) : null}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-white/50">{companion?.name || 'Рассказчик'}</p>
+                    <p className="mt-1 line-clamp-4 text-sm leading-relaxed">
+                      {narration.state === 'speaking' && narration.activeSentence ? narration.activeSentence : cueText}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 px-4 pb-2 pt-2">
+                  <button type="button" onClick={narration.toggle}
+                    className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full bg-white px-4 text-xs font-semibold text-neutral-900">
+                    {narration.state === 'speaking' ? <><Pause className="h-3.5 w-3.5" aria-hidden /> Пауза</>
+                      : narration.state === 'completed' ? <><RotateCcw className="h-3.5 w-3.5" aria-hidden /> Ещё раз</>
+                        : <><Play className="h-3.5 w-3.5" aria-hidden /> Послушать</>}
+                  </button>
+                  <button type="button" onClick={() => { narration.pause(); companion?.onAvatarEnabledChange(false); setMode('idle'); }}
+                    className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full border border-white/15 px-3 text-xs font-semibold text-white/75 hover:bg-white/10">
+                    <EyeOff className="h-3.5 w-3.5" aria-hidden /> Не показывать рассказчика
+                  </button>
+                  <button type="button" onClick={() => collapse(true)} aria-label="Свернуть"
+                    className="ml-auto grid h-10 w-10 place-items-center rounded-full text-white/60 hover:bg-white/10 hover:text-white">
+                    <ChevronDown className="h-5 w-5" />
+                  </button>
+                </div>
+              </motion.section>
+            )}
+            {open && tutor && (
               <motion.section
                 key="chat"
                 id={chatId}
@@ -173,13 +298,13 @@ export function TutorDock({ tutor }: { tutor: LessonTutor }) {
                         {message.role === 'tutor' && ((message.offer && message === lastReply) || typeof message.theoryStep === 'number') && (
                           <div className="mt-2 flex flex-wrap gap-2">
                             {message.offer && message === lastReply && !locked && (
-                              <button type="button" onClick={tutor.requestHint} disabled={pending}
+                              <button type="button" onClick={tutor?.requestHint} disabled={pending}
                                 className="min-h-[44px] rounded-full bg-white/15 px-4 text-xs font-semibold hover:bg-white/25 disabled:opacity-50">
                                 Да, помоги
                               </button>
                             )}
                             {typeof message.theoryStep === 'number' && (
-                              <button type="button" onClick={() => { tutor.openTheory(message.theoryStep as number); setMode('idle'); }}
+                              <button type="button" onClick={() => { tutor?.openTheory(message.theoryStep as number); setMode('idle'); }}
                                 className="inline-flex min-h-[44px] items-center gap-1 rounded-full bg-white/15 px-4 text-xs font-semibold hover:bg-white/25">
                                 <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> К объяснению
                               </button>
@@ -198,11 +323,11 @@ export function TutorDock({ tutor }: { tutor: LessonTutor }) {
                 </div>
                 {!locked && (
                   <div className="flex flex-wrap gap-1.5 px-4 pb-2">
-                    <button type="button" onClick={() => ask(tutor.requestHint)} disabled={pending}
+                    <button type="button" onClick={() => ask(() => tutor?.requestHint())} disabled={pending}
                       className="inline-flex min-h-[44px] items-center gap-1 rounded-full border border-white/15 px-3 text-xs font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50">
                       <Lightbulb className="h-3.5 w-3.5" aria-hidden /> Подсказка
                     </button>
-                    <button type="button" onClick={() => ask(() => tutor.sendMessage(STUCK_MESSAGE))} disabled={pending}
+                    <button type="button" onClick={() => ask(() => tutor?.sendMessage(STUCK_MESSAGE))} disabled={pending}
                       className="min-h-[44px] rounded-full border border-white/15 px-3 text-xs font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50">
                       {STUCK_MESSAGE}
                     </button>
@@ -226,11 +351,11 @@ export function TutorDock({ tutor }: { tutor: LessonTutor }) {
             </button>
           )}
 
-          {mode === 'idle' ? (
+          {mode === 'idle' || mode === 'speak' || !tutor ? (
             <button ref={idleRef} type="button" onClick={expand} aria-expanded={false} aria-controls={chatId}
               aria-label={hasOffer ? `Помощник: ${teaser}` : 'Открыть помощника'}
               className="flex h-12 w-full items-center gap-2 px-2 pr-4 text-left">
-              <TutorOrb calling={hasOffer} />
+              <TutorOrb calling={hasOffer} imageUrl={faceUrl} speaking={narration.state === 'speaking'} />
               <span className="relative h-5 min-w-0 flex-1 overflow-hidden text-sm text-white/75">
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.span
@@ -249,7 +374,7 @@ export function TutorDock({ tutor }: { tutor: LessonTutor }) {
             </button>
           ) : (
             <form onSubmit={submit} className="flex h-12 items-center gap-2 px-2">
-              <TutorOrb calling={hasOffer && !open} />
+              <TutorOrb calling={hasOffer && !open} imageUrl={faceUrl} speaking={narration.state === 'speaking'} />
               <input
                 ref={inputRef}
                 value={draft}

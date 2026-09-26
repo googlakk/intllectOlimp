@@ -1,11 +1,7 @@
 import { Sparkles, UserRound } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { getAvatarCueAsset } from '@/lib/api/avatar';
+import { useEffect, useState } from 'react';
 import type { AvatarCue } from '@/lib/api/types';
-import { useProtectedMediaUrl } from '@/lib/useProtectedMediaUrl';
-import { activeNarrationSentence, narrationSegments, narrationSpeechText } from './avatarNarration';
-
-type NarratorState = 'ready' | 'speaking' | 'paused' | 'completed';
+import { useAvatarNarration } from './useAvatarNarration';
 
 type AvatarCompanionProps = {
   cue?: AvatarCue;
@@ -18,6 +14,7 @@ type AvatarCompanionProps = {
   onAudioEnabledChange: (enabled: boolean) => void;
 };
 
+/** Рассказчик крупно — превью аватара в редакторе урока. В уроке ученика аватар живёт в плашке помощника. */
 export function AvatarCompanion({
   cue,
   previewImageUrl,
@@ -28,161 +25,18 @@ export function AvatarCompanion({
   onAvatarEnabledChange,
   onAudioEnabledChange,
 }: AvatarCompanionProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const playbackTokenRef = useRef(0);
-  const speechSegmentRef = useRef(0);
-  const [narratorState, setNarratorState] = useState<NarratorState>('ready');
-  const [progress, setProgress] = useState(0);
+  const narration = useAvatarNarration({ cue, lessonVersionId, avatarEnabled, audioEnabled, onAudioEnabledChange });
   const [showHint, setShowHint] = useState(true);
-  const [videoRequested, setVideoRequested] = useState(false);
-  const [pendingVideoPlay, setPendingVideoPlay] = useState(false);
-  const [lazyVideoUrl, setLazyVideoUrl] = useState<string | undefined>(cue?.video_url);
-  const [lazyPosterUrl, setLazyPosterUrl] = useState<string | undefined | null>(cue?.poster_url);
-  const [assetLookupDone, setAssetLookupDone] = useState(Boolean(cue?.video_url));
-  const narration = narrationSpeechText(cue?.fallback_text || cue?.script || '');
-  const effectiveVideoUrl = lazyVideoUrl || cue?.video_url;
-  const protectedVideo = useProtectedMediaUrl(effectiveVideoUrl, { enabled: videoRequested && Boolean(effectiveVideoUrl) });
-  const speechSegments = useMemo(() => narrationSegments(cue?.script || ''), [cue?.script]);
-  const activeSentence = useMemo(
-    () => activeNarrationSentence(narration, progress),
-    [narration, progress],
-  );
-
-  useEffect(() => () => {
-    window.speechSynthesis?.cancel();
-  }, []);
-
   useEffect(() => {
-    playbackTokenRef.current += 1;
-    window.speechSynthesis?.cancel();
-    setNarratorState('ready');
-    setProgress(0);
-    speechSegmentRef.current = 0;
     setShowHint(true);
-    setVideoRequested(false);
-    setPendingVideoPlay(false);
-    setLazyVideoUrl(cue?.video_url);
-    setLazyPosterUrl(cue?.poster_url);
-    setAssetLookupDone(Boolean(cue?.video_url));
-    const hintTimer = window.setTimeout(() => setShowHint(false), 4500);
-    if (videoRef.current) {
-      videoRef.current.pause();
-      videoRef.current.currentTime = 0;
-      videoRef.current.load();
-    }
-    return () => window.clearTimeout(hintTimer);
-  }, [cue?.id, cue?.beat_id, cue?.video_url, cue?.poster_url]);
-
-  useEffect(() => {
-    if (!pendingVideoPlay || !protectedVideo.url || !videoRef.current) return;
-    videoRef.current.muted = false;
-    void videoRef.current.play()
-      .then(() => {
-        setPendingVideoPlay(false);
-        setNarratorState('speaking');
-      })
-      .catch(() => {
-        setPendingVideoPlay(false);
-        setNarratorState('paused');
-      });
-  }, [pendingVideoPlay, protectedVideo.url]);
+    const timer = window.setTimeout(() => setShowHint(false), 4500);
+    return () => window.clearTimeout(timer);
+  }, [cue?.id, cue?.beat_id]);
 
   if (!cue) return null;
-
-  const pause = () => {
-    playbackTokenRef.current += 1;
-    window.speechSynthesis?.cancel();
-    videoRef.current?.pause();
-    setNarratorState('paused');
-  };
-
-  const speakFallback = () => {
-    if (!avatarEnabled || !('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const token = ++playbackTokenRef.current;
-    if (narratorState === 'completed') speechSegmentRef.current = 0;
-    const speakNext = () => {
-      if (playbackTokenRef.current !== token) return;
-      const segmentIndex = speechSegmentRef.current;
-      const segment = speechSegments[segmentIndex];
-      if (!segment) {
-        setProgress(1);
-        setNarratorState('completed');
-        speechSegmentRef.current = 0;
-        return;
-      }
-      const utterance = new SpeechSynthesisUtterance(segment);
-      utterance.lang = 'ru-RU';
-      utterance.rate = 0.95;
-      utterance.onboundary = (event) => {
-        if (playbackTokenRef.current !== token) return;
-        const localProgress = segment.length > 0 ? event.charIndex / segment.length : 0;
-        setProgress(Math.min((segmentIndex + localProgress) / speechSegments.length, 0.99));
-      };
-      utterance.onend = () => {
-        if (playbackTokenRef.current !== token) return;
-        speechSegmentRef.current += 1;
-        speakNext();
-      };
-      utterance.onerror = () => {
-        if (playbackTokenRef.current === token) setNarratorState('paused');
-      };
-      window.speechSynthesis.speak(utterance);
-    };
-    speakNext();
-    setNarratorState('speaking');
-  };
-
-  const play = async () => {
-    setShowHint(false);
-    if (!audioEnabled) onAudioEnabledChange(true);
-    if (!effectiveVideoUrl && !assetLookupDone && lessonVersionId && cue?.id) {
-      setAssetLookupDone(true);
-      try {
-        const asset = await getAvatarCueAsset({
-          lessonVersionId,
-          cueId: cue.id,
-          sceneId: cue.scene_id,
-        });
-        if (asset?.video_url) {
-          setLazyVideoUrl(asset.video_url);
-          setLazyPosterUrl(asset.poster_url);
-          setVideoRequested(true);
-          setPendingVideoPlay(true);
-          setNarratorState('paused');
-          return;
-        }
-      } catch {
-        // If generated video is not reachable, browser speech still explains the cue.
-      }
-    }
-    if (effectiveVideoUrl && !protectedVideo.url && !protectedVideo.error) {
-      setVideoRequested(true);
-      setPendingVideoPlay(true);
-      setNarratorState('paused');
-      return;
-    }
-    if (!protectedVideo.url || !videoRef.current) {
-      speakFallback();
-      return;
-    }
-    if (narratorState === 'completed') {
-      videoRef.current.currentTime = 0;
-      setProgress(0);
-    }
-    videoRef.current.muted = false;
-    try {
-      await videoRef.current.play();
-      setNarratorState('speaking');
-    } catch {
-      setNarratorState('paused');
-    }
-  };
-
-  const toggleNarration = () => {
-    if (narratorState === 'speaking') pause();
-    else void play();
-  };
+  const narratorState = narration.state;
+  const activeSentence = narration.activeSentence;
+  const toggleNarration = () => { setShowHint(false); narration.toggle(); };
 
   if (!avatarEnabled) {
     return (
@@ -215,23 +69,20 @@ export function AvatarCompanion({
         title={isSpeaking ? 'Нажмите, чтобы поставить на паузу' : 'Нажмите, чтобы услышать объяснение'}
         className="pointer-events-auto group relative h-[clamp(180px,30vh,300px)] w-[clamp(150px,22vw,250px)] overflow-visible outline-none"
       >
-        {protectedVideo.url ? (
+        {narration.video ? (
           <div className={`absolute inset-0 transition-transform duration-[2500ms] ${isSpeaking ? 'scale-[1.02]' : 'scale-100'}`}>
             <span className="pointer-events-none absolute inset-[8%] rounded-[42%] bg-primary/10 blur-2xl" />
             <video
-              ref={videoRef}
-              src={protectedVideo.url}
-              poster={lazyPosterUrl || cue.poster_url}
+              ref={narration.video.ref}
+              src={narration.video.src}
+              poster={narration.video.poster}
               playsInline
               preload="metadata"
-              muted={!audioEnabled}
-              onPlay={() => { setNarratorState('speaking'); }}
-              onPause={() => setNarratorState((current) => current === 'speaking' ? 'paused' : current)}
-              onEnded={() => { setProgress(1); setNarratorState('completed'); }}
-              onTimeUpdate={(event) => {
-                const video = event.currentTarget;
-                if (Number.isFinite(video.duration) && video.duration > 0) setProgress(video.currentTime / video.duration);
-              }}
+              muted={narration.video.muted}
+              onPlay={narration.video.onPlay}
+              onPause={narration.video.onPause}
+              onEnded={narration.video.onEnded}
+              onTimeUpdate={narration.video.onTimeUpdate}
               className="absolute left-1/2 top-0 h-full w-auto max-w-none -translate-x-1/2 object-cover drop-shadow-[0_18px_18px_rgba(15,23,42,0.24)] [mask-image:radial-gradient(ellipse_58%_68%_at_50%_48%,black_62%,rgba(0,0,0,0.82)_72%,rgba(0,0,0,0.28)_86%,transparent_100%)] [-webkit-mask-image:radial-gradient(ellipse_58%_68%_at_50%_48%,black_62%,rgba(0,0,0,0.82)_72%,rgba(0,0,0,0.28)_86%,transparent_100%)]"
             />
           </div>

@@ -11,7 +11,6 @@ import { TutorDock } from '@/features/tutor/TutorDock';
 import type { LessonTutor } from '@/features/tutor/useLessonTutor';
 import { isAssessmentBlock, type AttemptsByStep, type LessonAnswers } from './studentProgress';
 import { avatarCueForBeat, lessonPositionForBlock } from './lessonExperience';
-import { AvatarCompanion } from './AvatarCompanion';
 import { narrationSpeechText } from './lessonContent';
 
 const PHASE_LABELS: Record<string, string> = {
@@ -167,20 +166,6 @@ export function ActiveLessonContent({
               onTeachingBeatChange={onTeachingBeatChange}
             />
           </FitToViewport>
-          {cue && (
-            <div className="pointer-events-none fixed bottom-[clamp(8rem,28vh,11rem)] right-2 z-[70] flex w-[min(300px,calc(100vw-16px))] justify-end lg:hidden">
-              <AvatarCompanion
-                cue={cue}
-                previewImageUrl={lessonDocument?.avatar.preview_image_url}
-                companionName={lessonDocument?.avatar.profile_name}
-                lessonVersionId={lessonVersionId}
-                avatarEnabled={avatarEnabled}
-                audioEnabled={audioEnabled}
-                onAvatarEnabledChange={onAvatarEnabledChange}
-                onAudioEnabledChange={onAudioEnabledChange}
-              />
-            </div>
-          )}
         </motion.div>
       </AnimatePresence>
       <LessonContinueBar
@@ -190,7 +175,13 @@ export function ActiveLessonContent({
         isDiagnosticRoute={isDiagnosticRoute}
         onNext={onNext}
         onOpenSummary={onOpenSummary}
-        leading={tutor ? <TutorDock tutor={tutor} /> : null}
+        leading={tutor || cue ? (
+          // Один персонаж: рассказчик урока (аватар) и помощник-тьютор — в одной плашке.
+          <TutorDock tutor={tutor} companion={{
+            cue, previewImageUrl: lessonDocument?.avatar.preview_image_url, name: lessonDocument?.avatar.profile_name,
+            lessonVersionId, avatarEnabled, audioEnabled, onAvatarEnabledChange, onAudioEnabledChange,
+          }} />
+        ) : null}
       />
     </div>
   );
