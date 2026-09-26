@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { parseMathText } from './ShortExplanation';
 import { TaskCondition } from './BlockMedia';
-import { checkAnswer } from '@/features/interactiveEngines/scoring';
+import MathAnswerInput from './MathAnswerInput';
+import { checkAnswer, type AnswerSpec } from '@/features/interactiveEngines/scoring';
 import type { BlockAttempt } from '@/features/tutor/tutorBridge';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,6 +12,8 @@ export interface IndependentProblemProps {
   type: "text" | "numeric" | "expression" | "number" | "multiple_choice";
   options?: string[];
   correct_answer: string | string[];
+  /** form — важна запись («раскройте скобки»); equivalent — любая равная (уравнение, вычисление). */
+  answer_mode?: AnswerSpec['mode'];
   explanation: string;
   answer_unit?: string;
   accepted_units?: string[];
@@ -21,7 +24,7 @@ export interface IndependentProblemProps {
   onAttempt?: (attempt: BlockAttempt) => void;
 }
 
-export default function IndependentProblem({ question, type, options, correct_answer, explanation, difficulty, answer_unit, accepted_units, tolerance, media, onAnswer, onAttempt }: IndependentProblemProps) {
+export default function IndependentProblem({ question, type, options, correct_answer, answer_mode, explanation, difficulty, answer_unit, accepted_units, tolerance, media, onAnswer, onAttempt }: IndependentProblemProps) {
   const [value, setValue] = useState('');
   const [status, setStatus] = useState<'idle' | 'correct' | 'incorrect' | 'wrong_unit'>('idle');
   const [attempts, setAttempts] = useState(0);
@@ -32,7 +35,7 @@ export default function IndependentProblem({ question, type, options, correct_an
 
     // Варианты ответа сравниваются точно; как число — только числовые вопросы.
     const numeric = type !== 'multiple_choice' && (type === 'numeric' || type === 'number' || Boolean(answer_unit));
-    const result = checkAnswer(value, { correct: correct_answer, numeric, unit: answer_unit, acceptedUnits: accepted_units, tolerance });
+    const result = checkAnswer(value, { correct: correct_answer, mode: type === 'multiple_choice' ? 'choice' : answer_mode, numeric, unit: answer_unit, acceptedUnits: accepted_units, tolerance });
     setStatus(result);
     onAttempt?.({ value: value.trim(), outcome: result, locked: result === 'correct' || (result === 'incorrect' && attempts + 1 >= 3) });
     // Верное число с неверной единицей не тратит попытку: просим проверить единицы.
@@ -106,18 +109,17 @@ export default function IndependentProblem({ question, type, options, correct_an
           </div>
         ) : (
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <input
-              type="text"
+            <MathAnswerInput
               value={value}
-              onChange={(e) => {
-                setValue(e.target.value);
+              onChange={(next) => {
+                setValue(next);
                 if ((status === 'incorrect' && attempts < 3) || status === 'wrong_unit') {
                    setStatus('idle');
                 }
               }}
               disabled={isLocked}
+              mathTools={type !== 'text'}
               placeholder="Ваш ответ..."
-              className="flex-1 px-4 py-2.5 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 transition-all"
             />
             {answer_unit && <span className="shrink-0 text-sm font-semibold text-muted-foreground">в {answer_unit}</span>}
           </div>

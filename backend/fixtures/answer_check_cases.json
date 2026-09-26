@@ -1,418 +1,616 @@
 {
- "_about": "Общие случаи проверки ответа: их прогоняют и scoring.test.ts (браузер), и test_learning_cycle_progress.py (сервер). Правила в обоих местах должны совпадать.",
- "cases": [
-  {
-   "answer": "8,9",
-   "spec": {
-    "correct": "8.9",
-    "numeric": true,
-    "unit": "г/см³"
-   },
-   "expected": "correct",
-   "note": "запятая"
-  },
-  {
-   "answer": "8.90",
-   "spec": {
-    "correct": "8.9",
-    "numeric": true,
-    "unit": "г/см³"
-   },
-   "expected": "correct",
-   "note": "лишний ноль"
-  },
-  {
-   "answer": "8,9 г/см³",
-   "spec": {
-    "correct": "8.9",
-    "numeric": true,
-    "unit": "г/см³"
-   },
-   "expected": "correct",
-   "note": "с единицей"
-  },
-  {
-   "answer": "8.9 г/см3",
-   "spec": {
-    "correct": "8.9",
-    "numeric": true,
-    "unit": "г/см³"
-   },
-   "expected": "correct",
-   "note": "см3 = см³"
-  },
-  {
-   "answer": "8.9 g/cm3",
-   "spec": {
-    "correct": "8.9",
-    "numeric": true,
-    "unit": "г/см³"
-   },
-   "expected": "correct",
-   "note": "латиница"
-  },
-  {
-   "answer": "8.94",
-   "spec": {
-    "correct": "8.9",
-    "numeric": true,
-    "unit": "г/см³"
-   },
-   "expected": "correct",
-   "note": "в пределах разряда"
-  },
-  {
-   "answer": "9",
-   "spec": {
-    "correct": "8.9",
-    "numeric": true,
-    "unit": "г/см³"
-   },
-   "expected": "incorrect",
-   "note": "вне разряда"
-  },
-  {
-   "answer": "8.9 кг",
-   "spec": {
-    "correct": "8.9",
-    "numeric": true,
-    "unit": "г/см³"
-   },
-   "expected": "wrong_unit",
-   "note": "не та единица"
-  },
-  {
-   "answer": "1918",
-   "spec": {
-    "correct": "1917",
-    "numeric": true
-   },
-   "expected": "incorrect",
-   "note": "год: только точно"
-  },
-  {
-   "answer": "101",
-   "spec": {
-    "correct": "100",
-    "numeric": true
-   },
-   "expected": "incorrect",
-   "note": "целое: только точно"
-  },
-  {
-   "answer": "60 км/ч",
-   "spec": {
-    "correct": "60",
-    "numeric": true,
-    "unit": "км/ч"
-   },
-   "expected": "correct",
-   "note": "скорость"
-  },
-  {
-   "answer": "60 km/h",
-   "spec": {
-    "correct": "60",
-    "numeric": true,
-    "unit": "км/ч"
-   },
-   "expected": "correct",
-   "note": "латиница"
-  },
-  {
-   "answer": "10 000",
-   "spec": {
-    "correct": "10000",
-    "numeric": true,
-    "unit": "Н"
-   },
-   "expected": "correct",
-   "note": "разряды"
-  },
-  {
-   "answer": "5 МПа",
-   "spec": {
-    "correct": "5",
-    "numeric": true,
-    "unit": "мПа"
-   },
-   "expected": "wrong_unit",
-   "note": "мега ≠ милли"
-  },
-  {
-   "answer": "5 н",
-   "spec": {
-    "correct": "5",
-    "numeric": true,
-    "unit": "Н"
-   },
-   "expected": "correct",
-   "note": "регистр"
-  },
-  {
-   "answer": "12 Нм",
-   "spec": {
-    "correct": "12",
-    "numeric": true,
-    "unit": "Н·м"
-   },
-   "expected": "correct",
-   "note": "точка-умножение"
-  },
-  {
-   "answer": "5 м",
-   "spec": {
-    "correct": "5",
-    "numeric": true,
-    "unit": "м"
-   },
-   "expected": "correct",
-   "note": "однобуквенная единица"
-  },
-  {
-   "answer": "−2,5 м/с²",
-   "spec": {
-    "correct": "-2.5",
-    "numeric": true,
-    "unit": "м/с²"
-   },
-   "expected": "correct",
-   "note": "минус"
-  },
-  {
-   "answer": "0",
-   "spec": {
-    "correct": 0,
-    "numeric": true
-   },
-   "expected": "correct",
-   "note": "ноль числом"
-  },
-  {
-   "answer": "9",
-   "spec": {
-    "correct": "8.9",
-    "numeric": true,
-    "tolerance": 0.05
-   },
-   "expected": "correct",
-   "note": "явный допуск 5%"
-  },
-  {
-   "answer": "5",
-   "spec": {
-    "correct": "3",
-    "numeric": true,
-    "tolerance": "Infinity"
-   },
-   "expected": "incorrect",
-   "note": "мусорный допуск"
-  },
-  {
-   "answer": "3.6",
-   "spec": {
-    "correct": "3",
-    "numeric": true,
-    "tolerance": "NaN"
-   },
-   "expected": "incorrect",
-   "note": "NaN-допуск"
-  },
-  {
-   "answer": "NaN",
-   "spec": {
-    "correct": "NaN",
-    "numeric": true
-   },
-   "expected": "incorrect",
-   "note": "NaN"
-  },
-  {
-   "answer": "1",
-   "spec": {
-    "correct": "1/2",
-    "numeric": true
-   },
-   "expected": "incorrect",
-   "note": "дробь"
-  },
-  {
-   "answer": "2",
-   "spec": {
-    "correct": "2x",
-    "numeric": true
-   },
-   "expected": "incorrect",
-   "note": "выражение"
-  },
-  {
-   "answer": "1918",
-   "spec": {
-    "correct": "1917"
-   },
-   "expected": "incorrect",
-   "note": "вариант ответа"
-  },
-  {
-   "answer": "1",
-   "spec": {
-    "correct": "1 и 2"
-   },
-   "expected": "incorrect",
-   "note": "текстовый вариант"
-  },
-  {
-   "answer": "3 закона Кеплера",
-   "spec": {
-    "correct": "3 закона Ньютона"
-   },
-   "expected": "incorrect",
-   "note": "текст начинается с числа"
-  },
-  {
-   "answer": "1/3",
-   "spec": {
-    "correct": "1/2"
-   },
-   "expected": "incorrect",
-   "note": "дробь как текст"
-  },
-  {
-   "answer": " Баласагун ",
-   "spec": {
-    "correct": "баласагун"
-   },
-   "expected": "correct",
-   "note": "текст"
-  },
-  {
-   "answer": "x = 2",
-   "spec": {
-    "correct": [
-     "x=2",
-     "x = 2"
-    ]
-   },
-   "expected": "correct",
-   "note": "варианты записи"
-  },
-  {
-   "answer": "8,9",
-   "spec": {
-    "correct": "8.9"
-   },
-   "expected": "incorrect",
-   "note": "не числовой вопрос — строго"
-  },
-  {
-   "answer": "0.0015",
-   "spec": {
-    "correct": "1.5·10^-3",
-    "numeric": true
-   },
-   "expected": "correct",
-   "note": "степень десяти: десятичная запись"
-  },
-  {
-   "answer": "1,5·10⁻³",
-   "spec": {
-    "correct": "1.5·10^-3",
-    "numeric": true
-   },
-   "expected": "correct",
-   "note": "степень десяти: верхний индекс"
-  },
-  {
-   "answer": "1.5",
-   "spec": {
-    "correct": "1.5·10^-3",
-    "numeric": true
-   },
-   "expected": "incorrect",
-   "note": "степень десяти не единица"
-  },
-  {
-   "answer": "1.5·10^-4",
-   "spec": {
-    "correct": "1.5·10^-3",
-    "numeric": true
-   },
-   "expected": "incorrect",
-   "note": "не та степень — неверно, не «единицы»"
-  },
-  {
-   "answer": "1,5×10^-3 м",
-   "spec": {
-    "correct": "1.5·10^-3",
-    "numeric": true,
-    "unit": "м"
-   },
-   "expected": "correct",
-   "note": "степень и единица"
-  },
-  {
-   "answer": "0.3",
-   "spec": {
-    "correct": "1.5e-3",
-    "numeric": true
-   },
-   "expected": "incorrect",
-   "note": "малое число в e-записи"
-  },
-  {
-   "answer": "0.0015",
-   "spec": {
-    "correct": "1.5e-3",
-    "numeric": true
-   },
-   "expected": "correct",
-   "note": "e-запись"
-  },
-  {
-   "answer": "3e8",
-   "spec": {
-    "correct": "300000000",
-    "numeric": true
-   },
-   "expected": "correct",
-   "note": "большое число"
-  },
-  {
-   "answer": "5 kg·m",
-   "spec": {
-    "correct": "5",
-    "numeric": true,
-    "unit": "кг·м"
-   },
-   "expected": "correct",
-   "note": "составная единица латиницей"
-  },
-  {
-   "answer": "0.45",
-   "spec": {
-    "correct": "0.5",
-    "numeric": true
-   },
-   "expected": "correct",
-   "note": "граница: половина разряда"
-  },
-  {
-   "answer": "0.44",
-   "spec": {
-    "correct": "0.5",
-    "numeric": true
-   },
-   "expected": "incorrect",
-   "note": "за границей разряда"
-  },
-  {
-   "answer": "3.14",
-   "spec": {
-    "correct": "3.14",
-    "numeric": true
-   },
-   "expected": "correct",
-   "note": "точность ответа"
-  }
- ]
+  "_about": "Общие случаи проверки ответа: их прогоняют и scoring.test.ts (браузер), и test_learning_cycle_progress.py (сервер). Правила в обоих местах должны совпадать.",
+  "cases": [
+    {
+      "answer": "8,9",
+      "spec": {
+        "correct": "8.9",
+        "numeric": true,
+        "unit": "г/см³"
+      },
+      "expected": "correct",
+      "note": "запятая"
+    },
+    {
+      "answer": "8.90",
+      "spec": {
+        "correct": "8.9",
+        "numeric": true,
+        "unit": "г/см³"
+      },
+      "expected": "correct",
+      "note": "лишний ноль"
+    },
+    {
+      "answer": "8,9 г/см³",
+      "spec": {
+        "correct": "8.9",
+        "numeric": true,
+        "unit": "г/см³"
+      },
+      "expected": "correct",
+      "note": "с единицей"
+    },
+    {
+      "answer": "8.9 г/см3",
+      "spec": {
+        "correct": "8.9",
+        "numeric": true,
+        "unit": "г/см³"
+      },
+      "expected": "correct",
+      "note": "см3 = см³"
+    },
+    {
+      "answer": "8.9 g/cm3",
+      "spec": {
+        "correct": "8.9",
+        "numeric": true,
+        "unit": "г/см³"
+      },
+      "expected": "correct",
+      "note": "латиница"
+    },
+    {
+      "answer": "8.94",
+      "spec": {
+        "correct": "8.9",
+        "numeric": true,
+        "unit": "г/см³"
+      },
+      "expected": "correct",
+      "note": "в пределах разряда"
+    },
+    {
+      "answer": "9",
+      "spec": {
+        "correct": "8.9",
+        "numeric": true,
+        "unit": "г/см³"
+      },
+      "expected": "incorrect",
+      "note": "вне разряда"
+    },
+    {
+      "answer": "8.9 кг",
+      "spec": {
+        "correct": "8.9",
+        "numeric": true,
+        "unit": "г/см³"
+      },
+      "expected": "wrong_unit",
+      "note": "не та единица"
+    },
+    {
+      "answer": "1918",
+      "spec": {
+        "correct": "1917",
+        "numeric": true
+      },
+      "expected": "incorrect",
+      "note": "год: только точно"
+    },
+    {
+      "answer": "101",
+      "spec": {
+        "correct": "100",
+        "numeric": true
+      },
+      "expected": "incorrect",
+      "note": "целое: только точно"
+    },
+    {
+      "answer": "60 км/ч",
+      "spec": {
+        "correct": "60",
+        "numeric": true,
+        "unit": "км/ч"
+      },
+      "expected": "correct",
+      "note": "скорость"
+    },
+    {
+      "answer": "60 km/h",
+      "spec": {
+        "correct": "60",
+        "numeric": true,
+        "unit": "км/ч"
+      },
+      "expected": "correct",
+      "note": "латиница"
+    },
+    {
+      "answer": "10 000",
+      "spec": {
+        "correct": "10000",
+        "numeric": true,
+        "unit": "Н"
+      },
+      "expected": "correct",
+      "note": "разряды"
+    },
+    {
+      "answer": "5 МПа",
+      "spec": {
+        "correct": "5",
+        "numeric": true,
+        "unit": "мПа"
+      },
+      "expected": "wrong_unit",
+      "note": "мега ≠ милли"
+    },
+    {
+      "answer": "5 н",
+      "spec": {
+        "correct": "5",
+        "numeric": true,
+        "unit": "Н"
+      },
+      "expected": "correct",
+      "note": "регистр"
+    },
+    {
+      "answer": "12 Нм",
+      "spec": {
+        "correct": "12",
+        "numeric": true,
+        "unit": "Н·м"
+      },
+      "expected": "correct",
+      "note": "точка-умножение"
+    },
+    {
+      "answer": "5 м",
+      "spec": {
+        "correct": "5",
+        "numeric": true,
+        "unit": "м"
+      },
+      "expected": "correct",
+      "note": "однобуквенная единица"
+    },
+    {
+      "answer": "−2,5 м/с²",
+      "spec": {
+        "correct": "-2.5",
+        "numeric": true,
+        "unit": "м/с²"
+      },
+      "expected": "correct",
+      "note": "минус"
+    },
+    {
+      "answer": "0",
+      "spec": {
+        "correct": 0,
+        "numeric": true
+      },
+      "expected": "correct",
+      "note": "ноль числом"
+    },
+    {
+      "answer": "9",
+      "spec": {
+        "correct": "8.9",
+        "numeric": true,
+        "tolerance": 0.05
+      },
+      "expected": "correct",
+      "note": "явный допуск 5%"
+    },
+    {
+      "answer": "5",
+      "spec": {
+        "correct": "3",
+        "numeric": true,
+        "tolerance": "Infinity"
+      },
+      "expected": "incorrect",
+      "note": "мусорный допуск"
+    },
+    {
+      "answer": "3.6",
+      "spec": {
+        "correct": "3",
+        "numeric": true,
+        "tolerance": "NaN"
+      },
+      "expected": "incorrect",
+      "note": "NaN-допуск"
+    },
+    {
+      "answer": "NaN",
+      "spec": {
+        "correct": "NaN",
+        "numeric": true
+      },
+      "expected": "incorrect",
+      "note": "NaN"
+    },
+    {
+      "answer": "1",
+      "spec": {
+        "correct": "1/2",
+        "numeric": true
+      },
+      "expected": "incorrect",
+      "note": "дробь"
+    },
+    {
+      "answer": "2",
+      "spec": {
+        "correct": "2x",
+        "numeric": true
+      },
+      "expected": "incorrect",
+      "note": "выражение"
+    },
+    {
+      "answer": "1918",
+      "spec": {
+        "correct": "1917"
+      },
+      "expected": "incorrect",
+      "note": "вариант ответа"
+    },
+    {
+      "answer": "1",
+      "spec": {
+        "correct": "1 и 2"
+      },
+      "expected": "incorrect",
+      "note": "текстовый вариант"
+    },
+    {
+      "answer": "3 закона Кеплера",
+      "spec": {
+        "correct": "3 закона Ньютона"
+      },
+      "expected": "incorrect",
+      "note": "текст начинается с числа"
+    },
+    {
+      "answer": "1/3",
+      "spec": {
+        "correct": "1/2"
+      },
+      "expected": "incorrect",
+      "note": "дробь как текст"
+    },
+    {
+      "answer": " Баласагун ",
+      "spec": {
+        "correct": "баласагун"
+      },
+      "expected": "correct",
+      "note": "текст"
+    },
+    {
+      "answer": "x = 2",
+      "spec": {
+        "correct": [
+          "x=2",
+          "x = 2"
+        ]
+      },
+      "expected": "correct",
+      "note": "варианты записи"
+    },
+    {
+      "answer": "8,9",
+      "spec": {
+        "correct": "8.9"
+      },
+      "expected": "incorrect",
+      "note": "не числовой вопрос — строго"
+    },
+    {
+      "answer": "0.0015",
+      "spec": {
+        "correct": "1.5·10^-3",
+        "numeric": true
+      },
+      "expected": "correct",
+      "note": "степень десяти: десятичная запись"
+    },
+    {
+      "answer": "1,5·10⁻³",
+      "spec": {
+        "correct": "1.5·10^-3",
+        "numeric": true
+      },
+      "expected": "correct",
+      "note": "степень десяти: верхний индекс"
+    },
+    {
+      "answer": "1.5",
+      "spec": {
+        "correct": "1.5·10^-3",
+        "numeric": true
+      },
+      "expected": "incorrect",
+      "note": "степень десяти не единица"
+    },
+    {
+      "answer": "1.5·10^-4",
+      "spec": {
+        "correct": "1.5·10^-3",
+        "numeric": true
+      },
+      "expected": "incorrect",
+      "note": "не та степень — неверно, не «единицы»"
+    },
+    {
+      "answer": "1,5×10^-3 м",
+      "spec": {
+        "correct": "1.5·10^-3",
+        "numeric": true,
+        "unit": "м"
+      },
+      "expected": "correct",
+      "note": "степень и единица"
+    },
+    {
+      "answer": "0.3",
+      "spec": {
+        "correct": "1.5e-3",
+        "numeric": true
+      },
+      "expected": "incorrect",
+      "note": "малое число в e-записи"
+    },
+    {
+      "answer": "0.0015",
+      "spec": {
+        "correct": "1.5e-3",
+        "numeric": true
+      },
+      "expected": "correct",
+      "note": "e-запись"
+    },
+    {
+      "answer": "3e8",
+      "spec": {
+        "correct": "300000000",
+        "numeric": true
+      },
+      "expected": "correct",
+      "note": "большое число"
+    },
+    {
+      "answer": "5 kg·m",
+      "spec": {
+        "correct": "5",
+        "numeric": true,
+        "unit": "кг·м"
+      },
+      "expected": "correct",
+      "note": "составная единица латиницей"
+    },
+    {
+      "answer": "0.45",
+      "spec": {
+        "correct": "0.5",
+        "numeric": true
+      },
+      "expected": "correct",
+      "note": "граница: половина разряда"
+    },
+    {
+      "answer": "0.44",
+      "spec": {
+        "correct": "0.5",
+        "numeric": true
+      },
+      "expected": "incorrect",
+      "note": "за границей разряда"
+    },
+    {
+      "answer": "3.14",
+      "spec": {
+        "correct": "3.14",
+        "numeric": true
+      },
+      "expected": "correct",
+      "note": "точность ответа"
+    },
+    {
+      "answer": "2√3",
+      "spec": {
+        "correct": "\\sqrt{12}",
+        "mode": "equivalent"
+      },
+      "expected": "correct",
+      "note": "корень: вынесен множитель"
+    },
+    {
+      "answer": "sqrt(12)",
+      "spec": {
+        "correct": "√12"
+      },
+      "expected": "correct",
+      "note": "корень словом sqrt"
+    },
+    {
+      "answer": "2*sqrt(3)",
+      "spec": {
+        "correct": "$2\\sqrt{3}$"
+      },
+      "expected": "correct",
+      "note": "LaTeX в ответе урока"
+    },
+    {
+      "answer": "3/4",
+      "spec": {
+        "correct": "0,75",
+        "numeric": true
+      },
+      "expected": "correct",
+      "note": "дробь = десятичная"
+    },
+    {
+      "answer": "\\frac{3}{4}",
+      "spec": {
+        "correct": "3/4"
+      },
+      "expected": "correct",
+      "note": "дробь LaTeX"
+    },
+    {
+      "answer": "x/2",
+      "spec": {
+        "correct": "0,5x",
+        "mode": "equivalent"
+      },
+      "expected": "correct",
+      "note": "дробь с переменной"
+    },
+    {
+      "answer": "a²+2ab+b²",
+      "spec": {
+        "correct": "(a+b)^2",
+        "mode": "equivalent"
+      },
+      "expected": "correct",
+      "note": "квадрат суммы"
+    },
+    {
+      "answer": "a^2+b^2",
+      "spec": {
+        "correct": "(a+b)^2",
+        "mode": "equivalent"
+      },
+      "expected": "incorrect",
+      "note": "заблуждение: квадрат суммы"
+    },
+    {
+      "answer": "√(9+16)",
+      "spec": {
+        "correct": "5",
+        "mode": "equivalent"
+      },
+      "expected": "correct",
+      "note": "корень из суммы"
+    },
+    {
+      "answer": "√9+√16",
+      "spec": {
+        "correct": "5",
+        "mode": "equivalent"
+      },
+      "expected": "incorrect",
+      "note": "заблуждение: корень из суммы"
+    },
+    {
+      "answer": "x = 7",
+      "spec": {
+        "correct": "7",
+        "mode": "equivalent"
+      },
+      "expected": "correct",
+      "note": "ответ в виде x = …"
+    },
+    {
+      "answer": "(x-3)(x+3)",
+      "spec": {
+        "correct": "x^2-9",
+        "mode": "equivalent"
+      },
+      "expected": "correct",
+      "note": "разность квадратов"
+    },
+    {
+      "answer": "√x²",
+      "spec": {
+        "correct": "x",
+        "mode": "equivalent"
+      },
+      "expected": "correct",
+      "note": "корень из квадрата при x > 0"
+    },
+    {
+      "answer": "3√2 см",
+      "spec": {
+        "correct": "√18"
+      },
+      "expected": "incorrect",
+      "note": "выражение с единицей — не выражение"
+    },
+    {
+      "answer": "пять",
+      "spec": {
+        "correct": "5"
+      },
+      "expected": "incorrect",
+      "note": "слово — не выражение"
+    },
+    {
+      "answer": "7:2",
+      "spec": {
+        "correct": "3,5",
+        "numeric": true
+      },
+      "expected": "correct",
+      "note": "деление двоеточием"
+    },
+    {
+      "answer": "2(x+1)",
+      "spec": {
+        "correct": "2x+2"
+      },
+      "expected": "incorrect",
+      "note": "форма: раскрыть скобки — нераскрытое не засчитываем"
+    },
+    {
+      "answer": "2x + 2",
+      "spec": {
+        "correct": "2x+2"
+      },
+      "expected": "correct",
+      "note": "форма: пробелы не важны"
+    },
+    {
+      "answer": "2·x+2",
+      "spec": {
+        "correct": "2x+2"
+      },
+      "expected": "correct",
+      "note": "форма: знак умножения не важен"
+    },
+    {
+      "answer": "6/8",
+      "spec": {
+        "correct": "3/4"
+      },
+      "expected": "incorrect",
+      "note": "форма: сократить дробь"
+    },
+    {
+      "answer": "0,5",
+      "spec": {
+        "correct": "1/2",
+        "mode": "choice"
+      },
+      "expected": "incorrect",
+      "note": "вариант ответа — только точно"
+    },
+    {
+      "answer": "ba",
+      "spec": {
+        "correct": "ab",
+        "mode": "equivalent"
+      },
+      "expected": "incorrect",
+      "note": "буквы — не выражение"
+    },
+    {
+      "answer": "2(x+1)",
+      "spec": {
+        "correct": "2x+2",
+        "mode": "equivalent"
+      },
+      "expected": "correct",
+      "note": "по смыслу — для уравнений и вычислений"
+    }
+  ]
 }

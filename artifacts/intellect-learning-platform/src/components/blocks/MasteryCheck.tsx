@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, XCircle, Trophy } from 'lucide-react';
 import { parseMathText } from './ShortExplanation';
-import { checkAnswer } from '@/features/interactiveEngines/scoring';
+import { checkAnswer, type AnswerSpec } from '@/features/interactiveEngines/scoring';
 
 export interface MasteryCheckQuestion {
   question: string;
@@ -12,6 +12,7 @@ export interface MasteryCheckQuestion {
   explanation: string;
   dimension: string;
   answer_unit?: string;
+  answer_mode?: AnswerSpec['mode'];
   accepted_units?: string[];
   tolerance?: number;
 }
@@ -56,6 +57,7 @@ export default function MasteryCheck({ questions, onAnswer }: MasteryCheckProps)
       ? (value === currentQ.correct_answer ? 'correct' : 'incorrect')
       : checkAnswer(value, {
         correct: currentQ.correct_answer,
+        mode: currentQ.answer_mode,
         numeric,
         unit: currentQ.answer_unit,
         acceptedUnits: currentQ.accepted_units,

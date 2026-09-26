@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { parseMathText } from './ShortExplanation';
 import { TaskCondition } from './BlockMedia';
-import { checkAnswer } from '@/features/interactiveEngines/scoring';
+import MathAnswerInput from './MathAnswerInput';
+import { checkAnswer, type AnswerSpec } from '@/features/interactiveEngines/scoring';
 import type { BlockAttempt } from '@/features/tutor/tutorBridge';
 import { CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,6 +12,8 @@ export interface GuidedPracticeProps {
   hints: string[];
   input_type: "text" | "numeric" | "expression" | "number" | "multiple_choice";
   correct_answer: string | string[];
+  /** form — важна запись («раскройте скобки»); equivalent — любая равная (уравнение, вычисление). */
+  answer_mode?: AnswerSpec['mode'];
   explanation: string;
   answer_unit?: string;
   accepted_units?: string[];
@@ -20,7 +23,7 @@ export interface GuidedPracticeProps {
   onAttempt?: (attempt: BlockAttempt) => void;
 }
 
-export default function GuidedPractice({ question, hints, input_type, correct_answer, explanation, answer_unit, accepted_units, tolerance, media, onAnswer, onAttempt }: GuidedPracticeProps) {
+export default function GuidedPractice({ question, hints, input_type, correct_answer, answer_mode, explanation, answer_unit, accepted_units, tolerance, media, onAnswer, onAttempt }: GuidedPracticeProps) {
   const [value, setValue] = useState('');
   const [status, setStatus] = useState<'idle' | 'correct' | 'incorrect' | 'wrong_unit'>('idle');
   const [hintIndex, setHintIndex] = useState(0);
@@ -30,7 +33,7 @@ export default function GuidedPractice({ question, hints, input_type, correct_an
     if (!value.trim()) return;
 
     const numeric = input_type === 'numeric' || input_type === 'number' || Boolean(answer_unit);
-    const result = checkAnswer(value, { correct: correct_answer, numeric, unit: answer_unit, acceptedUnits: accepted_units, tolerance });
+    const result = checkAnswer(value, { correct: correct_answer, mode: answer_mode, numeric, unit: answer_unit, acceptedUnits: accepted_units, tolerance });
     setStatus(result);
     onAttempt?.({ value: value.trim(), outcome: result, hintsSeen: hintIndex });
     // Верное число с неверной единицей — не ошибка ученика по сути: просим проверить единицы.
@@ -57,17 +60,15 @@ export default function GuidedPractice({ question, hints, input_type, correct_an
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <input
-            type="text"
+          <MathAnswerInput
             value={value}
-            onChange={(e) => {
-              setValue(e.target.value);
+            onChange={(next) => {
+              setValue(next);
               if (status !== 'idle') setStatus('idle');
             }}
             disabled={isLocked}
+            mathTools={input_type !== 'text'}
             placeholder={input_type === 'numeric' || input_type === 'number' ? 'Введите число...' : 'Введите ваш ответ...'}
-            className="flex-1 px-4 py-2.5 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 transition-all"
-            aria-label="Ваш ответ"
           />
           {answer_unit && <span className="shrink-0 text-sm font-semibold text-muted-foreground">в {answer_unit}</span>}
           <button

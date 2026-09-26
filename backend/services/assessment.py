@@ -4,6 +4,8 @@ import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from services.math_expression import same_form, same_math
+
 
 # Те же правила, что у проверки ответа в браузере
 # (artifacts/intellect-learning-platform/src/features/interactiveEngines/scoring.ts);
@@ -21,6 +23,7 @@ _LATIN_UNITS = {
     "N": "Н", "kN": "кН", "Pa": "Па", "kPa": "кПа", "MPa": "МПа", "J": "Дж", "kJ": "кДж", "W": "Вт", "kW": "кВт",
     "V": "В", "A": "А", "Ohm": "Ом", "Ω": "Ом", "l": "л", "L": "л", "Hz": "Гц",
 }
+
 
 
 def _as_text(value: Any) -> str:
@@ -104,16 +107,26 @@ def check_answer(
     unit: str | None = None,
     accepted_units: list[str] | None = None,
     tolerance: Any = None,
+    mode: str | None = None,
 ) -> str:
     """'correct', 'wrong_unit' (число верное, единица нет) или 'incorrect'.
 
-    Как число сравниваются только ответы числовых вопросов; текст, выражения
-    и варианты ответа — только как текст.
+    Как число с единицей сравниваются только ответы числовых вопросов; выражения
+    сверяются по смыслу (services/math_expression.py), остальное — как текст.
     """
     if _NOT_A_NUMBER.match(_as_text(value).strip()):
         return "incorrect"
     candidates = [_as_text(item) for item in (expected if isinstance(expected, list) else [expected])]
     if any(_same_text(value, candidate) for candidate in candidates):
+        return "correct"
+    # mode: "choice" — вариант ответа, только точно; "form" (выражения по умолчанию) — та же запись;
+    # "equivalent" (числовые по умолчанию, уравнения) — по смыслу: 2√3 = √12, 1/2 = 0,5.
+    mode = mode or ("equivalent" if numeric else "form")
+    if mode == "choice":
+        return "incorrect"
+    if mode == "form" and any(same_form(value, candidate) for candidate in candidates):
+        return "correct"
+    if mode == "equivalent" and not unit and any(same_math(value, candidate, numbers=numeric) for candidate in candidates):
         return "correct"
     if not numeric:
         return "incorrect"
@@ -140,8 +153,10 @@ def equal_answer(value: Any, expected: Any, **spec: Any) -> bool:
     return check_answer(value, expected, **spec) == "correct"
 
 
-def _answer_spec(item: dict, *, numeric: bool) -> dict[str, Any]:
+def _answer_spec(item: dict, *, numeric: bool, choice: bool = False) -> dict[str, Any]:
+    mode = "choice" if choice else item.get("answer_mode") if item.get("answer_mode") in {"form", "equivalent"} else None
     return {
+        "mode": mode,
         "numeric": numeric or bool(item.get("answer_unit")),
         "unit": item.get("answer_unit"),
         "accepted_units": item.get("accepted_units") if isinstance(item.get("accepted_units"), list) else None,
@@ -158,14 +173,15 @@ def grade_assessment(blocks: list[dict], responses: dict[str, str]) -> tuple[dic
                 key = f"{index}_q{question_index}"
                 answers[key] = equal_answer(
                     responses.get(key, ""), question.get("correct_answer", ""),
-                    **_answer_spec(question, numeric=question.get("type") in {"numeric", "number"}),
+                    **_answer_spec(question, numeric=question.get("type") in {"numeric", "number"},
+                                   choice=question.get("type") == "multiple_choice"),
                 )
         elif block.get("component") in {"RetrievalCheck", "IndependentProblem"}:
             key = str(index)
             # Варианты ответа (RetrievalCheck, multiple_choice) — только точное совпадение.
             numeric = block.get("component") == "IndependentProblem" and content.get("type") in {"numeric", "number"}
             answers[key] = equal_answer(
-                responses.get(key, ""), content.get("correct_answer", ""), **_answer_spec(content, numeric=numeric),
+                responses.get(key, ""), content.get("correct_answer", ""), **_answer_spec(content, numeric=numeric, choice=block.get("component") == "RetrievalCheck" or content.get("type") == "multiple_choice"),
             )
     score = round(100 * sum(answers.values()) / len(answers)) if answers else 0
     return answers, score

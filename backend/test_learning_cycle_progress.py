@@ -141,3 +141,16 @@ def test_mastery_numeric_rule_matches_the_browser():
     ]}}]
     answers, _ = grade_assessment(blocks, {"0_q0": "8,9", "0_q1": "1918"})
     assert answers == {"0_q0": True, "0_q1": False}
+
+
+def test_choice_questions_never_match_by_meaning():
+    from services.assessment import grade_assessment
+    blocks = [
+        {"component": "RetrievalCheck", "content": {"correct_answer": "1/2", "options": ["1/2", "0,5"]}},
+        {"component": "MasteryCheck", "content": {"questions": [
+            {"type": "multiple_choice", "correct_answer": "2x+2", "options": ["2x+2", "2(x+1)"]},
+            {"type": "numeric", "correct_answer": "3/4"},
+        ]}},
+    ]
+    answers, _ = grade_assessment(blocks, {"0": "0,5", "1_q0": "2(x+1)", "1_q1": "0,75"})
+    assert answers == {"0": False, "1_q0": False, "1_q1": True}

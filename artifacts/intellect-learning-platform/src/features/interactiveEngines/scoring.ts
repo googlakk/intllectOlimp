@@ -1,3 +1,4 @@
+import { sameForm, sameMath } from './mathExpression';
 export type BlockResult = 'idle' | 'correct' | 'incorrect' | 'partial';
 
 export function normalizeText(value: unknown): string {
@@ -58,6 +59,11 @@ export type AnswerSpec = {
   acceptedUnits?: string[];
   /** Явный относительный допуск (0…0,5). Без него — точность правильного ответа. */
   tolerance?: number | string;
+  /**
+   * choice — вариант ответа, только точно; form (выражения по умолчанию) — та же запись;
+   * equivalent (числовые по умолчанию, уравнения) — по смыслу: 2√3 = √12, 1/2 = 0,5.
+   */
+  mode?: 'choice' | 'form' | 'equivalent';
 };
 
 type Quantity = { value: number; unit: string; decimals: number };
@@ -149,6 +155,10 @@ export function checkAnswer(answer: string, spec: AnswerSpec): AnswerCheck {
   if (NOT_A_NUMBER.test(asText(answer).trim())) return 'incorrect';
   const candidates = (Array.isArray(spec.correct) ? spec.correct : [spec.correct]).map(asText);
   if (candidates.some((candidate) => sameText(answer, candidate))) return 'correct';
+  const mode = spec.mode ?? (spec.numeric ? 'equivalent' : 'form');
+  if (mode === 'choice') return 'incorrect';
+  if (mode === 'form' && candidates.some((candidate) => sameForm(answer, candidate))) return 'correct';
+  if (mode === 'equivalent' && !spec.unit && candidates.some((candidate) => sameMath(answer, candidate, { numbers: Boolean(spec.numeric) }))) return 'correct';
   if (!spec.numeric) return 'incorrect';
   const given = parseQuantity(answer);
   if (!given || NOT_A_UNIT.test(normalizeUnit(given.unit))) return 'incorrect';
