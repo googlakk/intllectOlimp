@@ -12,7 +12,7 @@ from time import monotonic
 from typing import Any, Iterable
 from types import SimpleNamespace
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -660,6 +660,10 @@ async def refresh_student_access(
     student = await db.get(Student, student_id)
     if student is None:
         raise CurriculumGraphError(status_code=404, detail="Ученик не найден")
+    # Карта нового ученика часто запрашивается несколько раз подряд: без блокировки
+    # параллельные пересчёты пишут одни и те же строки и ждут друг друга до таймаута.
+    await db.execute(text("SELECT pg_advisory_xact_lock(:namespace, :student_id)"),
+                     {"namespace": ACCESS_LOCK_NAMESPACE, "student_id": student_id})
 
     topic_rows = (
         await db.execute(
@@ -716,6 +720,7 @@ async def refresh_student_access(
     }
     now = datetime.now(timezone.utc)
     new_gates: list[dict[str, Any]] = []
+    access_values: list[dict[str, Any]] = []
     for topic, _section, subject in topic_rows:
         progress = progress_by_topic.get(topic.id)
         state = "locked"
@@ -774,31 +779,16 @@ async def refresh_student_access(
             elif not progression_edges and prereqs and readiness >= 1.0:
                 state, reason = "available", "Необходимые навыки уже освоены."
 
-        statement = (
-            insert(StudentTopicAccess)
-            .values(
-                student_id=student_id,
-                topic_id=topic.id,
-                state=state,
-                readiness_score=min(1.0, readiness),
-                reason=reason,
-                unlocked_by_topic_id=unlocked_by,
-                unlocked_at=now if state == "available" else None,
-                updated_at=now,
-            )
-            .on_conflict_do_update(
-                index_elements=[StudentTopicAccess.student_id, StudentTopicAccess.topic_id],
-                set_={
-                    "state": state,
-                    "readiness_score": min(1.0, readiness),
-                    "reason": reason,
-                    "unlocked_by_topic_id": unlocked_by,
-                    "unlocked_at": now if state == "available" else StudentTopicAccess.unlocked_at,
-                    "updated_at": now,
-                },
-            )
-        )
-        await db.execute(statement)
+        access_values.append({
+            "student_id": student_id,
+            "topic_id": topic.id,
+            "state": state,
+            "readiness_score": min(1.0, readiness),
+            "reason": reason,
+            "unlocked_by_topic_id": unlocked_by,
+            "unlocked_at": now if state == "available" else None,
+            "updated_at": now,
+        })
 
         if state == "available" and previous_states.get(topic.id) not in {"available", "in_progress", "mastered"} and unlocked_by:
             trigger_skill_ids = [item.skill_id for item in prereqs_by_topic.get(topic.id, []) if skill_scores.get(item.skill_id, 0) >= item.mastery_threshold]
@@ -825,7 +815,32 @@ async def refresh_student_access(
                     "explanation": reason,
                     "trigger_skill_ids": trigger_skill_ids,
                 })
+    await _upsert_topic_access(db, access_values)
     return new_gates
+
+
+# Ключ pg_advisory_xact_lock: пространство «доступ к темам», второй ключ — id ученика.
+ACCESS_LOCK_NAMESPACE = 7301
+# Одна вставка на пачку, а не на тему: у ученика старших классов сотни тем.
+ACCESS_UPSERT_BATCH = 500
+
+
+async def _upsert_topic_access(db: AsyncSession, values: list[dict[str, Any]]) -> None:
+    for start in range(0, len(values), ACCESS_UPSERT_BATCH):
+        statement = insert(StudentTopicAccess).values(values[start:start + ACCESS_UPSERT_BATCH])
+        excluded = statement.excluded
+        await db.execute(statement.on_conflict_do_update(
+            index_elements=[StudentTopicAccess.student_id, StudentTopicAccess.topic_id],
+            set_={
+                "state": excluded.state,
+                "readiness_score": excluded.readiness_score,
+                "reason": excluded.reason,
+                "unlocked_by_topic_id": excluded.unlocked_by_topic_id,
+                # Закрытая тема сохраняет дату прежнего открытия.
+                "unlocked_at": func.coalesce(excluded.unlocked_at, StudentTopicAccess.unlocked_at),
+                "updated_at": excluded.updated_at,
+            },
+        ))
 
 
 async def get_student_curriculum_map(

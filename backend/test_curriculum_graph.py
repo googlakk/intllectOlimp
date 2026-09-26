@@ -399,3 +399,39 @@ class AuthoredGoalTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(topic.learning_objectives, goal)
         self.assertEqual(topic.skills, [])
         self.assertNotIn('topic_skills', db.inserts)
+
+
+class AccessRefreshTests(unittest.IsolatedAsyncioTestCase):
+    async def test_new_student_access_is_locked_and_written_in_one_statement(self):
+        from sqlalchemy.sql.dml import Insert
+        from models import Section, Student, Subject, Topic
+        from services.curriculum_graph import refresh_student_access
+
+        subject = Subject(id=1, name='История', grade=8)
+        section = Section(id=1, subject_id=1, name='Новое время', sort_order=1)
+        topics = [Topic(id=index, section_id=1, name=f'Тема {index}', sort_order=index) for index in range(1, 41)]
+
+        class Session:
+            def __init__(self):
+                self.statements = []
+
+            async def get(self, _model, _identifier):
+                return Student(id=9, grade=8)
+
+            async def execute(self, statement, params=None):
+                self.statements.append((statement, params))
+                names = [item['name'] for item in getattr(statement, 'column_descriptions', [])]
+                if names == ['Topic', 'Section', 'Subject']:
+                    return FakeExecuteRows([(topic, section, subject) for topic in topics])
+                return FakeExecuteRows([])
+
+            async def scalars(self, _statement):
+                return FakeExecuteRows([])
+
+        session = Session()
+        await refresh_student_access(9, session)
+        self.assertIn('pg_advisory_xact_lock', str(session.statements[0][0]))
+        access = [statement for statement, _ in session.statements
+                  if isinstance(statement, Insert) and statement.table.name == 'student_topic_access']
+        self.assertEqual(len(access), 1)
+        self.assertEqual(len(access[0].compile().params) // 8, 40)

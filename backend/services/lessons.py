@@ -584,6 +584,8 @@ async def get_student_lesson_manifest(
             from services.curriculum_graph import refresh_student_access
 
             await refresh_student_access(student_id, db)
+            # Сохраняем пересчёт: иначе строки доступа откатываются, а блокировка ученика держится до конца запроса.
+            await db.commit()
             access_state = "available"
         progress_payload = serialize_progress(progress) if progress is not None else None
         remember_student_manifest_state(student_id, topic_id, {
@@ -638,6 +640,8 @@ async def get_student_lesson_manifest(
         from services.curriculum_graph import refresh_student_access
 
         await refresh_student_access(student_id, db)
+        # Сохраняем пересчёт: иначе строки доступа откатываются, а блокировка ученика держится до конца запроса.
+        await db.commit()
         access_state = "available"
 
     topic = await db.get(Topic, topic_id)
