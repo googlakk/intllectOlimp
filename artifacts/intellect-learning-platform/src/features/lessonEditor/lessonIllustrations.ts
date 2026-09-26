@@ -1,5 +1,6 @@
 import type { Block, EducationalImageResponse, GeneratedLesson, MediaRecommendation } from '@/lib/api/types';
 import { placeGeneratedMedia, type MediaPlacementTarget } from './mediaPlacement';
+import { primarySectionLabel, readLessonTextbook } from '@/features/textbooks/lessonSource';
 
 /** Сколько картинок создаём одновременно: быстрее, но без лавины запросов. */
 export const ILLUSTRATION_CONCURRENCY = 2;
@@ -29,7 +30,9 @@ function curriculumSummary(lesson: GeneratedLesson): string {
   const objectives = Array.isArray(metadata.objectives)
     ? metadata.objectives.map((item) => (item && typeof item === 'object' ? String((item as { text?: unknown }).text || '') : '')).filter(Boolean)
     : [];
-  return [String(metadata.learning_focus || ''), ...objectives].filter(Boolean).join('; ').slice(0, 1200);
+  // Картинка опирается на тот же параграф учебника, что и урок.
+  const section = primarySectionLabel(readLessonTextbook(metadata));
+  return [section ? `Учебник: ${section}` : '', String(metadata.learning_focus || ''), ...objectives].filter(Boolean).join('; ').slice(0, 1200);
 }
 
 export function illustrationRequest(lesson: GeneratedLesson, item: MediaRecommendation, model?: string) {

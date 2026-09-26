@@ -220,6 +220,7 @@ async def take_tutor_turn(
     store: TutorStore | None = None,
     manifest_loader: ManifestLoader | None = None,
     tool_caller: ToolCaller | None = None,
+    textbook_loader: Callable[[Any, int], Awaitable[dict[str, Any] | None]] | None = None,
     settings: TutorSettings | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
@@ -296,13 +297,14 @@ async def take_tutor_turn(
         # Всё нужное из истории — до освобождения соединения.
         history = _history(recent)
         reached = outcome == "correct" or any(t.check_outcome == "correct" for t in recent)
+        textbook = await (textbook_loader or _load_textbook)(db, payload.topic_id)
         await store.release()
         await _llm_reply(
             turn, tool_caller, settings, lesson=lesson, blocks=blocks, block=block, grade=grade, language=language,
             spec=spec, hints_shown=hints_shown, hints=hints, outcome=outcome, value=value,
             protected=protected_items(blocks, payload.block_index, payload.question_index),
             message=message, reached=reached, history=history,
-            question_index=payload.question_index, event=payload.event,
+            question_index=payload.question_index, event=payload.event, textbook=textbook,
         )
 
     theory = nearest_theory_index(blocks, payload.block_index)
@@ -337,6 +339,9 @@ async def _llm_reply(turn: TutorTurn, tool_caller: ToolCaller, settings: TutorSe
         {"text": lesson_character(ctx["grade"], subject_label, show_path, ctx["language"]) + "\n\n"
                  + lesson_context(ctx["blocks"], metadata), "cache": True},
     ]
+    if ctx.get("textbook"):
+        from ai.textbook_grounding import tutor_textbook_block
+        system_blocks.append({"text": tutor_textbook_block(ctx["textbook"]), "cache": True})
     prompt = turn_prompt(TurnContext(
         block=block, block_index=turn.block_index, question_index=ctx["question_index"], event=ctx["event"],
         student_value=ctx["value"], check_outcome=ctx["outcome"], message=ctx["message"],
@@ -396,6 +401,17 @@ async def _llm_reply(turn: TutorTurn, tool_caller: ToolCaller, settings: TutorSe
     turn.reply, turn.reply_source = (unseen[0], "guard") if unseen else (template("fallback", ctx["language"]), "guard")
     # Сигнал учителю о тревожном сообщении сохраняется, даже если реплика заменена.
     turn.action = "call_teacher" if turn.safety_flag == "distress" else None
+
+
+async def _load_textbook(db: Any, topic_id: int) -> dict[str, Any] | None:
+    """Параграф учебника темы; нет его или таблиц — тьютор работает как раньше."""
+    if db is None:
+        return None
+    from models import Topic
+    from services.textbook_context import load_textbook_context
+
+    topic = await db.get(Topic, topic_id)
+    return await load_textbook_context(db, topic) if topic is not None else None
 
 
 def _subject_guidance(metadata: dict[str, Any]) -> tuple[str, str]:

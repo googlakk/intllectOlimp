@@ -14,6 +14,7 @@ import {
 import { lessonEditorInvalidationKeys } from './workflow';
 import { placeGeneratedMedia, type MediaPlacementTarget, type PlacedLessonMedia } from './mediaPlacement';
 import ModelPicker, { useModelChoice } from './ModelPicker';
+import { primarySectionLabel, readLessonTextbook } from '@/features/textbooks/lessonSource';
 
 export const MEDIA_CAPABLE_COMPONENTS = new Set([
   'ShortExplanation', 'KeyConcept', 'WorkedExample', 'MindMap', 'Timeline',
@@ -191,7 +192,9 @@ function curriculumSummary(lesson: GeneratedLesson): string {
   const objectives = Array.isArray(metadata.objectives)
     ? metadata.objectives.map((item) => item && typeof item === 'object' ? String((item as { text?: unknown }).text || '') : '').filter(Boolean)
     : [];
-  return [String(metadata.learning_focus || ''), ...objectives].filter(Boolean).join('; ').slice(0, 1200);
+  // Картинка опирается на тот же параграф учебника, что и урок.
+  const section = primarySectionLabel(readLessonTextbook(metadata));
+  return [section ? `Учебник: ${section}` : '', String(metadata.learning_focus || ''), ...objectives].filter(Boolean).join('; ').slice(0, 1200);
 }
 
 function blockTitle(block: GeneratedLesson['blocks'][number] | undefined): string {

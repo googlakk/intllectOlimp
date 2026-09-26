@@ -62,9 +62,12 @@ def reply(text, **extra):
 
 
 class Harness:
-    def __init__(self, replies=(), manifest=None, settings=ON):
+    def __init__(self, replies=(), manifest=None, settings=ON, textbook=None):
         self.store, self.replies, self.prompts = MemoryStore(), list(replies), []
-        self.manifest, self.settings = manifest or lesson(), settings
+        self.manifest, self.settings, self.textbook = manifest or lesson(), settings, textbook
+
+    async def textbook_loader(self, db, topic_id):
+        return self.textbook
 
     async def manifest_loader(self, **kwargs):
         if isinstance(self.manifest, Exception):
@@ -84,11 +87,23 @@ class Harness:
         return asyncio.run(take_tutor_turn(
             student_id=7, organization_id=1, grade=8, payload=TurnInput(**payload), db=None, store=self.store,
             manifest_loader=self.manifest_loader, tool_caller=self.tool, settings=self.settings,
-            now=datetime(2026, 9, 26, tzinfo=timezone.utc),
+            textbook_loader=self.textbook_loader, now=datetime(2026, 9, 26, tzinfo=timezone.utc),
         ))
 
 
 class TutorServiceTests(unittest.TestCase):
+    def test_textbook_paragraph_goes_to_tutor_without_book_answers(self):
+        book = {"title": "Физика. 8 класс", "sections": [{"number": "§ 12", "title": "Плотность вещества", "page_from": 45, "page_to": 49,
+                "text": "[стр. 45]\nПлотность — масса единицы объёма.",
+                "items": [{"id": 1, "kind": "example", "label": "Пример 1", "page": 46, "text": "Найдём плотность…", "answer": "2000 кг/м³"}]}]}
+        h = Harness([reply("Вспомни определение на стр. 45.")], textbook=book)
+        h.turn(event="message", message="не понимаю")
+        blocks = h.prompts[0]["system_blocks"]
+        self.assertEqual(len(blocks), 3)
+        self.assertIn("Плотность — масса единицы объёма", blocks[2]["text"])
+        self.assertNotIn("2000 кг/м³", blocks[2]["text"])
+        self.assertTrue(blocks[2]["cache"])
+
     def test_disabled_tutor_is_forbidden(self):
         with self.assertRaises(TutorServiceError) as denied:
             Harness(settings=TutorSettings(False, None, 6, 500, True)).turn(event="message", message="помоги")
