@@ -1,5 +1,5 @@
 import { Link } from 'wouter';
-import { ArrowLeft, ListTree, X } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { useCallback, useEffect, useState, type ReactNode, type RefObject, type Dispatch, type SetStateAction } from 'react';
 import type { Block, LearningObjective, LessonDocument, ObjectiveMastery, WarpGate } from '@/lib/api/types';
 import type { AttemptsByStep, LessonAnswers } from './studentProgress';
@@ -7,13 +7,13 @@ import { ActiveLessonContent } from './studentLessonContent';
 import { LessonTitlePage } from './LessonTitlePage';
 import type { LessonIntro } from './lessonIntro';
 import { AvatarCompanion } from './AvatarCompanion';
+import { LessonPlanDock } from './LessonPlanDock';
 import type { LessonTutor } from '@/features/tutor/useLessonTutor';
 import { avatarCueForBeat, defaultBeatId, lessonPositionForBlock } from './lessonExperience';
 import {
   EmptyLessonState,
   LessonCompletionSummary,
   LessonLoadingState,
-  LessonStepper,
   LessonUnavailableState,
 } from './studentLessonViews';
 
@@ -116,7 +116,6 @@ export function StudentLessonPageView({
   tutor,
 }: StudentLessonPageViewProps) {
   const showSummary = isCompleted && result && currentStep === activeBlocks.length;
-  const [isPlanOpen, setIsPlanOpen] = useState(false);
   const [activeBeatId, setActiveBeatId] = useState<string>();
   const activeOriginalIndex = activeOriginalIndices[currentStep] ?? currentStep;
   const lessonPosition = lessonPositionForBlock(lessonDocument, activeOriginalIndex);
@@ -134,7 +133,6 @@ export function StudentLessonPageView({
   }, [currentStep, lessonPosition?.scene.id, sceneDefaultBeatId]);
 
   useEffect(() => {
-    setIsPlanOpen(window.matchMedia('(min-width: 1024px)').matches);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
@@ -225,22 +223,23 @@ export function StudentLessonPageView({
           <span className="h-2 w-2 rounded-full bg-primary" />
           Урок идёт
         </div>
-        <button
-          type="button"
-          title={isPlanOpen ? 'Скрыть план урока' : 'Показать план урока'}
-          aria-label={isPlanOpen ? 'Скрыть план урока' : 'Показать план урока'}
-          aria-expanded={isPlanOpen}
-          onClick={() => setIsPlanOpen((open) => !open)}
-          className={`grid h-9 w-9 shrink-0 place-items-center rounded-md border transition-colors ${
-            isPlanOpen ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
-          }`}
-        >
-          <ListTree className="h-5 w-5" />
-        </button>
+        {showLessonRail && (
+          <LessonPlanDock
+            activeBlocks={activeBlocks}
+            activeOriginalIndices={activeOriginalIndices}
+            answers={answers}
+            currentStep={currentStep}
+            isCompleted={isCompleted}
+            maxOpenedStep={maxOpenedStep}
+            lessonDocument={lessonDocument}
+            onNavigate={onNavigate}
+            onOpenSummary={onOpenSummary}
+          />
+        )}
       </header>
 
       <div className="lesson-board relative flex min-h-0 flex-1 overflow-hidden">
-        <main className={`h-full min-w-0 flex-1 flex-col px-4 py-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 2xl:px-16 ${isPlanOpen ? 'hidden lg:flex' : 'flex'} ${showSummary ? 'overflow-y-auto' : 'overflow-hidden'}`}>
+        <main className={`h-full min-w-0 flex-1 flex-col px-4 py-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 2xl:px-16 flex ${showSummary ? 'overflow-y-auto' : 'overflow-hidden'}`}>
           {saveError && (
             <div role="alert" className="mb-6 rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm font-medium text-destructive">
               Прогресс пока не сохранён: {saveError.message}
@@ -250,49 +249,13 @@ export function StudentLessonPageView({
           {content}
         </main>
 
-        {showLessonRail && (
+        {showLessonRail && avatarCue && (
           <aside
             aria-label="Дополнительные инструменты урока"
-            className={`${isPlanOpen ? 'flex' : 'hidden lg:flex'} h-full w-full shrink-0 flex-col gap-4 overflow-hidden p-3 lg:w-[340px] lg:py-4 lg:pr-4 xl:w-[360px]`}
+            className="hidden h-full w-full shrink-0 flex-col gap-4 overflow-hidden p-3 lg:flex lg:w-[340px] lg:py-4 lg:pr-4 xl:w-[360px]"
           >
-            {isPlanOpen && (
-              <section className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-md ${avatarCue ? 'lg:flex-none lg:basis-1/2' : ''}`} aria-label="План урока">
-                <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
-                  <div>
-                    <p className="text-sm font-bold text-foreground">План урока</p>
-                    <p className="text-xs text-muted-foreground">Шаг {Math.min(currentStep + 1, activeBlocks.length)} из {activeBlocks.length}</p>
-                  </div>
-                  <button
-                    type="button"
-                    title="Скрыть план урока"
-                    aria-label="Скрыть план урока"
-                    onClick={() => setIsPlanOpen(false)}
-                    className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                  <LessonStepper
-                    activeBlocks={activeBlocks}
-                    activeOriginalIndices={activeOriginalIndices}
-                    answers={answers}
-                    currentStep={currentStep}
-                    isCompleted={isCompleted}
-                    maxOpenedStep={maxOpenedStep}
-                    lessonDocument={lessonDocument}
-                    onNavigate={(index) => {
-                      onNavigate(index);
-                      if (window.innerWidth < 1024) setIsPlanOpen(false);
-                    }}
-                    onOpenSummary={onOpenSummary}
-                  />
-                </div>
-              </section>
-            )}
-
             {avatarCue && (
-              <div className={`hidden min-h-0 overflow-y-auto rounded-2xl border border-border bg-card p-3 shadow-md lg:flex lg:flex-col lg:justify-center ${isPlanOpen ? 'flex-1' : 'h-full'}`}>
+              <div className={`hidden min-h-0 overflow-y-auto rounded-2xl border border-border bg-card p-3 shadow-md lg:flex lg:flex-col lg:justify-center h-full`}>
                 <AvatarCompanion
                   cue={avatarCue}
                   previewImageUrl={lessonDocument?.avatar.preview_image_url}
