@@ -243,7 +243,14 @@ async def ingest_textbook(textbook_id: int, deps: IngestDeps, *, claimed: bool =
 
         if scans:
             await store.update(textbook_id, status="recognizing")
-            await _recognize(textbook_id, data, scans, deps, len(pages))
+            failed, reason = await _recognize(textbook_id, data, scans, deps, len(pages))
+            if failed:
+                # Без части страниц (часто это оглавление в конце) разбор даст неверные параграфы.
+                await store.update(textbook_id, status="failed", error=(
+                    f"Не распознано {failed} стр. из {len(scans)}{f': {reason}' if reason else ''}. "
+                    "Нажмите «Запустить обработку» — распознаются только недостающие страницы."
+                ))
+                return "failed"
 
         await store.update(textbook_id, status="structuring")
         status = await _structure(textbook_id, book.language, deps)
@@ -260,11 +267,26 @@ async def ingest_textbook(textbook_id: int, deps: IngestDeps, *, claimed: bool =
         return "failed"
 
 
-async def _recognize(textbook_id: int, data: bytes, indices: list[int], deps: IngestDeps, total: int) -> None:
+def _model_error_reason(exc: Exception) -> str:
+    """Понятная учителю причина сбоя модели (без ключей и технических подробностей)."""
+    text = str(exc).lower()
+    if "credit balance" in text or "billing" in text:
+        return "закончился баланс API Anthropic — пополните его в Plans & Billing"
+    if "rate" in text and "limit" in text:
+        return "превышен лимит запросов к модели — повторите позже"
+    if "overloaded" in text:
+        return "модель перегружена — повторите позже"
+    return "ошибка модели"
+
+
+async def _recognize(textbook_id: int, data: bytes, indices: list[int], deps: IngestDeps, total: int) -> tuple[int, str]:
+    """Возвращает число нераспознанных страниц и причину последнего сбоя модели."""
     from llm.router import TASK_TEXTBOOK_OCR
 
     semaphore = asyncio.Semaphore(OCR_CONCURRENCY)
     done = 0
+    failed = 0
+    reasons: list[str] = []
 
     async def one(index: int, png: bytes) -> tuple[int, dict[str, Any] | None]:
         import base64
@@ -278,6 +300,7 @@ async def _recognize(textbook_id: int, data: bytes, indices: list[int], deps: In
                 page = parse_ocr_page(getattr(result, "data", None) or {}) if getattr(result, "ok", False) else None
             except Exception as exc:
                 logger.warning("Textbook %s page %s OCR failed: %s", textbook_id, index, exc.__class__.__name__)
+                reasons.append(_model_error_reason(exc))
                 page = None
         return index, page
 
@@ -296,7 +319,12 @@ async def _recognize(textbook_id: int, data: bytes, indices: list[int], deps: In
             for index, page in results
         ])
         done += len(results)
+        failed += sum(1 for _index, page in results if page is None or not page["text"])
+        if reasons and reasons[-1].startswith("закончился баланс"):
+            break  # без денег на счёте дальше каждая страница упадёт — не тратим время
         await deps.store.update(textbook_id, progress={"stage": "recognizing", "pages": total, "scans_left": len(indices) - done})
+    failed += len(indices) - done  # не дошли из-за остановки
+    return failed, (reasons[-1] if reasons else "")
 
 
 async def _structure(textbook_id: int, language: str, deps: IngestDeps) -> str:

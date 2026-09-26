@@ -165,6 +165,16 @@ class IngestTests(unittest.TestCase):
         self.assertFalse([kw for task, kw in caller.calls if kw["tool"]["name"] == "textbook_page"])
         self.assertEqual(store.pages_by_index[2].text, "Исправлено учителем")
 
+    def test_failed_recognition_stops_before_structure_with_reason(self):
+        store, caller = MemoryStore(book()), Caller(ocr_fails={0})
+        self.assertEqual(run(ingest_textbook(1, self.deps(store, caller=caller))), "failed")
+        self.assertIn("Не распознано 1 стр. из 2", store.book.error)
+        self.assertNotIn("textbook_toc", [kw["tool"]["name"] for task, kw in caller.calls])
+
+    def test_empty_credit_balance_is_explained(self):
+        from services.textbooks import _model_error_reason
+        self.assertIn("баланс", _model_error_reason(RuntimeError("Your credit balance is too low to access the Anthropic API")))
+
     def test_failed_page_is_marked_and_retried_next_time(self):
         store = MemoryStore(book())
         run(ingest_textbook(1, self.deps(store, caller=Caller(ocr_fails={0}))))
