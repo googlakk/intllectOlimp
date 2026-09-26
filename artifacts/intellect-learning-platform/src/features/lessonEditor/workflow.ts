@@ -44,7 +44,7 @@ export function useLessonEditorWorkflow(topicId: number, lesson: GeneratedLesson
     );
   };
 
-  const togglePublication = (warningsAcknowledged: boolean) => {
+  const togglePublication = (warningsAcknowledged: boolean, errorsOverridden = false) => {
     if (!lesson || !user) return;
 
     if (lesson.status === 'published' && !lesson.has_unpublished_changes) {
@@ -57,6 +57,7 @@ export function useLessonEditorWorkflow(topicId: number, lesson: GeneratedLesson
         lesson_id: lesson.id,
         teacher_id: user.id,
         acknowledge_warnings: warningsAcknowledged,
+        override_errors: errorsOverridden,
       },
       { onSuccess: invalidateLessonQueries },
     );

@@ -2,7 +2,7 @@
  * «График по формуле»: функция с параметрами (y = kx + b, y = a·x², y = k/x, y = √x),
  * ползунки, прогноз «что будет с графиком» до движения ползунка и график-цель пунктиром.
  */
-import { evaluateMath, parseExpression, variables, type MathNode } from './mathExpression';
+import { evaluateMath, extractTask, parseExpression, variables, type MathNode } from './mathExpression';
 
 export type ExplorerParam = { name: string; label: string; min: number; max: number; step: number; initial: number };
 export type ExplorerPrediction = { question: string; options: string[]; correctAnswer: string; explanation: string };
@@ -28,7 +28,7 @@ function range(value: unknown, fallback: [number, number]): [number, number] {
 
 /** Данные блока от модели. null — формула не читается или в ней неизвестные буквы. */
 export function normalizeExplorer(content: Record<string, unknown>): Explorer | null {
-  const formulaText = String(content.formula ?? '').replace(/^\s*y\s*=\s*/i, '').trim();
+  const formulaText = extractTask(String(content.formula ?? '')).replace(/^\s*y\s*=\s*/i, '').trim();
   const formula = parseExpression(formulaText);
   if (!formula) return null;
   const params = (Array.isArray(content.params) ? content.params : [])

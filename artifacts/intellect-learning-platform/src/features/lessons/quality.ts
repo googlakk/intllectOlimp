@@ -50,6 +50,8 @@ export type LessonQualityState = {
   hasObjectiveContract: boolean;
   coverage: ObjectiveCoverage[];
   blockingIssues: string[];
+  /** Недочёты не ломают проверку ответов: можно опубликовать, отметив «ознакомился». */
+  canOverride: boolean;
   warningMessages: string[];
   canPublish: boolean;
 };
@@ -128,6 +130,7 @@ export function buildBlockingIssues(
 export function getLessonQualityState(
   lesson: GeneratedLesson | null | undefined,
   warningsAcknowledged: boolean,
+  errorsOverridden = false,
 ): LessonQualityState {
   const blocks = lesson?.blocks || [];
   const metadata = lesson?.lesson_metadata;
@@ -137,7 +140,9 @@ export function getLessonQualityState(
   const coverage = buildCoverage(objectives, blocks, qualityReport);
   const blockingIssues = buildBlockingIssues(qualityReport, hasObjectiveContract, blocks.length);
   const warningMessages = groupedMessages(qualityReport?.warnings || []);
-  const canPublish = blockingIssues.length === 0 && (warningMessages.length === 0 || warningsAcknowledged);
+  const canOverride = blockingIssues.length > 0 && hasObjectiveContract && qualityReport?.overridable === true;
+  const canPublish = (blockingIssues.length === 0 || (canOverride && errorsOverridden))
+    && (warningMessages.length === 0 || warningsAcknowledged);
 
   return {
     objectives,
@@ -145,6 +150,7 @@ export function getLessonQualityState(
     hasObjectiveContract,
     coverage,
     blockingIssues,
+    canOverride,
     warningMessages,
     canPublish,
   };

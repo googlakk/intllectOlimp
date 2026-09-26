@@ -15,9 +15,33 @@ type Token = { type: 'num'; value: number; text: string } | { type: 'var'; name:
 
 const SUPERSCRIPT_POWERS: Record<string, string> = { '²': '^2', '³': '^3' };
 
+const HOMOGLYPHS: Record<string, string> = {
+  х: 'x', у: 'y', а: 'a', о: 'o', е: 'e', с: 'c', к: 'k', р: 'p', Х: 'X', У: 'Y', А: 'A', О: 'O', Е: 'E', С: 'C', К: 'K', Р: 'P',
+};
+
+/** Одиночная кириллическая «х» (как латинская x) — латинская: и в задании, и в ответе ученика. */
+export function latinLetters(text: string): string {
+  return text.replace(/(?<![а-яё])[хуаоескр](?![а-яё])/gi, (char) => HOMOGLYPHS[char] ?? char);
+}
+
+/**
+ * Формула из текста ЗАДАНИЯ (не ответа): «Упростите: √12 + √27.» → «√12 + √27»; «Решите $2x = 4$» → «2x = 4».
+ * В ответах часть до двоеточия несёт смысл («Следствие: …») — там не применяем.
+ */
+export function extractTask(source: string): string {
+  let text = source.trim();
+  const dollars = /\$([^$]+)\$/.exec(text);
+  if (dollars) text = dollars[1];
+  else {
+    const prefix = /^[^:]*[а-яё]{3,}[^:]*:\s*(.+)$/i.exec(text);
+    if (prefix) text = prefix[1];
+  }
+  return latinLetters(text.trim().replace(/\.$/, ''));
+}
+
 /** LaTeX и «красивые» знаки → простая запись. */
 function preprocess(source: string): string {
-  let text = source.trim().replace(/^\$+|\$+$/g, '');
+  let text = latinLetters(source.trim()).replace(/^\$+|\$+$/g, '');
   // \frac{a}{b} → ((a)/(b)), \sqrt{a} → √(a); вложенные — повторяем, пока меняется.
   for (let guard = 0; guard < 10; guard += 1) {
     const next = text

@@ -4,7 +4,7 @@
  * отличается от исходной постоянным множителем (перенос слагаемых, деление на число). Деление на x
  * или возведение в квадрат меняет множество корней — такой шаг не засчитывается, и это правильно.
  */
-import { evaluateMath, parseExpression, sameForm, sameMath, variables, type MathNode } from './mathExpression';
+import { evaluateMath, extractTask, latinLetters, parseExpression, sameForm, sameMath, variables, type MathNode } from './mathExpression';
 
 export type StepSolverKind = 'expression' | 'equation';
 export type SolverStep = { hint: string; expected: string };
@@ -20,7 +20,7 @@ type Equation = { difference: MathNode; names: string[] };
 const SAMPLES = [1.7, 2.3, 3.1, 0.6, 4.4, 1.2, 2.9, 5.3];
 
 export function parseEquation(source: string): Equation | null {
-  const sides = source.split('=');
+  const sides = latinLetters(source).split('=');
   if (sides.length !== 2) return null;
   const left = parseExpression(sides[0]);
   const right = parseExpression(sides[1]);
@@ -110,7 +110,7 @@ function proportional(first: Equation, second: Equation): boolean {
 
 /** Корни из записи «x = 2», «x = 1 или x = 3», «x₁ = 1; x₂ = 3». null — это не ответ-корни. */
 export function parseRoots(source: string): number[] | null {
-  const parts = source.split(/\s*(?:или|;|,(?=\s*[a-z]))\s*/i).filter(Boolean);
+  const parts = latinLetters(source).split(/\s*(?:или|;|,(?=\s*[a-z]))\s*/i).filter(Boolean);
   const roots: number[] = [];
   for (const part of parts) {
     const match = /^\s*[a-z](?:_?\d|[₁₂])?\s*=\s*(.+)$/i.exec(part);
@@ -147,7 +147,8 @@ export type SolverSpec = {
 };
 
 /** Проверить очередную строку решения ученика. */
-export function checkStep(line: string, spec: SolverSpec): StepVerdict {
+export function checkStep(line: string, rawSpec: SolverSpec): StepVerdict {
+  const spec = { ...rawSpec, start: extractTask(rawSpec.start) };
   const text = line.trim();
   if (!text) return { status: 'unreadable' };
   if (spec.kind === 'equation') {
@@ -200,7 +201,7 @@ function mistakeOrWrong(text: string, spec: SolverSpec): StepVerdict {
 export function normalizeSolver(content: {
   kind?: unknown; start?: unknown; steps?: unknown; final_answer?: unknown; answer_mode?: unknown; mistakes?: unknown;
 }): (SolverSpec & { steps: SolverStep[] }) | null {
-  const start = typeof content.start === 'string' ? content.start.trim() : '';
+  const start = typeof content.start === 'string' ? extractTask(content.start) : '';
   const kind: StepSolverKind = content.kind === 'equation' || (content.kind !== 'expression' && start.includes('=')) ? 'equation' : 'expression';
   const steps = (Array.isArray(content.steps) ? content.steps : [])
     .filter((step): step is Record<string, unknown> => Boolean(step) && typeof step === 'object')

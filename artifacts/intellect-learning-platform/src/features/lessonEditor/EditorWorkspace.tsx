@@ -34,8 +34,9 @@ export default function EditorWorkspace({ topicId }: { topicId: number }) {
   const [unsaved, setUnsaved] = useState(false);
   const [step, setStep] = useState(() => new URLSearchParams(window.location.search).has('preview') ? 3 : 2);
   const [acknowledged, setAcknowledged] = useState(false);
-  useEffect(() => setAcknowledged(false), [lesson?.active_version_id]);
-  const quality = getLessonQualityState(lesson, acknowledged);
+  const [overridden, setOverridden] = useState(false);
+  useEffect(() => { setAcknowledged(false); setOverridden(false); }, [lesson?.active_version_id]);
+  const quality = getLessonQualityState(lesson, acknowledged, overridden);
   const blocks = lesson?.blocks ?? [];
   const published = lesson?.status === 'published';
   const canUpdate = published && lesson?.has_unpublished_changes;
@@ -67,9 +68,9 @@ export default function EditorWorkspace({ topicId }: { topicId: number }) {
       {step === 3 && <section className="space-y-5">
         <div className="rounded-xl border bg-card p-5"><h2 className="text-xl font-bold">Готовность к публикации</h2>
           {!blocks.length && <p className="mt-2">Сначала добавьте материалы урока.</p>}
-          {quality.blockingIssues.length > 0 && <div data-testid="status-quality-blocked" role="alert" className="mt-3 text-sm text-destructive"><p className="font-bold">Исправьте перед публикацией:</p><ul className="ml-5 list-disc">{quality.blockingIssues.map((item, index) => <li key={index}>{item}</li>)}</ul><button onClick={() => setStep(2)} className="mt-2 underline font-semibold">Перейти к материалам</button></div>}
+          {quality.blockingIssues.length > 0 && <div data-testid="status-quality-blocked" role="alert" className="mt-3 text-sm text-destructive"><p className="font-bold">Исправьте перед публикацией:</p><ul className="ml-5 list-disc">{quality.blockingIssues.map((item, index) => <li key={index}>{item}</li>)}</ul><button onClick={() => setStep(2)} className="mt-2 underline font-semibold">Перейти к материалам</button>{quality.canOverride && <label className="mt-3 flex items-start gap-2 font-medium text-foreground"><input type="checkbox" className="mt-0.5" checked={overridden} onChange={event => setOverridden(event.target.checked)} />Я ознакомился с недочётами и всё равно публикую урок</label>}</div>}
           {quality.warningMessages.length > 0 && <div className="mt-3 text-sm"><p className="font-bold">Рекомендации для проверки</p><ul className="ml-5 list-disc">{quality.warningMessages.map((item, index) => <li key={index}>{item}</li>)}</ul><label className="mt-3 flex items-center gap-2"><input type="checkbox" checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} />Я проверил рекомендации</label></div>}
-          <div className="mt-5 flex flex-wrap gap-3"><button type="button" disabled={busy || !blocks.length || ((!published || canUpdate) && !quality.canPublish)} onClick={() => workflow.togglePublication(acknowledged)} className="rounded-lg bg-primary px-5 py-3 font-bold text-primary-foreground disabled:opacity-50">{busy ? 'Сохраняется…' : canUpdate ? 'Обновить публикацию' : published ? 'Снять с публикации' : 'Опубликовать'}</button><button onClick={() => setStep(2)} className="rounded-lg border px-5 py-3 font-semibold">Продолжить редактирование</button></div>
+          <div className="mt-5 flex flex-wrap gap-3"><button type="button" disabled={busy || !blocks.length || ((!published || canUpdate) && !quality.canPublish)} onClick={() => workflow.togglePublication(acknowledged, overridden)} className="rounded-lg bg-primary px-5 py-3 font-bold text-primary-foreground disabled:opacity-50">{busy ? 'Сохраняется…' : canUpdate ? 'Обновить публикацию' : published ? 'Снять с публикации' : 'Опубликовать'}</button><button onClick={() => setStep(2)} className="rounded-lg border px-5 py-3 font-semibold">Продолжить редактирование</button></div>
           {quality.coverage.length > 0 && <details className="mt-4"><summary className="cursor-pointer text-sm font-semibold">Проверка целей обучения</summary><ul className="mt-3 space-y-2">{quality.coverage.map(item => <li key={item.objective.id} className="text-sm">{item.objective.text}: {item.explanation ? '✓' : '—'} объяснение · {item.practice ? '✓' : '—'} практика · {item.assessment ? '✓' : '—'} проверка</li>)}</ul></details>}
         </div>
         <div className="rounded-xl border bg-card p-4 md:p-6"><h2 className="mb-5 text-xl font-bold">Урок глазами ученика</h2><p className="mb-4 text-sm text-muted-foreground">Предпросмотр черновика. Ваши ответы здесь не сохраняются в результатах учеников.</p><BlockRenderer key={lesson?.active_version_id ?? 'preview'} blocks={blocks} /></div>

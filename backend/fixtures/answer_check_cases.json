@@ -611,6 +611,41 @@
       },
       "expected": "correct",
       "note": "по смыслу — для уравнений и вычислений"
+    },
+    {
+      "answer": "Следствие: 1916",
+      "spec": {
+        "correct": "Причина: 1916",
+        "mode": "equivalent"
+      },
+      "expected": "incorrect",
+      "note": "текст до двоеточия — смысл ответа"
+    },
+    {
+      "answer": "Неверно: x+1",
+      "spec": {
+        "correct": "Верно: x+1",
+        "mode": "equivalent"
+      },
+      "expected": "incorrect",
+      "note": "верно/неверно с формулой"
+    },
+    {
+      "answer": "Вариант А: 2x",
+      "spec": {
+        "correct": "Вариант Б: 2x",
+        "mode": "equivalent"
+      },
+      "expected": "incorrect",
+      "note": "подписи вариантов"
+    },
+    {
+      "answer": "х + 1",
+      "spec": {
+        "correct": "x+1"
+      },
+      "expected": "correct",
+      "note": "кириллическая х в ответе"
     }
   ]
 }

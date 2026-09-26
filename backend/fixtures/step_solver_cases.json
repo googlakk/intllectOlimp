@@ -164,6 +164,39 @@
       "status": "wrong",
       "done": false,
       "note": "корень суммы"
+    },
+    {
+      "kind": "expression",
+      "start": "Упростите выражение: √12 + √27.",
+      "final_answer": [
+        "5√3"
+      ],
+      "line": "5√3",
+      "status": "ok",
+      "done": true,
+      "note": "задание со словами и точкой"
+    },
+    {
+      "kind": "equation",
+      "start": "Решите уравнение $3(х - 2) = х + 4$",
+      "final_answer": [
+        "х = 5"
+      ],
+      "line": "3x - 6 = x + 4",
+      "status": "ok",
+      "done": false,
+      "note": "LaTeX и кириллическая х"
+    },
+    {
+      "kind": "equation",
+      "start": "Решите уравнение: 2х = 4",
+      "final_answer": [
+        "x = 2"
+      ],
+      "line": "х = 2",
+      "status": "ok",
+      "done": true,
+      "note": "кириллическая х у ученика"
     }
   ]
 }

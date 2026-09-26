@@ -44,10 +44,10 @@ export const updateLessonBlocks = (lessonId: number, blocks: Block[]) =>
     body: JSON.stringify({ blocks }),
   });
 
-export const publishLesson = (lessonId: number, teacherId: number, acknowledgeWarnings = false) =>
+export const publishLesson = (lessonId: number, teacherId: number, acknowledgeWarnings = false, overrideErrors = false) =>
   request<GeneratedLesson>(`/lessons/${lessonId}/publish`, {
     method: 'PUT',
-    body: JSON.stringify({ teacher_id: teacherId, acknowledge_warnings: acknowledgeWarnings }),
+    body: JSON.stringify({ teacher_id: teacherId, acknowledge_warnings: acknowledgeWarnings, override_errors: overrideErrors }),
   });
 
 export const unpublishLesson = (lessonId: number) =>
@@ -104,8 +104,8 @@ export const useUpdateLessonBlocks = () =>
 
 export const usePublishLesson = () =>
   useMutation({
-    mutationFn: (data: { lesson_id: number; teacher_id: number; acknowledge_warnings?: boolean }) =>
-      publishLesson(data.lesson_id, data.teacher_id, data.acknowledge_warnings),
+    mutationFn: (data: { lesson_id: number; teacher_id: number; acknowledge_warnings?: boolean; override_errors?: boolean }) =>
+      publishLesson(data.lesson_id, data.teacher_id, data.acknowledge_warnings, data.override_errors),
   });
 
 export const useUnpublishLesson = () =>

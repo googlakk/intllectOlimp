@@ -106,3 +106,23 @@ describe('lesson quality helpers', () => {
     expect(state.blockingIssues).toEqual(['Старый урок нужно проверить или перегенерировать перед публикацией']);
   });
 });
+
+describe('publishing over soft errors', () => {
+  const lesson = (report: Record<string, unknown>) => ({
+    blocks: [{ component: 'ShortExplanation', content: {} }],
+    lesson_metadata: { objectives: [{ id: 'obj-1', text: 'Цель' }], quality_report: { errors: [{ code: 'step_solver_invalid', message: 'Решаю по шагам: …' }], gaps: [], warnings: [], ...report } },
+  }) as unknown as Parameters<typeof getLessonQualityState>[0];
+
+  it('allows publishing after the teacher confirms soft errors', () => {
+    const soft = lesson({ publishable: false, overridable: true });
+    expect(getLessonQualityState(soft, false).canOverride).toBe(true);
+    expect(getLessonQualityState(soft, false).canPublish).toBe(false);
+    expect(getLessonQualityState(soft, false, true).canPublish).toBe(true);
+  });
+
+  it('keeps broken answers blocking', () => {
+    const hard = lesson({ publishable: false, overridable: false });
+    expect(getLessonQualityState(hard, false, true).canOverride).toBe(false);
+    expect(getLessonQualityState(hard, false, true).canPublish).toBe(false);
+  });
+});

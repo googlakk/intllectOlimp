@@ -58,6 +58,8 @@ export type ObjectiveMastery = {
 };
 export type QualityReport = {
   publishable?: boolean;
+  /** Ошибки не ломают проверку ответов: учитель может опубликовать под свою ответственность. */
+  overridable?: boolean;
   objectives?: Record<string, {
     objective?: string;
     diagnostic?: number[];

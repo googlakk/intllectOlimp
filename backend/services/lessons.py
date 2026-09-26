@@ -365,9 +365,11 @@ async def carry_forward_anchored_assets(
 
 def lesson_needs_quality_refresh(lesson: GeneratedLesson) -> bool:
     metadata = lesson.lesson_metadata or {}
-    return not isinstance(metadata.get("objectives"), list) or not isinstance(
-        metadata.get("quality_report"), dict
-    )
+    report = metadata.get("quality_report")
+    if not isinstance(metadata.get("objectives"), list) or not isinstance(report, dict):
+        return True
+    # Отчёт до появления «опубликовать под ответственность учителя»: пересчитать, чтобы появилась галочка.
+    return report.get("publishable") is False and "overridable" not in report
 
 
 def lesson_topic_contract(lesson: GeneratedLesson, topic: Topic | None = None) -> dict[str, Any] | None:
@@ -992,6 +994,7 @@ async def publish_lesson(
     teacher_id: int,
     acknowledge_warnings: bool,
     db: AsyncSession,
+    override_errors: bool = False,
 ) -> GeneratedLesson:
     if await db.get(Teacher, teacher_id) is None:
         raise LessonServiceError(status_code=404, detail="Преподаватель не найден")
@@ -1008,7 +1011,9 @@ async def publish_lesson(
         topic.learning_objectives,
         topic_contract=lesson_topic_contract(lesson, topic),
     )
-    if not quality["quality_report"]["publishable"]:
+    report = quality["quality_report"]
+    overridden = not report["publishable"] and override_errors and report.get("overridable")
+    if not report["publishable"] and not overridden:
         raise LessonServiceError(
             status_code=422,
             detail={
@@ -1037,6 +1042,10 @@ async def publish_lesson(
         "acknowledged_warning_codes": [
             item.get("code") for item in warnings if isinstance(item, dict)
         ],
+        # Недочёты, с которыми учитель ознакомился и всё равно опубликовал.
+        "overridden_error_codes": [
+            item.get("code") for item in report["errors"] if isinstance(item, dict)
+        ] + (["objective_gaps"] if report.get("gaps") else []) if overridden else [],
     }
     lesson.blocks = quality["normalized_blocks"]
     lesson.lesson_metadata = metadata

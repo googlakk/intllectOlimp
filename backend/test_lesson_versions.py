@@ -213,3 +213,26 @@ async def test_delete_protects_published_and_historical_lessons():
         await delete_lesson_record(2, db)
     assert history.value.status_code == 409
     assert db.deleted == []
+
+
+@async_test
+async def test_teacher_can_publish_over_soft_errors_but_not_broken_blocks():
+    db = VersionSession()
+    blocks = deepcopy(db.lesson.blocks)
+    objective_ids = next(b["content"]["objective_ids"] for b in blocks if b["content"].get("objective_ids"))
+    # Мягкий недочёт: у цели нет итоговой проверки.
+    await update_lesson_blocks(2, [b for b in blocks if b["component"] != "MasteryCheck"], db)
+    report = quality_report(db.lesson.blocks, db.topic.learning_objectives)["quality_report"]
+    assert not report["publishable"] and report["overridable"]
+    with pytest.raises(LessonServiceError):
+        await publish_lesson(2, 3, True, db)
+    lesson = await publish_lesson(2, 3, True, db, override_errors=True)
+    assert lesson.lesson_metadata["quality_review"]["overridden_error_codes"]
+
+    # Сломанный интерактив засчитал бы ученику ошибку — галочкой не подтвердить.
+    broken_solver = {"component": "StepSolver", "content": {"objective_ids": objective_ids, "evidence_stage": "practice",
+                                                             "start": "Упростите выражение", "final_answer": ["1"]}}
+    await update_lesson_blocks(2, blocks[:-1] + [broken_solver] + blocks[-1:], db)
+    assert not quality_report(db.lesson.blocks, db.topic.learning_objectives)["quality_report"]["overridable"]
+    with pytest.raises(LessonServiceError):
+        await publish_lesson(2, 3, True, db, override_errors=True)

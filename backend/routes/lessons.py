@@ -45,6 +45,8 @@ class LessonDocumentInput(BaseModel):
 class PublishInput(BaseModel):
     teacher_id: int
     acknowledge_warnings: bool = False
+    # Учитель ознакомился с недочётами и публикует под свою ответственность.
+    override_errors: bool = False
 
 
 class AvatarProfileSelectionInput(BaseModel):
@@ -187,6 +189,7 @@ async def publish(
             teacher_id=teacher_id,
             acknowledge_warnings=payload.acknowledge_warnings,
             db=db,
+            override_errors=payload.override_errors,
         )
     except LessonServiceError as exc:
         raise_http_error(exc)

@@ -13,8 +13,30 @@ _SUPERSCRIPT_POWERS = {"²": "^2", "³": "^3"}
 _SAMPLES = (1.7, 2.3, 3.1, 0.6, 4.4, 1.2, 2.9)
 
 
+_HOMOGLYPHS = str.maketrans("хуаоескрХУАОЕСКР", "xyaoeckpXYAOECKP")
+
+
+def _latin_letters(text: str) -> str:
+    """Одиночная кириллическая «х» (как латинская x) — латинская: и в задании, и в ответе ученика."""
+    return re.sub(r"(?<![а-яёА-ЯЁ])[хуаоескрХУАОЕСКР](?![а-яёА-ЯЁ])", lambda match: match.group(0).translate(_HOMOGLYPHS), text)
+
+
+def extract_task(source: str) -> str:
+    """Формула из текста ЗАДАНИЯ (не ответа): «Упростите: √12 + √27.» → «√12 + √27»;
+    «Решите $2x = 4$» → «2x = 4». В ответах часть до двоеточия несёт смысл — там не применяем."""
+    text = source.strip()
+    dollars = re.search(r"\$([^$]+)\$", text)
+    if dollars:
+        text = dollars.group(1)
+    else:
+        prefix = re.match(r"^[^:]*[а-яёА-ЯЁ]{3,}[^:]*:\s*(.+)$", text)
+        if prefix:
+            text = prefix.group(1)
+    return _latin_letters(text.strip().rstrip("."))
+
+
 def _preprocess(source: str) -> str:
-    text = source.strip().strip("$")
+    text = _latin_letters(source).strip().strip("$")
     for _ in range(10):
         following = re.sub(r"\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}", r"((\1)/(\2))", text)
         following = re.sub(r"\\sqrt\s*\{([^{}]*)\}", r"√(\1)", following)
@@ -259,7 +281,7 @@ def parse_expression(source: Any) -> Any:
 
 
 def parse_equation(source: str) -> Any:
-    sides = source.split("=")
+    sides = _latin_letters(source).split("=")
     if len(sides) != 2:
         return None
     left, right = parse_expression(sides[0]), parse_expression(sides[1])
@@ -360,7 +382,7 @@ def _proportional(first: Any, second: Any) -> bool:
 
 def parse_roots(source: str) -> list[float] | None:
     """«x = 2», «x = 1 или x = 3», «x₁ = 1; x₂ = 3» → корни; иначе None."""
-    parts = [part for part in re.split(r"\s*(?:или|;|,(?=\s*[a-zA-Z]))\s*", source, flags=re.IGNORECASE) if part]
+    parts = [part for part in re.split(r"\s*(?:или|;|,(?=\s*[a-zA-Z]))\s*", _latin_letters(source), flags=re.IGNORECASE) if part]
     roots: list[float] = []
     for part in parts:
         match = re.fullmatch(r"\s*[a-zA-Z](?:_?\d|[₁₂])?\s*=\s*(.+)", part)
@@ -393,6 +415,7 @@ def _special_answer(answers: list[str]) -> str | None:
 def check_solver_step(line: str, *, kind: str, start: str, final_answer: list[str], answer_mode: str = "form") -> tuple[str, bool]:
     """('ok'|'wrong'|'unreadable', решено ли). Ошибки из mistakes здесь не различаем — только верность строки."""
     text = line.strip()
+    start = extract_task(start)
     if not text:
         return "unreadable", False
     if kind == "equation":
@@ -433,7 +456,7 @@ def _roots_complete(start: str, answer: str) -> bool:
 
 def step_solver_problem(content: dict[str, Any]) -> str | None:
     """Что не так в данных блока StepSolver (None — всё верно)."""
-    start = str(content.get("start") or "").strip()
+    start = extract_task(str(content.get("start") or ""))
     raw_answer = content.get("final_answer")
     final_answer = [str(item).strip() for item in (raw_answer if isinstance(raw_answer, list) else [raw_answer]) if isinstance(item, str) and item.strip()]
     if not start or not final_answer:
@@ -471,7 +494,7 @@ def solver_line_outcome(line: str, content: dict[str, Any]) -> str:
 
 def function_explorer_problem(content: dict[str, Any]) -> str | None:
     """Что не так в данных блока FunctionExplorer (как normalizeExplorer в functionExplorer.ts)."""
-    formula = parse_expression(re.sub(r"^\s*y\s*=\s*", "", str(content.get("formula") or ""), flags=re.IGNORECASE))
+    formula = parse_expression(re.sub(r"^\s*y\s*=\s*", "", extract_task(str(content.get("formula") or "")), flags=re.IGNORECASE))
     if formula is None:
         return "формула не читается"
     params = [param for param in content.get("params") or [] if isinstance(param, dict)]
