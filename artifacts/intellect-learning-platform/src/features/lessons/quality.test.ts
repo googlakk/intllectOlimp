@@ -120,7 +120,7 @@ describe('publishing over soft errors', () => {
     expect(getLessonQualityState(soft, false, true).canPublish).toBe(true);
   });
 
-  it('lets the teacher confirm any errors, including old reports without the flag', () => {
+  it('lets the teacher confirm all errors, including old reports without the flag', () => {
     const old = lesson({ publishable: false });
     expect(getLessonQualityState(old, false, true).canPublish).toBe(true);
   });
