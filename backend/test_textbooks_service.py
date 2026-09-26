@@ -222,6 +222,26 @@ class IngestTests(unittest.TestCase):
         store = MemoryStore(book())
         self.assertEqual(run(ingest_textbook(1, self.deps(store, storage=Storage(size=None)))), "failed")
 
+    def test_sections_are_extracted_concurrently_and_failure_is_isolated(self):
+        state = {"now": 0, "peak": 0}
+
+        class SlowCaller(Caller):
+            async def __call__(self, task, **kwargs):
+                if kwargs["tool"]["name"] != "textbook_items":
+                    return await super().__call__(task, **kwargs)
+                state["now"] += 1
+                state["peak"] = max(state["peak"], state["now"])
+                await asyncio.sleep(0.01)
+                state["now"] -= 1
+                if "§ 1" in kwargs["user"]:
+                    raise RuntimeError("model down")
+                return await super().__call__(task, **kwargs)
+
+        store = MemoryStore(book())
+        self.assertEqual(run(ingest_textbook(1, self.deps(store, caller=SlowCaller()))), "needs_review")
+        self.assertEqual(state["peak"], 2)  # оба параграфа — одновременно
+        self.assertEqual([s.items_status for s in store.section_rows], ["failed", "done"])
+
     def test_section_text_has_printed_page_marks(self):
         self.assertEqual(section_text({4: "A", 5: " ", 6: "B"}, 4, 6, 2), "[стр. 2]\nA\n\n[стр. 4]\nB")
 

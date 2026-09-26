@@ -37,7 +37,9 @@ logger = logging.getLogger(__name__)
 MAX_FILE_BYTES = 150 * 1024 * 1024
 # Обработка, которая дольше этого не обновляла книгу, считается остановившейся (перезапуск сервера).
 STALE_AFTER = timedelta(minutes=10)
-OCR_CONCURRENCY = 4
+OCR_CONCURRENCY = 8
+# Параграфов разбирается одновременно (у каждого — долгий ответ модели).
+ITEMS_CONCURRENCY = 6
 TOC_MAX_TOKENS = 8000
 SECTION_TEXT_LIMIT = 120_000
 RUNNING_STATUSES = ("extracting", "recognizing", "structuring")
@@ -374,23 +376,33 @@ async def _extract_items(textbook_id: int, sections: list[TextbookSection], page
     by_index = {page.index: page.text for page in pages}
     failed = 0
     todo = [section for section in sections if section.items_status != "done"]
-    for done, section in enumerate(todo, start=1):
+
+    async def extract(section: TextbookSection) -> list[dict[str, Any]] | None:
         text = section_text(by_index, section.pdf_from, section.pdf_to, offset)
         try:
             result = await deps.tool_caller(
                 TASK_TEXTBOOK_STRUCTURE, system=ITEMS_PROMPT,
                 user=f"Параграф: {section.number} {section.title}\n\n{text}", tool=ITEMS_TOOL, max_tokens=ITEMS_MAX_TOKENS,
             )
-            items = parse_items(getattr(result, "data", None) or {}) if getattr(result, "ok", False) else None
+            return parse_items(getattr(result, "data", None) or {}) if getattr(result, "ok", False) else None
         except Exception as exc:
             logger.warning("Textbook %s section %s items failed: %s", textbook_id, section.id, exc.__class__.__name__)
-            items = None
-        if items is None:
-            failed += 1
-            await deps.store.set_section_status(section.id, "failed")
-        else:
-            await deps.store.replace_items(textbook_id, section.id, items)
-            await deps.store.set_section_status(section.id, "done")
+            return None
+
+    # Параграфы независимы: модель разбирает несколько сразу; запись в базу — по очереди после пачки
+    # (одна сессия базы не допускает параллельных операций).
+    done = 0
+    for start in range(0, len(todo), ITEMS_CONCURRENCY):
+        chunk = todo[start:start + ITEMS_CONCURRENCY]
+        results = await asyncio.gather(*(extract(section) for section in chunk))
+        for section, items in zip(chunk, results):
+            if items is None:
+                failed += 1
+                await deps.store.set_section_status(section.id, "failed")
+            else:
+                await deps.store.replace_items(textbook_id, section.id, items)
+                await deps.store.set_section_status(section.id, "done")
+        done += len(chunk)
         await deps.store.update(textbook_id, progress={
             "stage": "items", "sections": len(sections), "items_left": len(todo) - done,
             **({"calibration": round(share, 2)} if share is not None else {}),
