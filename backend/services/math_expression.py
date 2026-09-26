@@ -35,8 +35,16 @@ def extract_task(source: str) -> str:
     return _latin_letters(text.strip().rstrip("."))
 
 
+_UNICODE_FRACTIONS = {"½": "(1/2)", "⅓": "(1/3)", "⅔": "(2/3)", "¼": "(1/4)", "¾": "(3/4)", "⅕": "(1/5)", "⅙": "(1/6)", "⅛": "(1/8)"}
+
+
 def _preprocess(source: str) -> str:
     text = _latin_letters(source).strip().strip("$")
+    # Смешанные числа: 2\frac{1}{2} и «2 1/2» — это 2 + 1/2 (только числа, иначе 2·x/3 — умножение).
+    text = re.sub(r"(\d+)\s*\\d?frac\s*\{\s*(\d+)\s*\}\s*\{\s*(\d+)\s*\}", r"(\1+\2/\3)", text)
+    text = re.sub(r"(?<![\d.,/])(\d+)\s+(\d+)\s*/\s*(\d+)(?![\d.,])", r"(\1+\2/\3)", text)
+    text = re.sub(r"[½⅓⅔¼¾⅕⅙⅛]", lambda match: _UNICODE_FRACTIONS[match.group(0)], text)
+    text = re.sub(r"\\div", "/", text)
     for _ in range(10):
         following = re.sub(r"\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}", r"((\1)/(\2))", text)
         following = re.sub(r"\\sqrt\s*\{([^{}]*)\}", r"√(\1)", following)
@@ -51,7 +59,9 @@ def _preprocess(source: str) -> str:
     text = re.sub(r"[−–—]", "-", text)
     text = re.sub(r"[×·⋅∙]", "*", text)
     text = re.sub(r"[:÷]", "/", text)
-    return re.sub(r"\s+", "", text)
+    text = re.sub(r"\s+", "", text)
+    # Модуль |a − b| → ‖(a − b) (одноуровневый).
+    return re.sub(r"\|([^|]+)\|", r"‖(\1)", text)
 
 
 def _tokenize(text: str) -> list[tuple[str, Any]] | None:
@@ -66,7 +76,7 @@ def _tokenize(text: str) -> list[tuple[str, Any]] | None:
         char = text[index]
         if re.fullmatch(r"[a-zA-Z]", char):
             tokens.append(("var", char))
-        elif char in "+-*/^()√":
+        elif char in "+-*/^()√‖":
             tokens.append(("op", char))
         else:
             return None
@@ -112,7 +122,7 @@ class _Parser:
                 left = ("bin", op, left, right)
                 continue
             token = self.peek()
-            if not token or (token[0] == "op" and token[1] not in "(√"):
+            if not token or (token[0] == "op" and token[1] not in "(√‖"):
                 break
             right = self.power()
             if right is None:
@@ -159,6 +169,9 @@ class _Parser:
         if token[1] == "√":
             arg = self.power()
             return None if arg is None else ("sqrt", arg)
+        if token[1] == "‖":
+            arg = self.atom()
+            return None if arg is None else ("abs", arg)
         return None
 
 
@@ -183,6 +196,8 @@ def _evaluate(node: Any, scope: dict[str, float]) -> float:
         return scope.get(node[1], math.nan)
     if kind == "neg":
         return -_evaluate(node[1], scope)
+    if kind == "abs":
+        return abs(_evaluate(node[1], scope))
     if kind == "sqrt":
         value = _evaluate(node[1], scope)
         return math.nan if value < 0 or math.isnan(value) else math.sqrt(value)
@@ -262,7 +277,7 @@ def _ordered(node: Any) -> list[str]:
     kind = node[0]
     if kind == "var":
         return [node[1]]
-    if kind in ("neg", "sqrt"):
+    if kind in ("neg", "sqrt", "abs"):
         return _ordered(node[1])
     if kind == "bin":
         return _ordered(node[2]) + _ordered(node[3])
@@ -464,7 +479,7 @@ def step_solver_problem(content: dict[str, Any]) -> str | None:
     kind = content.get("kind") if content.get("kind") in ("expression", "equation") else ("equation" if "=" in start else "expression")
     mode = "equivalent" if content.get("answer_mode") == "equivalent" else "form"
     if (parse_equation(start) if kind == "equation" else parse_expression(start)) is None:
-        return "задание не читается как выражение или уравнение"
+        return f"задание «{start[:60]}» не читается как выражение или уравнение"
     spec = {"kind": kind, "start": start, "final_answer": final_answer, "answer_mode": mode}
     if check_solver_step(final_answer[0], **spec) != ("ok", True):
         return "ответ не следует из задания"

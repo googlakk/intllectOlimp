@@ -9,6 +9,7 @@ export type MathNode =
   | { kind: 'var'; name: string }
   | { kind: 'neg'; arg: MathNode }
   | { kind: 'sqrt'; arg: MathNode }
+  | { kind: 'abs'; arg: MathNode }
   | { kind: 'bin'; op: '+' | '-' | '*' | '/' | '^'; left: MathNode; right: MathNode };
 
 type Token = { type: 'num'; value: number; text: string } | { type: 'var'; name: string } | { type: 'op'; value: string };
@@ -39,9 +40,17 @@ export function extractTask(source: string): string {
   return latinLetters(text.trim().replace(/\.$/, ''));
 }
 
+const UNICODE_FRACTIONS: Record<string, string> = { '½': '(1/2)', '⅓': '(1/3)', '⅔': '(2/3)', '¼': '(1/4)', '¾': '(3/4)', '⅕': '(1/5)', '⅙': '(1/6)', '⅛': '(1/8)' };
+
 /** LaTeX и «красивые» знаки → простая запись. */
 function preprocess(source: string): string {
   let text = latinLetters(source.trim()).replace(/^\$+|\$+$/g, '');
+  // Смешанные числа: 2\frac{1}{2} и «2 1/2» — это 2 + 1/2 (только числа, иначе 2·x/3 — умножение).
+  text = text
+    .replace(/(\d+)\s*\\d?frac\s*\{\s*(\d+)\s*\}\s*\{\s*(\d+)\s*\}/g, '($1+$2/$3)')
+    .replace(/(?<![\d.,/])(\d+)\s+(\d+)\s*\/\s*(\d+)(?![\d.,])/g, '($1+$2/$3)')
+    .replace(/[½⅓⅔¼¾⅕⅙⅛]/g, (char) => UNICODE_FRACTIONS[char])
+    .replace(/\\div/g, '/');
   // \frac{a}{b} → ((a)/(b)), \sqrt{a} → √(a); вложенные — повторяем, пока меняется.
   for (let guard = 0; guard < 10; guard += 1) {
     const next = text
@@ -59,7 +68,9 @@ function preprocess(source: string): string {
     .replace(/[−–—]/g, '-')
     .replace(/[×·⋅∙]/g, '*')
     .replace(/[:÷]/g, '/')
-    .replace(/\s+/g, '');
+    .replace(/\s+/g, '')
+    // Модуль |a − b| → ‖(a − b) (одноуровневый).
+    .replace(/\|([^|]+)\|/g, '‖($1)');
 }
 
 function tokenize(text: string): Token[] | null {
@@ -76,7 +87,7 @@ function tokenize(text: string): Token[] | null {
     const char = text[index];
     if (/[a-z]/i.test(char)) {
       tokens.push({ type: 'var', name: char });
-    } else if ('+-*/^()√'.includes(char)) {
+    } else if ('+-*/^()√‖'.includes(char)) {
       tokens.push({ type: 'op', value: char });
     } else {
       return null;
@@ -121,7 +132,7 @@ class Parser {
         continue;
       }
       const token = this.peek();
-      const implicit = token && (token.type !== 'op' || token.value === '(' || token.value === '√');
+      const implicit = token && (token.type !== 'op' || token.value === '(' || token.value === '√' || token.value === '‖');
       if (!implicit) break;
       const right = this.power();
       if (!right) return null;
@@ -166,6 +177,10 @@ class Parser {
       const arg = this.power();
       return arg && { kind: 'sqrt', arg };
     }
+    if (token.value === '‖') {
+      const arg = this.atom();
+      return arg && { kind: 'abs', arg };
+    }
     return null;
   }
 }
@@ -191,7 +206,7 @@ export function parseMath(source: unknown): MathNode | null {
 
 export function variables(node: MathNode, into = new Set<string>()): Set<string> {
   if (node.kind === 'var') into.add(node.name);
-  else if (node.kind === 'neg' || node.kind === 'sqrt') variables(node.arg, into);
+  else if (node.kind === 'neg' || node.kind === 'sqrt' || node.kind === 'abs') variables(node.arg, into);
   else if (node.kind === 'bin') { variables(node.left, into); variables(node.right, into); }
   return into;
 }
@@ -202,6 +217,7 @@ export function evaluateMath(node: MathNode, scope: Record<string, number>): num
     case 'var': return scope[node.name] ?? NaN;
     case 'neg': return -evaluateMath(node.arg, scope);
     case 'sqrt': { const value = evaluateMath(node.arg, scope); return value < 0 ? NaN : Math.sqrt(value); }
+    case 'abs': return Math.abs(evaluateMath(node.arg, scope));
     case 'bin': {
       const left = evaluateMath(node.left, scope);
       const right = evaluateMath(node.right, scope);
@@ -288,6 +304,7 @@ export function mathToLatex(node: MathNode): string {
     case 'var': return node.name;
     case 'neg': return `-${wrap(node.arg, mathToLatex(node.arg), '*', 'right')}`;
     case 'sqrt': return `\\sqrt{${mathToLatex(node.arg)}}`;
+    case 'abs': return `\\left|${mathToLatex(node.arg)}\\right|`;
     case 'bin': {
       // −3/x пишем как −3 над x со знаком перед дробью.
       if (node.op === '/' && node.left.kind === 'neg') return `-\\frac{${mathToLatex(node.left.arg)}}{${mathToLatex(node.right)}}`;

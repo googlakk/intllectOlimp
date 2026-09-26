@@ -104,6 +104,7 @@ export function substituteParams(node: MathNode, values: Record<string, number>)
     }
     case 'num': return node;
     case 'neg':
+    case 'abs':
     case 'sqrt': return { ...node, arg: substituteParams(node.arg, values) };
     case 'bin': return { ...node, left: substituteParams(node.left, values), right: substituteParams(node.right, values) };
   }

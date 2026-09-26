@@ -368,8 +368,10 @@ def lesson_needs_quality_refresh(lesson: GeneratedLesson) -> bool:
     report = metadata.get("quality_report")
     if not isinstance(metadata.get("objectives"), list) or not isinstance(report, dict):
         return True
-    # Отчёт до появления «опубликовать под ответственность учителя»: пересчитать, чтобы появилась галочка.
-    return report.get("publishable") is False and "overridable" not in report
+    # Неопубликуемый урок с отчётом по старым правилам: проверки могли стать точнее — пересчитать.
+    from objectives import QUALITY_CHECKS_VERSION
+
+    return report.get("publishable") is False and report.get("checks_version") != QUALITY_CHECKS_VERSION
 
 
 def lesson_topic_contract(lesson: GeneratedLesson, topic: Topic | None = None) -> dict[str, Any] | None:

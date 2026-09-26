@@ -730,6 +730,9 @@ def _cause_role(value: Any) -> str | None:
     return _CAUSE_ROLE_ALIASES.get(str(value or "").strip().lower().replace("ё", "е"))
 
 
+# Растёт, когда проверки становятся точнее: неопубликуемый урок со старым отчётом пересчитывается при открытии.
+QUALITY_CHECKS_VERSION = 2
+
 # Ошибки, при которых ученику засчитали бы неверный ответ или блок не откроется: их не подтвердить галочкой.
 HARD_ERROR_CODES = frozenset({
     "answer_not_in_options", "arithmetic_answer_mismatch", "empty_mastery_check", "invalid_content",
@@ -831,6 +834,7 @@ def quality_report(
     coverage["errors"] = coverage["errors"] + component_content_warnings(normalized_blocks)
     coverage["publishable"] = not coverage["errors"] and not coverage["gaps"] and bool(objectives)
     # Учитель может опубликовать под свою ответственность, если ошибки не ломают проверку ответов.
+    coverage["checks_version"] = QUALITY_CHECKS_VERSION
     coverage["overridable"] = bool(objectives) and not any(
         isinstance(error, dict) and error.get("code") in HARD_ERROR_CODES for error in coverage["errors"]
     )

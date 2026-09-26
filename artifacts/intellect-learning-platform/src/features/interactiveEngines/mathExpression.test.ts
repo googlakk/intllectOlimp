@@ -9,8 +9,18 @@ describe('sameMath', () => {
   ])('%s = %s', (left, right) => expect(sameMath(left, right)).toBe(true));
 
   it.each([
-    ['√(a+b)', '√a+√b'], ['(a+b)^2', 'a^2+b^2'], ['2x', 'x^2'], ['√12', '3√2'],
+    ['√(a+b)', '√a+√b'], ['2 1/2', '2/2'], ['(a+b)^2', 'a^2+b^2'], ['2x', 'x^2'], ['√12', '3√2'],
   ])('%s ≠ %s', (left, right) => expect(sameMath(left, right)).toBe(false));
+
+  it('reads school records: mixed numbers, modulus, ½, \\div', () => {
+    expect(sameMath('2 1/2', '2,5')).toBe(true);
+    expect(sameMath('-2\\frac{1}{3} + 1\\frac{1}{2}', '-5/6')).toBe(true);
+    expect(sameMath('2\\frac{x}{3}', '2x/3')).toBe(true);
+    expect(sameMath('|-3| + 1', '4')).toBe(true);
+    expect(sameMath('½ + ¼', '3/4')).toBe(true);
+    expect(sameMath('7 \\div 2', '3,5')).toBe(true);
+    expect(mathToLatex(parseMath('|x - 1|')!)).toBe('\\left|x - 1\\right|');
+  });
 
   it('rejects words, equations and broken input', () => {
     expect(parseMath('пять')).toBeNull();
