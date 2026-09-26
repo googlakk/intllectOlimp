@@ -173,7 +173,7 @@ SYSTEM_PROMPT = """
 Каждый элемент массива имеет ровно такую оболочку:
 {"component": "ИмяКомпонента", "content": { ... }}
 
-Допустимы только следующие 28 компонентов и их точные схемы content:
+Допустимы только следующие 29 компонентов и их точные схемы content:
 
 1. ShortExplanation:
 {"title": string, "text": string, "key_concepts": string[], "callout"?: string}
@@ -336,7 +336,17 @@ start — выражение или уравнение из задачи уче�
 виде («вынесите множитель» → "5√3"). mistakes — 1–3 типичные ошибки этой задачи: wrong — неверная строка
 («√39» при √12 + √27), message — что нарушено. Используй в математике как главное задание на отработку.
 
-28. GeneratedMedia:
+28. FunctionExplorer:
+{"title": string, "instruction": string, "formula": string, "params": [{"name": string, "label": string, "min": number, "max": number, "step": number, "default": number}], "x_range": [number, number], "y_range": [number, number], "target"?: {"params": {<name>: number}}, "points"?: [{"x": number, "y": number, "label": string}], "prediction"?: {"question": string, "options": string[], "correct_answer": string, "explanation": string}, "explanation": string}
+График функции по формуле с параметрами на ползунках. formula — правая часть «y = …» в записи ученика:
+"k*x + b", "a*x^2", "k/x", "a*(x - m)^2 + n", "√x". Переменная — x, параметры — одна латинская буква
+(не x и не y), у каждого min < max, step, default. Нужно хотя бы одно из двух: prediction — прогноз до
+ползунков («что станет с графиком, если k сменит знак?», 4 варианта, correct_answer — один из них);
+target — значения параметров, при которых график ученика совпадёт с пунктиром (значения кратны step и
+внутри min…max); points — точки, через которые проходит цель. Используй в математике для тем о функциях
+и графиках.
+
+29. GeneratedMedia:
 {"title": string, "description"?: string, "media_kind": "image"|"video", "url"?: string, "data_url"?: string, "poster_url"?: string, "alt_text"?: string, "caption"?: string, "pedagogical_role"?: string, "visual_intent"?: string, "success_check"?: string, "job_id"?: string, "generation_id"?: string, "prompt"?: string, "model"?: string}
 Не используй GeneratedMedia при обычной генерации урока: этот блок вставляется только после
 реального вызова OpenRouter media API из редактора. Никогда не выдумывай url, data_url или
@@ -356,7 +366,7 @@ $3 \\cdot 3 = 9$ → «значит, $3^2 = 9$». Нельзя: «формула
 предмете, передаётся в запросе.
 
 Следуй переданному предметному маршруту, а не одной универсальной последовательности.
-Для математических задач используй разобранные примеры, StepSolver (решение по шагам), MisconceptionDebugger,
+Для математических задач используй разобранные примеры, StepSolver (решение по шагам), FunctionExplorer (функции и графики), MisconceptionDebugger,
 SortAndClassify или ProcessBuilder; для наук — PredictionLab, DataInvestigation,
 PhysicsSandbox и ProcessBuilder; для языков — SortAndClassify,
 BranchingScenario и ArgumentMap; для гуманитарных предметов — источники,

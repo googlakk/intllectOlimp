@@ -24,7 +24,7 @@ COMPUTING_WORDS = ("информат", "программ", "робот", "ком
 HEAVY_COMPONENTS = {
     "ProcessBuilder", "ArgumentMap", "BranchingScenario", "PredictionLab",
     "DataInvestigation", "PhysicsSandbox", "HotspotInvestigation", "CodeBlocksLab",
-    "ChronologyLine", "CauseEffectMap",
+    "ChronologyLine", "CauseEffectMap", "FunctionExplorer",
 }
 
 
@@ -254,7 +254,10 @@ def build_component_plan(shape: LessonShape, objectives: list[dict[str, Any]], f
         plan.append(_step("apply", "practice", ids, allowed,
                           actions.get("apply", "Применить к новой ситуации: связать события, причины и итоги")))
     elif subject_plan.get("apply"):
-        plan.append(_step("apply", "practice", ids, subject_plan["apply"],
+        # Тема по тексту целей требует своего блока (у математики — функции → «График по формуле»).
+        topic_apply = next((components for pattern, components in (profile or {}).get("topic_apply", ())
+                            if any(pattern.search(objective.get("text") or "") for objective in objectives)), None)
+        plan.append(_step("apply", "practice", ids, topic_apply or subject_plan["apply"],
                           actions.get("apply", "Применить к новой ситуации: решение, аргумент, оценка")))
     elif shape in {"extended_concept", "process_inquiry", "source_argument"} or len(ids) > 1:
         plan.append(_step("apply", "practice", ids, ["IndependentProblem", "ArgumentBuilder", "DataInvestigation", "ProcessBuilder"], "Связать цели и перенести знания"))

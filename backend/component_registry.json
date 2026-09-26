@@ -657,6 +657,31 @@
     "rendering_notes": "Строки решения в KaTeX, поле с кнопками дроби и корня; проверка равносильности подстановкой, образец шага после двух ошибок."
   },
   {
+    "id": "function-explorer",
+    "code": "C45",
+    "category": "interact",
+    "subjects": ["math"],
+    "purpose": "График по формуле: параметры функции на ползунках, прогноз изменения графика и совмещение с графиком-целью",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["formula"],
+      "properties": {
+        "title": {"type": "string"},
+        "instruction": {"type": "string"},
+        "formula": {"type": "string"},
+        "params": {"type": "array", "items": {"type": "object", "required": ["name", "min", "max"], "properties": {"name": {"type": "string"}, "label": {"type": "string"}, "min": {"type": "number"}, "max": {"type": "number"}, "step": {"type": "number"}, "default": {"type": "number"}}}},
+        "x_range": {"type": "array", "items": {"type": "number"}},
+        "y_range": {"type": "array", "items": {"type": "number"}},
+        "target": {"type": "object", "properties": {"params": {"type": "object"}}},
+        "points": {"type": "array", "items": {"type": "object", "required": ["x", "y"], "properties": {"x": {"type": "number"}, "y": {"type": "number"}, "label": {"type": "string"}}}},
+        "prediction": {"type": "object", "required": ["question", "options", "correct_answer"], "properties": {"question": {"type": "string"}, "options": {"type": "array", "items": {"type": "string"}}, "correct_answer": {"type": "string"}, "explanation": {"type": "string"}}},
+        "explanation": {"type": "string"}
+      }
+    },
+    "rendering_notes": "SVG-плоскость с осями через ноль и клеткой; график по формуле, пунктир цели, ползунки параметров, прогноз до ползунков."
+  },
+  {
     "id": "generated-media",
     "code": "C41",
     "category": "media",

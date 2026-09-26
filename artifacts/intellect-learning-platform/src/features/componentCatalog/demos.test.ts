@@ -21,6 +21,7 @@ describe('component demos', () => {
       'chronology-line',
       'code-blocks-lab',
       'data-investigation',
+      'function-explorer',
       'generated-media',
       'guided-practice',
       'hotspot-investigation',

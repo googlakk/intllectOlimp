@@ -34,6 +34,7 @@ const PRACTICE_COMPONENTS = [
   'ChronologyLine',
   'CauseEffectMap',
   'StepSolver',
+  'FunctionExplorer',
 ];
 
 export type ObjectiveCoverage = {

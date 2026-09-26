@@ -16,7 +16,7 @@ ASSESSMENT_COMPONENTS = frozenset({
     "GuidedPractice", "IndependentProblem", "RetrievalCheck", "TextEvidencePicker", "ArgumentBuilder",
     "SortAndClassify", "ProcessBuilder", "ArgumentMap", "BranchingScenario", "MisconceptionDebugger",
     "PredictionLab", "DataInvestigation", "PhysicsSandbox", "HotspotInvestigation", "CodeBlocksLab", "ChronologyLine", "CauseEffectMap",
-    "StepSolver", "MasteryCheck",
+    "StepSolver", "FunctionExplorer", "MasteryCheck",
 })
 LESSON_CONTEXT_LIMIT = 12000
 BLOCK_TEXT_LIMIT = 1200

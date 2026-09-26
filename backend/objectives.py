@@ -39,6 +39,7 @@ PRACTICE_COMPONENTS = {
     "ChronologyLine",
     "CauseEffectMap",
     "StepSolver",
+    "FunctionExplorer",
 }
 ASSESSMENT_COMPONENTS = {"RetrievalCheck", "MasteryCheck"}
 INDEPENDENT_ASSESSMENT_COMPONENTS = {
@@ -59,6 +60,7 @@ INDEPENDENT_ASSESSMENT_COMPONENTS = {
     "ChronologyLine",
     "CauseEffectMap",
     "StepSolver",
+    "FunctionExplorer",
     "MasteryCheck",
 }
 HEAVY_ENGINE_COMPONENTS = {
@@ -72,6 +74,7 @@ HEAVY_ENGINE_COMPONENTS = {
     "CodeBlocksLab",
     "ChronologyLine",
     "CauseEffectMap",
+    "FunctionExplorer",
 }
 STAGE_COMPONENTS = {
     "diagnostic": {"RetrievalCheck"},
@@ -91,6 +94,7 @@ ALLOWED_COMPONENTS = {
     "ChronologyLine",
     "CauseEffectMap",
     "StepSolver",
+    "FunctionExplorer",
 }
 # Выведены из употребления: генератор их не выбирает, в конструкторе и каталоге
 # их нет. В ALLOWED_COMPONENTS остаются, чтобы уже созданные уроки открывались
@@ -761,7 +765,7 @@ def component_content_warnings(blocks: list[dict[str, Any]]) -> list[dict[str, A
                 "block": index,
                 "message": "Причины и следствия: нужны событие, 4+ фактора с ролями, причина и последствие, не больше одного повода — исправьте или перегенерируйте блок",
             })
-    from services.math_expression import step_solver_problem
+    from services.math_expression import function_explorer_problem, step_solver_problem
 
     for index, block in enumerate(blocks):
         if not isinstance(block, dict) or block.get("component") != "StepSolver":
@@ -772,6 +776,16 @@ def component_content_warnings(blocks: list[dict[str, Any]]) -> list[dict[str, A
                 "code": "step_solver_invalid",
                 "block": index,
                 "message": f"Решаю по шагам: {problem} — исправьте или перегенерируйте блок",
+            })
+    for index, block in enumerate(blocks):
+        if not isinstance(block, dict) or block.get("component") != "FunctionExplorer":
+            continue
+        problem = function_explorer_problem(block.get("content") if isinstance(block.get("content"), dict) else {})
+        if problem:
+            warnings.append({
+                "code": "function_explorer_invalid",
+                "block": index,
+                "message": f"График по формуле: {problem} — исправьте или перегенерируйте блок",
             })
     return warnings
 

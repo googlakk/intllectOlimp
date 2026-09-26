@@ -265,14 +265,23 @@ export function mathToLatex(node: MathNode): string {
     case 'neg': return `-${wrap(node.arg, mathToLatex(node.arg), '*', 'right')}`;
     case 'sqrt': return `\\sqrt{${mathToLatex(node.arg)}}`;
     case 'bin': {
+      // −3/x пишем как −3 над x со знаком перед дробью.
+      if (node.op === '/' && node.left.kind === 'neg') return `-\\frac{${mathToLatex(node.left.arg)}}{${mathToLatex(node.right)}}`;
       if (node.op === '/') return `\\frac{${mathToLatex(node.left)}}{${mathToLatex(node.right)}}`;
       const left = wrap(node.left, mathToLatex(node.left), node.op, 'left');
       const right = wrap(node.right, mathToLatex(node.right), node.op, 'right');
       if (node.op === '^') return `{${node.left.kind === 'sqrt' || node.left.kind === 'bin' || node.left.kind === 'neg' ? `\\left(${mathToLatex(node.left)}\\right)` : left}}^{${mathToLatex(node.right)}}`;
+      // (−0,5)·x пишем как −0,5x.
+      if (node.op === '*' && node.left.kind === 'neg') return `-${mathToLatex({ ...node, left: node.left.arg })}`;
       if (node.op === '*') {
         // 2x, 2√3, 3(x+1) — без знака; между числами — точка.
         const dot = node.right.kind === 'num' || (node.right.kind === 'bin' && node.right.op === '^' && node.right.left.kind === 'num');
         return `${left}${dot ? ' \\cdot ' : ''}${right}`;
+      }
+      // x + (−1) пишем как x − 1, x − (−1) — как x + 1.
+      if (node.right.kind === 'neg' && (node.op === '+' || node.op === '-')) {
+        const flipped = node.op === '+' ? '-' : '+';
+        return `${left} ${flipped} ${wrap(node.right.arg, mathToLatex(node.right.arg), flipped, 'right')}`;
       }
       return `${left} ${node.op} ${right}`;
     }

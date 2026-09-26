@@ -19,6 +19,7 @@ const ASSESSMENT_COMPONENTS = new Set([
   'ChronologyLine',
   'CauseEffectMap',
   'StepSolver',
+  'FunctionExplorer',
   'MasteryCheck',
 ]);
 
@@ -40,6 +41,7 @@ const OBJECTIVE_ASSESSMENT_COMPONENTS = new Set([
   'ChronologyLine',
   'CauseEffectMap',
   'StepSolver',
+  'FunctionExplorer',
   'MasteryCheck',
 ]);
 

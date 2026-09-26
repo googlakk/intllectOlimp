@@ -179,7 +179,7 @@ class MathProfileTests(unittest.TestCase):
     def test_function_topic_applies_on_a_graph(self):
         plan = math_plan("Строить график функции y = √x")
         apply = next(step for step in plan["component_plan"] if step["role"] == "apply")
-        self.assertEqual(apply["allowed_components"], ["InteractiveGraph"])
+        self.assertEqual(apply["allowed_components"], ["FunctionExplorer"])
 
     def test_math_warnings(self):
         blocks = [{"component": "Presentation", "content": {"slides": [], "objective_ids": ["a", "b"]}}]
@@ -289,3 +289,32 @@ class StepSolverTests(unittest.TestCase):
             status, done = check_solver_step(case["line"], kind=case["kind"], start=case["start"],
                                              final_answer=case["final_answer"], answer_mode=case.get("answer_mode", "form"))
             self.assertEqual((status, done), (case["status"], case["done"]), case["note"])
+
+
+class FunctionExplorerTests(unittest.TestCase):
+    def test_graph_task_is_validated(self):
+        from objectives import component_content_warnings
+
+        def block(**content):
+            base = {"formula": "k*x + b", "params": [{"name": "k", "min": -3, "max": 3, "step": 0.5}, {"name": "b", "min": -4, "max": 4, "step": 1}]}
+            return {"component": "FunctionExplorer", "content": {**base, **content}}
+
+        good = block(target={"params": {"k": 2, "b": -1}}, points=[{"x": 2, "y": 3}],
+                     prediction={"question": "?", "options": ["вверх", "вниз"], "correct_answer": "вверх"})
+        self.assertEqual(component_content_warnings([good]), [])
+        bad = [
+            block(),  # нет задания
+            block(target={"params": {"k": 2, "b": -1}}, points=[{"x": 2, "y": 4}]),  # точка мимо
+            block(target={"params": {"k": 2.3, "b": -1}}),  # не на шаге
+            block(formula="k*x + c", target={"params": {"k": 1, "b": 0}}),  # неизвестная буква
+            block(params=[{"name": "k", "min": -3, "max": 3, "step": 0.5, "default": 2}, {"name": "b", "min": -4, "max": 4, "step": 1, "default": -1}],
+                  target={"params": {"k": 2, "b": -1}}),  # решено без действий
+            block(target={"params": {"k": 2, "b": -1}}, evidence_stage="assessment"),  # итог без прогноза
+        ]
+        self.assertEqual([w["block"] for w in component_content_warnings(bad)], [0, 1, 2, 3, 4, 5])
+
+    def test_function_topic_with_two_objectives_applies_on_a_graph(self):
+        plan = math_plan("Строить график функции y = kx + b. Определять знак углового коэффициента по графику.")
+        steps = plan["component_plan"]
+        self.assertEqual(next(step for step in steps if step["role"] == "apply")["allowed_components"], ["FunctionExplorer"])
+        self.assertLessEqual(len(steps), plan["topic_contract"]["block_budget"]["max"])

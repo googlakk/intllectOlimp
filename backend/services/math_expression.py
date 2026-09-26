@@ -467,3 +467,52 @@ def solver_line_outcome(line: str, content: dict[str, Any]) -> str:
     mode = "equivalent" if content.get("answer_mode") == "equivalent" else "form"
     status, _ = check_solver_step(line, kind=kind, start=start, final_answer=final_answer, answer_mode=mode)
     return "correct" if status == "ok" else "incorrect"
+
+
+def function_explorer_problem(content: dict[str, Any]) -> str | None:
+    """Что не так в данных блока FunctionExplorer (как normalizeExplorer в functionExplorer.ts)."""
+    formula = parse_expression(re.sub(r"^\s*y\s*=\s*", "", str(content.get("formula") or ""), flags=re.IGNORECASE))
+    if formula is None:
+        return "формула не читается"
+    params = [param for param in content.get("params") or [] if isinstance(param, dict)]
+    names: dict[str, dict[str, Any]] = {}
+    for param in params:
+        name = str(param.get("name") or "").strip()
+        low, high = param.get("min"), param.get("max")
+        if not re.fullmatch(r"[a-wzA-WZ]", name) or not all(isinstance(value, (int, float)) for value in (low, high)) or low >= high:
+            return f"параметр «{name}» задан неверно"
+        names[name] = param
+    unknown = set(_ordered(formula)) - {"x", *names}
+    if unknown:
+        return f"в формуле неизвестные буквы: {', '.join(sorted(unknown))}"
+    target = content.get("target") if isinstance(content.get("target"), dict) else None
+    target_params = target.get("params") if target and isinstance(target.get("params"), dict) else None
+    if target is not None:
+        if target_params is None or set(target_params) != set(names):
+            return "у цели нужны значения всех параметров"
+        for name, value in target_params.items():
+            param = names[name]
+            step = param.get("step") if isinstance(param.get("step"), (int, float)) and param.get("step") > 0 else 0.5
+            if not isinstance(value, (int, float)) or not param["min"] <= value <= param["max"]:
+                return f"значение цели {name} вне ползунка"
+            if abs((value - param["min"]) / step - round((value - param["min"]) / step)) > 1e-6:
+                return f"значение цели {name} не попадает на шаг ползунка"
+        initial = {name: param.get("default", (param["min"] + param["max"]) / 2) for name, param in names.items()}
+        if all(isinstance(initial[name], (int, float)) and abs(initial[name] - target_params[name]) < 1e-9 for name in names):
+            return "начальные значения ползунков совпадают с целью — задание решено без действий"
+        for point in content.get("points") or []:
+            if isinstance(point, dict) and isinstance(point.get("x"), (int, float)) and isinstance(point.get("y"), (int, float)):
+                value = _evaluate(formula, {**{key: float(item) for key, item in target_params.items()}, "x": float(point["x"])})
+                if not math.isfinite(value) or abs(value - point["y"]) > 1e-6:
+                    return "отмеченная точка не лежит на графике-цели"
+    prediction = content.get("prediction") if isinstance(content.get("prediction"), dict) else None
+    if prediction is not None:
+        options = prediction.get("options") if isinstance(prediction.get("options"), list) else []
+        if len(options) < 2 or prediction.get("correct_answer") not in options:
+            return "у прогноза нет верного ответа среди вариантов"
+    if target is None and prediction is None:
+        return "нет задания: нужен прогноз или график-цель"
+    if content.get("evidence_stage") == "assessment" and prediction is None:
+        # Цель подбирается ползунками наугад — для итоговой проверки нужен прогноз.
+        return "в итоговой проверке нужен прогноз, а не только подбор ползунками"
+    return None

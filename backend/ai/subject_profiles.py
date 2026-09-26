@@ -144,9 +144,11 @@ MATH: dict[str, Any] = {
     },
     # Темы про функции — задание на график, иначе — самостоятельная задача.
     "single_objective_apply": (
-        (re.compile(r"функци|график", re.IGNORECASE), ["InteractiveGraph"]),
+        (re.compile(r"функци|график", re.IGNORECASE), ["FunctionExplorer"]),
         (None, ["IndependentProblem"]),
     ),
+    # То же для урока с несколькими целями.
+    "topic_apply": ((re.compile(r"функци|график", re.IGNORECASE), ["FunctionExplorer"]),),
     "check_lesson_types": ("study", None, ""),
     # Тема привязана к параграфу — у каждого примера и задачи должна быть ссылка на учебник (source_ref).
     # «Найди ошибку» строится на заблуждении, а не на задаче книги — его не проверяем.
@@ -209,7 +211,7 @@ def subject_prompt(profile: dict[str, Any]) -> str:
 _TASK_COMPONENTS = frozenset({
     "GuidedPractice", "IndependentProblem", "RetrievalCheck", "TextEvidencePicker", "ArgumentBuilder", "SortAndClassify",
     "ProcessBuilder", "ArgumentMap", "BranchingScenario", "MisconceptionDebugger", "MasteryCheck", "ChronologyLine", "CauseEffectMap",
-    "StepSolver",
+    "StepSolver", "FunctionExplorer",
 })
 
 

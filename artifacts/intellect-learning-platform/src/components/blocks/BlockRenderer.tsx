@@ -43,6 +43,7 @@ export const blockLoaders: Record<string, BlockImporter> = {
   ChronologyLine: () => import('./ChronologyLine'),
   CauseEffectMap: () => import('./CauseEffectMap'),
   StepSolver: () => import('./StepSolver'),
+  FunctionExplorer: () => import('./FunctionExplorer'),
   GeneratedMedia: () => import('./GeneratedMedia'),
 };
 const preloadCache = new Map<string, Promise<BlockModule>>();
