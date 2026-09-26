@@ -859,6 +859,17 @@ async def _upsert_topic_access(db: AsyncSession, values: list[dict[str, Any]]) -
         ))
 
 
+def _has_stale_lock(rows: list[Any]) -> bool:
+    """Тема закрыта, хотя предыдущая в том же предмете уже пройдена — строки доступа устарели
+    (например, записаны старой версией или пересчёт после урока не случился)."""
+    previous_completed: dict[int, bool] = {}
+    for _topic, _section, subject, access, _lesson_status, progress in rows:
+        if access is not None and access.state == "locked" and previous_completed.get(subject.id):
+            return True
+        previous_completed[subject.id] = getattr(progress, "status", None) == "completed"
+    return False
+
+
 async def get_student_curriculum_map(
     student_id: int,
     db: AsyncSession,
@@ -897,7 +908,7 @@ async def get_student_curriculum_map(
 
     rows = await load_rows()
     has_materialized_access = any(access is not None for _topic, _section, _subject, access, _lesson_status, _progress in rows)
-    if refresh or (rows and not has_materialized_access):
+    if refresh or (rows and not has_materialized_access) or _has_stale_lock(rows):
         await refresh_student_access(student_id, db)
         await db.flush()
         rows = await load_rows()

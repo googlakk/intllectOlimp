@@ -453,3 +453,15 @@ class AccessRefreshTests(unittest.IsolatedAsyncioTestCase):
         # Граф не построен — темы не закрываются навсегда.
         states = {value for key, value in access[0].compile().params.items() if key.startswith('state_m')}
         self.assertEqual(states, {'available'})
+
+
+class StaleLockTests(unittest.TestCase):
+    def test_locked_topic_after_completed_one_is_stale(self):
+        from services.curriculum_graph import _has_stale_lock
+
+        subject = SimpleNamespace(id=4)
+        done = SimpleNamespace(status="completed")
+        locked = SimpleNamespace(state="locked")
+        available = SimpleNamespace(state="available")
+        self.assertTrue(_has_stale_lock([(1, 1, subject, available, "published", done), (2, 1, subject, locked, "published", None)]))
+        self.assertFalse(_has_stale_lock([(1, 1, subject, available, "published", None), (2, 1, subject, locked, "published", None)]))
