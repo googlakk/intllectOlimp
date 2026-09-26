@@ -41,6 +41,7 @@ export const blockLoaders: Record<string, BlockImporter> = {
   HotspotInvestigation: () => import('./HotspotInvestigation'),
   CodeBlocksLab: () => import('./CodeBlocksLab'),
   ChronologyLine: () => import('./ChronologyLine'),
+  CauseEffectMap: () => import('./CauseEffectMap'),
   GeneratedMedia: () => import('./GeneratedMedia'),
 };
 const preloadCache = new Map<string, Promise<BlockModule>>();

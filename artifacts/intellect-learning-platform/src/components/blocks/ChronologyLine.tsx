@@ -168,7 +168,8 @@ export default function ChronologyLine({ title, instruction, events, lanes, tole
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           Задание повреждено: в нём не хватает событий с годами. Сообщите учителю — а урок можно продолжать.
         </p>
-        {!skipped && <div className="mt-4"><PrimaryAction onClick={() => { setSkipped(true); onAnswer?.(true); }}>Продолжить урок</PrimaryAction></div>}
+        {/* Не засчитываем как верное: повреждённое задание не должно давать «освоено». */}
+        {!skipped && <div className="mt-4"><PrimaryAction onClick={() => { setSkipped(true); onAnswer?.(false); }}>Продолжить урок</PrimaryAction></div>}
       </BlockShell>
     );
   }

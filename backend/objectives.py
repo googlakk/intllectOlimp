@@ -37,6 +37,7 @@ PRACTICE_COMPONENTS = {
     "PhysicsSandbox",
     "CodeBlocksLab",
     "ChronologyLine",
+    "CauseEffectMap",
 }
 ASSESSMENT_COMPONENTS = {"RetrievalCheck", "MasteryCheck"}
 INDEPENDENT_ASSESSMENT_COMPONENTS = {
@@ -55,6 +56,7 @@ INDEPENDENT_ASSESSMENT_COMPONENTS = {
     "HotspotInvestigation",
     "CodeBlocksLab",
     "ChronologyLine",
+    "CauseEffectMap",
     "MasteryCheck",
 }
 HEAVY_ENGINE_COMPONENTS = {
@@ -67,6 +69,7 @@ HEAVY_ENGINE_COMPONENTS = {
     "HotspotInvestigation",
     "CodeBlocksLab",
     "ChronologyLine",
+    "CauseEffectMap",
 }
 STAGE_COMPONENTS = {
     "diagnostic": {"RetrievalCheck"},
@@ -84,6 +87,7 @@ ALLOWED_COMPONENTS = {
     "DataInvestigation", "PhysicsSandbox", "HotspotInvestigation",
     "CodeBlocksLab",
     "ChronologyLine",
+    "CauseEffectMap",
 }
 # Выведены из употребления: генератор их не выбирает, в конструкторе и каталоге
 # их нет. В ALLOWED_COMPONENTS остаются, чтобы уже созданные уроки открывались
@@ -706,8 +710,23 @@ def explanation_path_warnings(blocks: list[dict[str, Any]]) -> list[dict[str, An
     return warnings
 
 
+_CAUSE_ROLE_ALIASES = {
+    "cause": "cause", "причина": "cause", "себеп": "cause",
+    "trigger": "trigger", "повод": "trigger", "шылтоо": "trigger",
+    "consequence": "consequence", "последствие": "consequence", "следствие": "consequence", "натыйжа": "consequence",
+    "unrelated": "unrelated", "не связано": "unrelated", "байланышы жок": "unrelated",
+}
+
+
+def _cause_role(value: Any) -> str | None:
+    """Как во фронтенде (causeEffect.ts normalizeRole): регистр, пробелы, русские и кыргызские слова."""
+    return _CAUSE_ROLE_ALIASES.get(str(value or "").strip().lower().replace("ё", "е"))
+
+
 def component_content_warnings(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Проверка данных интерактивов, которые модель могла собрать неаккуратно."""
+    """Проверка данных интерактивов, которые модель могла собрать неаккуратно.
+
+    Это ошибки, а не рекомендации: повреждённый блок не должен дойти до учеников."""
     warnings: list[dict[str, Any]] = []
     for index, block in enumerate(blocks):
         if not isinstance(block, dict) or block.get("component") != "ChronologyLine":
@@ -721,7 +740,23 @@ def component_content_warnings(blocks: list[dict[str, Any]]) -> list[dict[str, A
             warnings.append({
                 "code": "chronology_line_invalid",
                 "block": index,
-                "message": "Лента событий: нужно 3–7 событий с годами числом и разными id — проверьте блок",
+                "message": "Лента событий: нужно 3–7 событий с годами числом и разными id — исправьте или перегенерируйте блок",
+            })
+    for index, block in enumerate(blocks):
+        if not isinstance(block, dict) or block.get("component") != "CauseEffectMap":
+            continue
+        content = block.get("content") if isinstance(block.get("content"), dict) else {}
+        factors = content.get("factors") if isinstance(content.get("factors"), list) else []
+        roles = [_cause_role(factor.get("role")) for factor in factors if isinstance(factor, dict)]
+        ids = [str(factor.get("id")) for factor in factors if isinstance(factor, dict)]
+        event = content.get("event")
+        if (len(factors) < 4 or roles.count("trigger") > 1 or "cause" not in roles or "consequence" not in roles
+                or any(role is None for role in roles) or len(set(ids)) != len(ids)
+                or not ((isinstance(event, dict) and event.get("label")) or (isinstance(event, str) and event.strip()))):
+            warnings.append({
+                "code": "cause_effect_map_invalid",
+                "block": index,
+                "message": "Причины и следствия: нужны событие, 4+ фактора с ролями, причина и последствие, не больше одного повода — исправьте или перегенерируйте блок",
             })
     return warnings
 
@@ -754,7 +789,7 @@ def quality_report(
     coverage["warnings"] = normalization_warnings + coverage["warnings"]
     coverage["warnings"] = coverage["warnings"] + shape_warnings
     coverage["warnings"] = coverage["warnings"] + explanation_path_warnings(normalized_blocks)
-    coverage["warnings"] = coverage["warnings"] + component_content_warnings(normalized_blocks)
+    coverage["errors"] = coverage["errors"] + component_content_warnings(normalized_blocks)
     coverage["publishable"] = not coverage["errors"] and not coverage["gaps"] and bool(objectives)
     return {
         "objectives": objectives,

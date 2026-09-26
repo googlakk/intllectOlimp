@@ -32,6 +32,7 @@ const PRACTICE_COMPONENTS = [
   'PhysicsSandbox',
   'CodeBlocksLab',
   'ChronologyLine',
+  'CauseEffectMap',
 ];
 
 export type ObjectiveCoverage = {

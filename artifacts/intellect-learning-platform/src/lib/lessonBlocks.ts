@@ -17,6 +17,7 @@ const ASSESSMENT_COMPONENTS = new Set([
   'HotspotInvestigation',
   'CodeBlocksLab',
   'ChronologyLine',
+  'CauseEffectMap',
   'MasteryCheck',
 ]);
 
@@ -36,6 +37,7 @@ const OBJECTIVE_ASSESSMENT_COMPONENTS = new Set([
   'HotspotInvestigation',
   'CodeBlocksLab',
   'ChronologyLine',
+  'CauseEffectMap',
   'MasteryCheck',
 ]);
 

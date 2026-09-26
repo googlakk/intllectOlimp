@@ -40,6 +40,7 @@ const PHASE_LABELS: Record<string, string> = {
   HotspotInvestigation: 'Исследование схемы',
   CodeBlocksLab: 'Алгоритм из блоков',
   ChronologyLine: 'Лента событий',
+  CauseEffectMap: 'Причины и следствия',
 };
 
 type ActiveLessonContentProps = {

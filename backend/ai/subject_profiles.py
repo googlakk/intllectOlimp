@@ -52,7 +52,7 @@ HISTORY: dict[str, Any] = {
         "model": ["WorkedExample"],
         "source": ["TextEvidencePicker"],
         "chronology": ["ChronologyLine", "SortAndClassify"],
-        "practice": ["SortAndClassify", "TextEvidencePicker", "ArgumentMap", "ProcessBuilder"],
+        "practice": ["CauseEffectMap", "SortAndClassify", "TextEvidencePicker", "ArgumentMap"],
         "apply": ["ArgumentBuilder", "BranchingScenario", "ArgumentMap"],
     },
     # Проверки — только для обычных учебных уроков: у контрольной и повторения свой набор блоков.
@@ -73,6 +73,8 @@ HISTORY: dict[str, Any] = {
             # Причины и последствия — в любом задании с причинными словами.
             "code": "history_without_causation",
             "components": None,
+            # Блок причин и следствий засчитывается сам по себе, без поиска слов.
+            "satisfied_by": {"CauseEffectMap"},
             "text": re.compile(r"причин|последств|следстви|из-за|поэтому|привел|привело|привели|себеп|натыйжа", re.IGNORECASE),
             "message": "В уроке истории нет задания на причины и последствия",
         },
@@ -106,7 +108,7 @@ def subject_prompt(profile: dict[str, Any]) -> str:
 # Задания — всё, где ученик действует (не объяснение).
 _TASK_COMPONENTS = frozenset({
     "GuidedPractice", "IndependentProblem", "RetrievalCheck", "TextEvidencePicker", "ArgumentBuilder", "SortAndClassify",
-    "ProcessBuilder", "ArgumentMap", "BranchingScenario", "MisconceptionDebugger", "MasteryCheck", "ChronologyLine",
+    "ProcessBuilder", "ArgumentMap", "BranchingScenario", "MisconceptionDebugger", "MasteryCheck", "ChronologyLine", "CauseEffectMap",
 })
 
 
@@ -130,7 +132,7 @@ def subject_warnings(blocks: list[dict[str, Any]], subject_name: str | None, les
     for check in profile["checks"]:
         pattern = check.get("text")
         components = check["components"] or _TASK_COMPONENTS
-        found = any(
+        found = any(block.get("component") in check.get("satisfied_by", ()) for block in blocks if isinstance(block, dict)) or any(
             block.get("component") in components
             and (pattern is None or any(pattern.search(text) for text in _texts(block.get("content"))))
             for block in blocks if isinstance(block, dict)

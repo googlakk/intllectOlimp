@@ -116,3 +116,29 @@ class ChronologyContractTests(unittest.TestCase):
         bad = {"component": "ChronologyLine", "content": {"events": [{"id": "a", "label": "x", "year": "1709"}, {"id": "a", "label": "y", "year": 1762}]}}
         self.assertEqual(component_content_warnings([good]), [])
         self.assertEqual([w["code"] for w in component_content_warnings([good, bad])], ["chronology_line_invalid"])
+
+
+class CauseEffectTests(unittest.TestCase):
+    def test_cause_effect_map_satisfies_causation_and_is_validated(self):
+        from objectives import component_content_warnings
+        good = {"component": "CauseEffectMap", "content": {"event": {"label": "Восстание"}, "factors": [
+            {"id": "a", "label": "Налоги", "role": "cause"}, {"id": "b", "label": "Поход", "role": "trigger"},
+            {"id": "c", "label": "Война", "role": "consequence"}, {"id": "d", "label": "Чай", "role": "unrelated"}]}}
+        blocks = [{"component": "Timeline", "content": {}}, {"component": "TextEvidencePicker", "content": {}}, good]
+        self.assertEqual(subject_warnings(blocks, "История Кыргызстана"), [])
+        self.assertEqual(component_content_warnings([good]), [])
+        spelled = {"component": "CauseEffectMap", "content": {"event": "Восстание 1916 года", "factors": [
+            {"id": "a", "label": "Налоги", "role": "Причина"}, {"id": "b", "label": "Поход", "role": " trigger "},
+            {"id": "c", "label": "Война", "role": "последствие"}, {"id": "d", "label": "Чай", "role": "unrelated"}]}}
+        self.assertEqual(component_content_warnings([spelled]), [])
+        bad = {"component": "CauseEffectMap", "content": {"event": {"label": "X"}, "factors": [{"id": "a", "label": "Y", "role": "trigger"}]}}
+        self.assertEqual([w["code"] for w in component_content_warnings([bad])], ["cause_effect_map_invalid"])
+
+
+class ContentErrorsTests(unittest.TestCase):
+    def test_broken_interactive_blocks_publishing(self):
+        from objectives import quality_report
+        bad = {"component": "ChronologyLine", "content": {"objective_ids": ["obj-1"], "evidence_stage": "practice", "events": [{"id": "a", "label": "x", "year": "1709"}]}}
+        report = quality_report([bad], "Знать хронологию")["quality_report"]
+        self.assertIn("chronology_line_invalid", [error["code"] for error in report["errors"]])
+        self.assertFalse(report["publishable"])

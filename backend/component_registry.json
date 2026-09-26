@@ -613,6 +613,26 @@
     "rendering_notes": "vis-timeline: карточки вперемешку на ленте, перетаскивание и ввод года; проверка с допуском и разбором."
   },
   {
+    "id": "cause-effect-map",
+    "code": "C43",
+    "category": "interact",
+    "subjects": ["humanities"],
+    "purpose": "Причины и следствия: определить роль факторов — причина, повод, последствие",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "instruction", "event", "factors"],
+      "properties": {
+        "title": {"type": "string"},
+        "instruction": {"type": "string"},
+        "event": {"type": "object", "required": ["label"], "properties": {"label": {"type": "string"}, "year": {"type": "integer"}}},
+        "factors": {"type": "array", "items": {"type": "object", "required": ["id", "label", "role"], "properties": {"id": {"type": "string"}, "label": {"type": "string"}, "role": {"type": "string", "enum": ["cause", "trigger", "consequence", "unrelated"]}, "kind": {"type": "string"}, "term": {"type": "string", "enum": ["short", "long"]}, "explanation": {"type": "string"}}}},
+        "explanation": {"type": "string"}
+      }
+    },
+    "rendering_notes": "React Flow: причины и повод слева, событие в центре, последствия справа; роль выбирается кнопками."
+  },
+  {
     "id": "generated-media",
     "code": "C41",
     "category": "media",

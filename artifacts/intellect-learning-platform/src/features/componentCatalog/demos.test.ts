@@ -17,6 +17,7 @@ describe('component demos', () => {
       'argument-builder',
       'argument-map',
       'branching-scenario',
+      'cause-effect-map',
       'chronology-line',
       'code-blocks-lab',
       'data-investigation',

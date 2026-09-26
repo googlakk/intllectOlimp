@@ -15,7 +15,7 @@ from typing import Any
 ASSESSMENT_COMPONENTS = frozenset({
     "GuidedPractice", "IndependentProblem", "RetrievalCheck", "TextEvidencePicker", "ArgumentBuilder",
     "SortAndClassify", "ProcessBuilder", "ArgumentMap", "BranchingScenario", "MisconceptionDebugger",
-    "PredictionLab", "DataInvestigation", "PhysicsSandbox", "HotspotInvestigation", "CodeBlocksLab", "ChronologyLine",
+    "PredictionLab", "DataInvestigation", "PhysicsSandbox", "HotspotInvestigation", "CodeBlocksLab", "ChronologyLine", "CauseEffectMap",
     "MasteryCheck",
 })
 LESSON_CONTEXT_LIMIT = 12000

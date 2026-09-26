@@ -173,7 +173,7 @@ SYSTEM_PROMPT = """
 Каждый элемент массива имеет ровно такую оболочку:
 {"component": "ИмяКомпонента", "content": { ... }}
 
-Допустимы только следующие 26 компонентов и их точные схемы content:
+Допустимы только следующие 27 компонентов и их точные схемы content:
 
 1. ShortExplanation:
 {"title": string, "text": string, "key_concepts": string[], "callout"?: string}
@@ -314,7 +314,14 @@ vega_lite_spec должен быть простой Vega-Lite специфика
 линии (например, «Кокандское ханство» и «Российская империя»), у события тогда lane = id линии.
 Используй в истории для хронологии; в других предметах — для этапов открытий и развития.
 
-26. GeneratedMedia:
+26. CauseEffectMap:
+{"title": string, "instruction": string, "event": {"label": string, "year"?: integer}, "factors": [{"id": string, "label": string, "role": "cause"|"trigger"|"consequence"|"unrelated", "kind"?: "political"|"economic"|"social"|"external"|"cultural", "term"?: "short"|"long", "explanation": string}], "explanation": string}
+Причины и следствия одного события: ученик определяет роль каждого фактора. 5–8 факторов: хотя бы
+2 причины (разных видов), ровно 1 повод, 1–3 последствия (ближайшее и долгосрочное) и 1 правдоподобный
+отвлекающий фактор (unrelated). explanation у фактора — почему роль именно такая. Факты — из учебника.
+Используй в истории для причин и последствий; в обществознании — для анализа ситуаций.
+
+27. GeneratedMedia:
 {"title": string, "description"?: string, "media_kind": "image"|"video", "url"?: string, "data_url"?: string, "poster_url"?: string, "alt_text"?: string, "caption"?: string, "pedagogical_role"?: string, "visual_intent"?: string, "success_check"?: string, "job_id"?: string, "generation_id"?: string, "prompt"?: string, "model"?: string}
 Не используй GeneratedMedia при обычной генерации урока: этот блок вставляется только после
 реального вызова OpenRouter media API из редактора. Никогда не выдумывай url, data_url или
@@ -338,7 +345,7 @@ $3 \\cdot 3 = 9$ → «значит, $3^2 = 9$». Нельзя: «формула
 SortAndClassify или ProcessBuilder; для наук — PredictionLab, DataInvestigation,
 PhysicsSandbox и ProcessBuilder; для языков — SortAndClassify,
 BranchingScenario и ArgumentMap; для гуманитарных предметов — источники,
-ArgumentMap, BranchingScenario, ProcessBuilder и ChronologyLine (хронология в истории); для информатики —
+ArgumentMap, BranchingScenario, ProcessBuilder, ChronologyLine (хронология) и CauseEffectMap (причины и последствия в истории); для информатики —
 CodeBlocksLab, MisconceptionDebugger и ProcessBuilder; для практических предметов —
 BranchingScenario и самооценку. Цифровой тест не должен подменять
 физическое или творческое выполнение. Заверши урок Reflection и MasteryCheck с вопросом

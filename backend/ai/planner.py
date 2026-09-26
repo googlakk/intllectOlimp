@@ -24,7 +24,7 @@ COMPUTING_WORDS = ("информат", "программ", "робот", "ком
 HEAVY_COMPONENTS = {
     "ProcessBuilder", "ArgumentMap", "BranchingScenario", "PredictionLab",
     "DataInvestigation", "PhysicsSandbox", "HotspotInvestigation", "CodeBlocksLab",
-    "ChronologyLine",
+    "ChronologyLine", "CauseEffectMap",
 }
 
 
