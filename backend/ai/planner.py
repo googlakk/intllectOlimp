@@ -222,7 +222,12 @@ def build_component_plan(shape: LessonShape, objectives: list[dict[str, Any]], f
                 plan.append(_step("practice", "practice", [objective_id], subject_plan["chronology"],
                                   "Выстроить события по времени и связать причины со следствиями"))
             # Первая цель — работа с источником, чтобы она гарантированно была в уроке.
-            practice = subject_plan.get("source") if position == 0 and subject_plan.get("source") else subject_plan["practice"]
+            if position == 0 and subject_plan.get("source"):
+                practice = subject_plan["source"]
+            elif position == 1 and subject_plan.get("signature_practice"):
+                practice = subject_plan["signature_practice"]
+            else:
+                practice = subject_plan["practice"]
             plan.append(_step("practice", "practice", [objective_id], practice,
                               "Найти доказательство в источнике и объяснить причины и последствия"))
             continue
@@ -238,7 +243,13 @@ def build_component_plan(shape: LessonShape, objectives: list[dict[str, Any]], f
         else:
             plan.append(_step("practice", "practice", [objective_id], ["GuidedPractice", "SortAndClassify", "ProcessBuilder"], "Активно обработать материал"))
 
-    if subject_plan.get("apply"):
+    single_apply = (profile or {}).get("single_objective_apply")
+    if subject_plan and len(objectives) == 1 and single_apply:
+        # При одной цели шага хронологии нет, а практика — источник: фирменный блок предмета ставим сюда.
+        text = objectives[0].get("text") or ""
+        allowed = next(components for pattern, components in single_apply if pattern is None or pattern.search(text))
+        plan.append(_step("apply", "practice", ids, allowed, "Применить к новой ситуации: связать события, причины и итоги"))
+    elif subject_plan.get("apply"):
         plan.append(_step("apply", "practice", ids, subject_plan["apply"], "Применить к новой ситуации: решение, аргумент, оценка"))
     elif shape in {"extended_concept", "process_inquiry", "source_argument"} or len(ids) > 1:
         plan.append(_step("apply", "practice", ids, ["IndependentProblem", "ArgumentBuilder", "DataInvestigation", "ProcessBuilder"], "Связать цели и перенести знания"))

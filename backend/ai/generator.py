@@ -259,7 +259,8 @@ Markdown, символы $ и LaTeX-команды. Формулы записы�
 каждый вопрос также должен иметь objective_ids (или dimension равный ID цели).
 Если в запросе передан component_plan, структура урока должна следовать этому плану:
 роль, objective_ids, evidence_stage и allowed_components для каждого шага являются
-контрактом. Не делай один и тот же шаблон для маленькой и большой темы.
+контрактом. Если в allowed_components шага один компонент — используй именно его.
+Не делай один и тот же шаблон для маленькой и большой темы.
 
 14. MasteryCheck:
 {"questions": [{"question": string, "type": "multiple_choice"|"numeric", "options"?: string[], "correct_answer": string, "answer_unit"?: string, "explanation": string, "dimension": string, "objective_ids": string[]}]}

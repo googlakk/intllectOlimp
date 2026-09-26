@@ -31,7 +31,7 @@ class ProfileTests(unittest.TestCase):
         first_practice = next(step for step in steps if step["role"] == "practice" and "источник" in step["cognitive_action"])
         self.assertEqual(first_practice["allowed_components"], ["TextEvidencePicker"])
         apply = next(step for step in steps if step["role"] == "apply")
-        self.assertIn("BranchingScenario", apply["allowed_components"])
+        self.assertEqual(apply["allowed_components"], ["ArgumentBuilder"])
         # Каждый предложенный блок допустим на своём этапе — иначе проверка урока выдаст ошибку.
         for step in steps:
             if step["evidence_stage"]:
@@ -42,6 +42,14 @@ class ProfileTests(unittest.TestCase):
                                     learning_objectives="Объяснять причины возвышения ханства", skills=None, resources=None,
                                     grade=8, hours=1, lesson_type="study")
         self.assertLessEqual(len(plan["component_plan"]), plan["topic_contract"]["block_budget"]["max"])
+        # Фирменный блок есть и при одной цели: цель про причины → «Причины и следствия».
+        apply = next(step for step in plan["component_plan"] if step["role"] == "apply")
+        self.assertEqual(apply["allowed_components"][0], "CauseEffectMap")
+        dates = build_topic_contract(topic_name="Кокандское ханство", subject_name="История Кыргызстана",
+                                     learning_objectives="Знать основные события правления Худояр-хана", skills=None,
+                                     resources=None, grade=8, hours=1, lesson_type="study")
+        apply = next(step for step in dates["component_plan"] if step["role"] == "apply")
+        self.assertEqual(apply["allowed_components"][0], "ChronologyLine")
 
     def test_other_subjects_keep_family_plan(self):
         plan = build_topic_contract(topic_name="Лирика", subject_name="Литература", learning_objectives="Анализировать стихотворение",

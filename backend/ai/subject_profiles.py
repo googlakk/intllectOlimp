@@ -51,10 +51,19 @@ HISTORY: dict[str, Any] = {
         "explain": ["Presentation", "Timeline"],
         "model": ["WorkedExample"],
         "source": ["TextEvidencePicker"],
-        "chronology": ["ChronologyLine", "SortAndClassify"],
-        "practice": ["CauseEffectMap", "SortAndClassify", "TextEvidencePicker", "ArgumentMap"],
-        "apply": ["ArgumentBuilder", "BranchingScenario", "ArgumentMap"],
+        # Фирменные блоки — единственный вариант в своём шаге: из списка модель берёт привычный блок, а не новый.
+        "chronology": ["ChronologyLine"],
+        "signature_practice": ["CauseEffectMap"],
+        "practice": ["SortAndClassify", "TextEvidencePicker"],
+        # Лёгкий блок: тяжёлый бюджет урока уже заняли «Лента событий» и «Причины и следствия».
+        "apply": ["ArgumentBuilder"],
     },
+    # Урок с одной целью вмещает один тяжёлый интерактив — он и становится заданием на применение:
+    # цель про причины/итоги → «Причины и следствия», иначе → «Лента событий».
+    "single_objective_apply": (
+        (re.compile(r"причин|последств|следстви|итог|значени|почему|привел|привело|привели|влия|роль|себеп|натыйжа", re.IGNORECASE), ["CauseEffectMap"]),
+        (None, ["ChronologyLine"]),
+    ),
     # Проверки — только для обычных учебных уроков: у контрольной и повторения свой набор блоков.
     "check_lesson_types": ("study", None, ""),
     # Обязательные опоры урока истории — проверяются после генерации.
