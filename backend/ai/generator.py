@@ -173,7 +173,7 @@ SYSTEM_PROMPT = """
 Каждый элемент массива имеет ровно такую оболочку:
 {"component": "ИмяКомпонента", "content": { ... }}
 
-Допустимы только следующие 25 компонентов и их точные схемы content:
+Допустимы только следующие 26 компонентов и их точные схемы content:
 
 1. ShortExplanation:
 {"title": string, "text": string, "key_concepts": string[], "callout"?: string}
@@ -306,7 +306,15 @@ vega_lite_spec должен быть простой Vega-Lite специфика
 {"title": string, "task": string, "toolbox_xml": string, "expected_block_types": string[], "explanation": string, "starter_xml"?: string}
 Используй для информатики и алгоритмов. toolbox_xml должен содержать только стандартные Blockly block type.
 
-25. GeneratedMedia:
+25. ChronologyLine:
+{"title": string, "instruction": string, "events": [{"id": string, "label": string, "year": integer, "explanation": string, "lane"?: string}], "lanes"?: [{"id": string, "label": string}], "tolerance_years"?: integer, "explanation": string}
+Лента событий: ученик сам расставляет события по годам. 4–7 событий, годы — только из учебника или
+материала урока (до нашей эры — отрицательное число). label — короткое название без года; explanation
+у события — почему оно стоит здесь (что было причиной или что из него следует). lanes — параллельные
+линии (например, «Кокандское ханство» и «Российская империя»), у события тогда lane = id линии.
+Используй в истории для хронологии; в других предметах — для этапов открытий и развития.
+
+26. GeneratedMedia:
 {"title": string, "description"?: string, "media_kind": "image"|"video", "url"?: string, "data_url"?: string, "poster_url"?: string, "alt_text"?: string, "caption"?: string, "pedagogical_role"?: string, "visual_intent"?: string, "success_check"?: string, "job_id"?: string, "generation_id"?: string, "prompt"?: string, "model"?: string}
 Не используй GeneratedMedia при обычной генерации урока: этот блок вставляется только после
 реального вызова OpenRouter media API из редактора. Никогда не выдумывай url, data_url или
@@ -330,7 +338,7 @@ $3 \\cdot 3 = 9$ → «значит, $3^2 = 9$». Нельзя: «формула
 SortAndClassify или ProcessBuilder; для наук — PredictionLab, DataInvestigation,
 PhysicsSandbox и ProcessBuilder; для языков — SortAndClassify,
 BranchingScenario и ArgumentMap; для гуманитарных предметов — источники,
-ArgumentMap, BranchingScenario и ProcessBuilder; для информатики —
+ArgumentMap, BranchingScenario, ProcessBuilder и ChronologyLine (хронология в истории); для информатики —
 CodeBlocksLab, MisconceptionDebugger и ProcessBuilder; для практических предметов —
 BranchingScenario и самооценку. Цифровой тест не должен подменять
 физическое или творческое выполнение. Заверши урок Reflection и MasteryCheck с вопросом

@@ -35,7 +35,7 @@ HISTORY: dict[str, Any] = {
         "Различай причину и повод, последствия ближайшие и долгосрочные.",
         "Работа с источником: кто автор, когда и зачем создан источник, чему в нём можно доверять — и только потом вывод.",
         "Не оценивай прошлое мерками сегодняшнего дня: объясняй поступки людей условиями их времени.",
-        "Хотя бы одно задание на порядок событий и одно — на связь причин и следствий.",
+        "Хотя бы одно задание на порядок событий (ChronologyLine — ученик сам ставит события на ленту) и одно — на связь причин и следствий.",
     ),
     "misconceptions": (
         "история — это только даты и имена, а не причины и связи",
@@ -51,7 +51,7 @@ HISTORY: dict[str, Any] = {
         "explain": ["Presentation", "Timeline"],
         "model": ["WorkedExample"],
         "source": ["TextEvidencePicker"],
-        "chronology": ["SortAndClassify", "ProcessBuilder"],
+        "chronology": ["ChronologyLine", "SortAndClassify"],
         "practice": ["SortAndClassify", "TextEvidencePicker", "ArgumentMap", "ProcessBuilder"],
         "apply": ["ArgumentBuilder", "BranchingScenario", "ArgumentMap"],
     },
@@ -61,7 +61,7 @@ HISTORY: dict[str, Any] = {
     "checks": (
         {
             "code": "history_without_chronology",
-            "components": {"Timeline", "ProcessBuilder"},
+            "components": {"Timeline", "ChronologyLine", "ProcessBuilder"},
             "message": "В уроке истории нет ленты времени или задания на порядок событий",
         },
         {
@@ -106,7 +106,7 @@ def subject_prompt(profile: dict[str, Any]) -> str:
 # Задания — всё, где ученик действует (не объяснение).
 _TASK_COMPONENTS = frozenset({
     "GuidedPractice", "IndependentProblem", "RetrievalCheck", "TextEvidencePicker", "ArgumentBuilder", "SortAndClassify",
-    "ProcessBuilder", "ArgumentMap", "BranchingScenario", "MisconceptionDebugger", "MasteryCheck",
+    "ProcessBuilder", "ArgumentMap", "BranchingScenario", "MisconceptionDebugger", "MasteryCheck", "ChronologyLine",
 })
 
 

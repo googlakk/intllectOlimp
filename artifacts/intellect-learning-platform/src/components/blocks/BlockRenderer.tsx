@@ -40,6 +40,7 @@ export const blockLoaders: Record<string, BlockImporter> = {
   PhysicsSandbox: () => import('./PhysicsSandbox'),
   HotspotInvestigation: () => import('./HotspotInvestigation'),
   CodeBlocksLab: () => import('./CodeBlocksLab'),
+  ChronologyLine: () => import('./ChronologyLine'),
   GeneratedMedia: () => import('./GeneratedMedia'),
 };
 const preloadCache = new Map<string, Promise<BlockModule>>();

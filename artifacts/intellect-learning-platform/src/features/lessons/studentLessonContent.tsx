@@ -39,6 +39,7 @@ const PHASE_LABELS: Record<string, string> = {
   PhysicsSandbox: 'Физическая модель',
   HotspotInvestigation: 'Исследование схемы',
   CodeBlocksLab: 'Алгоритм из блоков',
+  ChronologyLine: 'Лента событий',
 };
 
 type ActiveLessonContentProps = {

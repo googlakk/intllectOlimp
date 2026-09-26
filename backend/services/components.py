@@ -32,7 +32,7 @@ COMPONENT_METADATA: dict[str, dict[str, Any]] = {
 
 HEAVY_COMPONENT_CODES = {
     "ProcessBuilder", "ArgumentMap", "BranchingScenario", "PredictionLab",
-    "DataInvestigation", "PhysicsSandbox", "HotspotInvestigation", "CodeBlocksLab",
+    "DataInvestigation", "PhysicsSandbox", "HotspotInvestigation", "CodeBlocksLab", "ChronologyLine",
 }
 
 REGISTRY_ID_TO_COMPONENT = {
@@ -54,6 +54,7 @@ REGISTRY_ID_TO_COMPONENT = {
     "physics-sandbox": "PhysicsSandbox",
     "hotspot-investigation": "HotspotInvestigation",
     "code-blocks-lab": "CodeBlocksLab",
+    "chronology-line": "ChronologyLine",
 }
 
 

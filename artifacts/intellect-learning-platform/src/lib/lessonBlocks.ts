@@ -16,6 +16,7 @@ const ASSESSMENT_COMPONENTS = new Set([
   'PhysicsSandbox',
   'HotspotInvestigation',
   'CodeBlocksLab',
+  'ChronologyLine',
   'MasteryCheck',
 ]);
 
@@ -34,6 +35,7 @@ const OBJECTIVE_ASSESSMENT_COMPONENTS = new Set([
   'PhysicsSandbox',
   'HotspotInvestigation',
   'CodeBlocksLab',
+  'ChronologyLine',
   'MasteryCheck',
 ]);
 

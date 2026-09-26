@@ -31,6 +31,7 @@ const PRACTICE_COMPONENTS = [
   'DataInvestigation',
   'PhysicsSandbox',
   'CodeBlocksLab',
+  'ChronologyLine',
 ];
 
 export type ObjectiveCoverage = {

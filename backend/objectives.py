@@ -36,6 +36,7 @@ PRACTICE_COMPONENTS = {
     "DataInvestigation",
     "PhysicsSandbox",
     "CodeBlocksLab",
+    "ChronologyLine",
 }
 ASSESSMENT_COMPONENTS = {"RetrievalCheck", "MasteryCheck"}
 INDEPENDENT_ASSESSMENT_COMPONENTS = {
@@ -53,6 +54,7 @@ INDEPENDENT_ASSESSMENT_COMPONENTS = {
     "PhysicsSandbox",
     "HotspotInvestigation",
     "CodeBlocksLab",
+    "ChronologyLine",
     "MasteryCheck",
 }
 HEAVY_ENGINE_COMPONENTS = {
@@ -64,6 +66,7 @@ HEAVY_ENGINE_COMPONENTS = {
     "PhysicsSandbox",
     "HotspotInvestigation",
     "CodeBlocksLab",
+    "ChronologyLine",
 }
 STAGE_COMPONENTS = {
     "diagnostic": {"RetrievalCheck"},
@@ -80,6 +83,7 @@ ALLOWED_COMPONENTS = {
     "BranchingScenario", "MisconceptionDebugger", "PredictionLab",
     "DataInvestigation", "PhysicsSandbox", "HotspotInvestigation",
     "CodeBlocksLab",
+    "ChronologyLine",
 }
 # Выведены из употребления: генератор их не выбирает, в конструкторе и каталоге
 # их нет. В ALLOWED_COMPONENTS остаются, чтобы уже созданные уроки открывались
@@ -702,6 +706,26 @@ def explanation_path_warnings(blocks: list[dict[str, Any]]) -> list[dict[str, An
     return warnings
 
 
+def component_content_warnings(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Проверка данных интерактивов, которые модель могла собрать неаккуратно."""
+    warnings: list[dict[str, Any]] = []
+    for index, block in enumerate(blocks):
+        if not isinstance(block, dict) or block.get("component") != "ChronologyLine":
+            continue
+        content = block.get("content") if isinstance(block.get("content"), dict) else {}
+        events = content.get("events") if isinstance(content.get("events"), list) else []
+        ids = [str(event.get("id")) for event in events if isinstance(event, dict)]
+        good_years = all(isinstance(event, dict) and isinstance(event.get("year"), int) and not isinstance(event.get("year"), bool)
+                         for event in events)
+        if not 3 <= len(events) <= 7 or not good_years or len(set(ids)) != len(ids):
+            warnings.append({
+                "code": "chronology_line_invalid",
+                "block": index,
+                "message": "Лента событий: нужно 3–7 событий с годами числом и разными id — проверьте блок",
+            })
+    return warnings
+
+
 def quality_report(
     blocks: list[dict[str, Any]],
     raw_objectives: str | None,
@@ -730,6 +754,7 @@ def quality_report(
     coverage["warnings"] = normalization_warnings + coverage["warnings"]
     coverage["warnings"] = coverage["warnings"] + shape_warnings
     coverage["warnings"] = coverage["warnings"] + explanation_path_warnings(normalized_blocks)
+    coverage["warnings"] = coverage["warnings"] + component_content_warnings(normalized_blocks)
     coverage["publishable"] = not coverage["errors"] and not coverage["gaps"] and bool(objectives)
     return {
         "objectives": objectives,

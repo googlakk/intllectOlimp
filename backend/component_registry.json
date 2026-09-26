@@ -592,6 +592,27 @@
     "rendering_notes": "Blockly workspace с проверкой конструкций."
   },
   {
+    "id": "chronology-line",
+    "code": "C42",
+    "category": "interact",
+    "subjects": ["humanities"],
+    "purpose": "Лента событий: расставить события по времени и увидеть, на сколько ошибся",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "instruction", "events"],
+      "properties": {
+        "title": {"type": "string"},
+        "instruction": {"type": "string"},
+        "events": {"type": "array", "items": {"type": "object", "required": ["id", "label", "year"], "properties": {"id": {"type": "string"}, "label": {"type": "string"}, "year": {"type": "integer"}, "explanation": {"type": "string"}, "lane": {"type": "string"}}}},
+        "lanes": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "label": {"type": "string"}}}},
+        "tolerance_years": {"type": "integer"},
+        "explanation": {"type": "string"}
+      }
+    },
+    "rendering_notes": "vis-timeline: карточки вперемешку на ленте, перетаскивание и ввод года; проверка с допуском и разбором."
+  },
+  {
     "id": "generated-media",
     "code": "C41",
     "category": "media",

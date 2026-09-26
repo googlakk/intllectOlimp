@@ -97,3 +97,22 @@ class WarningsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ChronologyContractTests(unittest.TestCase):
+    def test_prompt_lists_every_generation_component(self):
+        import re
+        from ai.generator import SYSTEM_PROMPT
+        from objectives import GENERATION_COMPONENTS
+        header = int(re.search(r"Допустимы только следующие (\d+) компонент", SYSTEM_PROMPT).group(1))
+        numbered = re.findall(r"^(\d+)\. ([A-Za-z]+):", SYSTEM_PROMPT, re.MULTILINE)
+        self.assertEqual(header, len(GENERATION_COMPONENTS))
+        self.assertEqual([int(number) for number, _ in numbered], list(range(1, len(numbered) + 1)))
+        self.assertIn("ChronologyLine", {name for _, name in numbered})
+
+    def test_bad_chronology_data_is_flagged(self):
+        from objectives import component_content_warnings
+        good = {"component": "ChronologyLine", "content": {"events": [{"id": str(i), "label": "x", "year": 1700 + i} for i in range(4)]}}
+        bad = {"component": "ChronologyLine", "content": {"events": [{"id": "a", "label": "x", "year": "1709"}, {"id": "a", "label": "y", "year": 1762}]}}
+        self.assertEqual(component_content_warnings([good]), [])
+        self.assertEqual([w["code"] for w in component_content_warnings([good, bad])], ["chronology_line_invalid"])

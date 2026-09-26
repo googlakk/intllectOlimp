@@ -422,7 +422,7 @@ function componentLabel(component: string): string {
     MindMap: 'Карта понятий', Timeline: 'Лента времени', SortAndClassify: 'Сортировка', ProcessBuilder: 'Сборка процесса',
     ArgumentMap: 'Карта аргументов', BranchingScenario: 'Сценарий решений', MisconceptionDebugger: 'Разбор ошибки',
     PredictionLab: 'Лаборатория прогноза', DataInvestigation: 'Исследование данных', PhysicsSandbox: 'Физическая модель',
-    HotspotInvestigation: 'Исследование изображения', CodeBlocksLab: 'Блоковое программирование', Illustration: 'Иллюстрация',
+    HotspotInvestigation: 'Исследование изображения', CodeBlocksLab: 'Блоковое программирование', ChronologyLine: 'Лента событий', Illustration: 'Иллюстрация',
   };
   return labels[component] || component;
 }
