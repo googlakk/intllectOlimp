@@ -51,15 +51,16 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "anthropic": "claude-sonnet-5",
         "openrouter": "anthropic/claude-sonnet-5",
     },
-    # Распознавание сканов учебника: формулы и номера задач должны быть точными.
+    # Учебники: книгу модель «переписывает» целиком (распознавание и разметка), поэтому
+    # по умолчанию — недорогая Haiku. Для сложных формул можно вернуть Sonnet:
+    # LLM_MODEL_TEXTBOOK_OCR=claude-sonnet-5.
     TASK_TEXTBOOK_OCR: {
-        "anthropic": "claude-sonnet-5",
-        "openrouter": "anthropic/claude-sonnet-5",
+        "anthropic": "claude-haiku-4-5",
+        "openrouter": "anthropic/claude-haiku-4.5",
     },
-    # Разбор текста учебника: оглавление и элементы параграфов (дословно, без решений).
     TASK_TEXTBOOK_STRUCTURE: {
-        "anthropic": "claude-sonnet-5",
-        "openrouter": "anthropic/claude-sonnet-5",
+        "anthropic": "claude-haiku-4-5",
+        "openrouter": "anthropic/claude-haiku-4.5",
     },
 }
 

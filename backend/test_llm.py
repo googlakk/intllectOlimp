@@ -513,7 +513,8 @@ class UserImagesTests(unittest.TestCase):
 
     def test_textbook_ocr_task_defaults(self):
         from llm.router import TASK_TEXTBOOK_OCR
-        self.assertEqual(resolve_route(TASK_TEXTBOOK_OCR, env={}).model, "claude-sonnet-5")
+        self.assertEqual(resolve_route(TASK_TEXTBOOK_OCR, env={}).model, "claude-haiku-4-5")
+        self.assertEqual(resolve_route(TASK_TEXTBOOK_OCR, env={"LLM_MODEL_TEXTBOOK_OCR": "claude-sonnet-5"}).model, "claude-sonnet-5")
 
     def test_router_skips_empty_images_and_rejects_bad_format(self):
         class OldProvider:
