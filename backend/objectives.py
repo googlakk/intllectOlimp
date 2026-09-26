@@ -38,6 +38,7 @@ PRACTICE_COMPONENTS = {
     "CodeBlocksLab",
     "ChronologyLine",
     "CauseEffectMap",
+    "StepSolver",
 }
 ASSESSMENT_COMPONENTS = {"RetrievalCheck", "MasteryCheck"}
 INDEPENDENT_ASSESSMENT_COMPONENTS = {
@@ -57,6 +58,7 @@ INDEPENDENT_ASSESSMENT_COMPONENTS = {
     "CodeBlocksLab",
     "ChronologyLine",
     "CauseEffectMap",
+    "StepSolver",
     "MasteryCheck",
 }
 HEAVY_ENGINE_COMPONENTS = {
@@ -88,6 +90,7 @@ ALLOWED_COMPONENTS = {
     "CodeBlocksLab",
     "ChronologyLine",
     "CauseEffectMap",
+    "StepSolver",
 }
 # Выведены из употребления: генератор их не выбирает, в конструкторе и каталоге
 # их нет. В ALLOWED_COMPONENTS остаются, чтобы уже созданные уроки открывались
@@ -757,6 +760,18 @@ def component_content_warnings(blocks: list[dict[str, Any]]) -> list[dict[str, A
                 "code": "cause_effect_map_invalid",
                 "block": index,
                 "message": "Причины и следствия: нужны событие, 4+ фактора с ролями, причина и последствие, не больше одного повода — исправьте или перегенерируйте блок",
+            })
+    from services.math_expression import step_solver_problem
+
+    for index, block in enumerate(blocks):
+        if not isinstance(block, dict) or block.get("component") != "StepSolver":
+            continue
+        problem = step_solver_problem(block.get("content") if isinstance(block.get("content"), dict) else {})
+        if problem:
+            warnings.append({
+                "code": "step_solver_invalid",
+                "block": index,
+                "message": f"Решаю по шагам: {problem} — исправьте или перегенерируйте блок",
             })
     return warnings
 

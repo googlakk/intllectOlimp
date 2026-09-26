@@ -44,7 +44,7 @@ class ToolSchemaTests(unittest.TestCase):
         from ai.generator import SYSTEM_PROMPT
         from ai.planner import build_topic_contract
         self.assertNotIn("HotspotInvestigation", SYSTEM_PROMPT)
-        self.assertIn("27 компонентов", SYSTEM_PROMPT)
+        self.assertIn("28 компонентов", SYSTEM_PROMPT)
         for subject in ("География", "Физика", "История"):
             plan = build_topic_contract(topic_name="Т", subject_name=subject, learning_objectives="Цель один. Цель два.",
                                         skills=[], resources=None, grade=7, hours=3, lesson_type="study")["component_plan"]

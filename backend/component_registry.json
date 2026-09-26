@@ -633,6 +633,30 @@
     "rendering_notes": "React Flow: причины и повод слева, событие в центре, последствия справа; роль выбирается кнопками."
   },
   {
+    "id": "step-solver",
+    "code": "C44",
+    "category": "interact",
+    "subjects": ["math"],
+    "purpose": "Решаю по шагам: ученик пишет решение строка за строкой, каждое преобразование проверяется на равносильность",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["start", "final_answer"],
+      "properties": {
+        "title": {"type": "string"},
+        "instruction": {"type": "string"},
+        "kind": {"type": "string", "enum": ["expression", "equation"]},
+        "start": {"type": "string"},
+        "steps": {"type": "array", "items": {"type": "object", "required": ["expected"], "properties": {"hint": {"type": "string"}, "expected": {"type": "string"}}}},
+        "final_answer": {"type": ["string", "array"]},
+        "answer_mode": {"type": "string", "enum": ["form", "equivalent"]},
+        "mistakes": {"type": "array", "items": {"type": "object", "required": ["wrong", "message"], "properties": {"wrong": {"type": "string"}, "message": {"type": "string"}}}},
+        "explanation": {"type": "string"}
+      }
+    },
+    "rendering_notes": "Строки решения в KaTeX, поле с кнопками дроби и корня; проверка равносильности подстановкой, образец шага после двух ошибок."
+  },
+  {
     "id": "generated-media",
     "code": "C41",
     "category": "media",

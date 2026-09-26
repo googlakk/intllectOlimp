@@ -39,6 +39,7 @@ describe('component demos', () => {
       'retrieval-check',
       'short-explanation',
       'sort-and-classify',
+      'step-solver',
       'text-evidence-picker',
       'timeline',
       'worked-example',

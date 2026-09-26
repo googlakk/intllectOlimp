@@ -1,12 +1,14 @@
 import { useMemo, useRef } from 'react';
 import katex from 'katex';
-import { mathToLatex, parseMath } from '@/features/interactiveEngines/mathExpression';
+import { mathLineToLatex, mathToLatex, parseMath } from '@/features/interactiveEngines/mathExpression';
 
 type Props = {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  /** Enter в поле: для блоков без формы вокруг поля. */
+  onEnter?: () => void;
   /** Кнопки дроби, корня и степени и запись «как в тетради» — для ответов-выражений и чисел. */
   mathTools?: boolean;
   className?: string;
@@ -22,15 +24,17 @@ const TOOLS: { label: string; title: string; before: string; after: string }[] =
 ];
 
 /** Поле ответа. Для математики — кнопки и предпросмотр: 3/4 видно дробью, sqrt(12) — корнем. */
-export default function MathAnswerInput({ value, onChange, disabled, placeholder, mathTools, className }: Props) {
+export default function MathAnswerInput({ value, onChange, disabled, placeholder, mathTools, className, onEnter }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const preview = useMemo(() => {
     // Простое число показывать незачем: предпросмотр нужен, когда в записи есть дробь, корень, степень.
     if (!mathTools || !/[/√^²³*:()a-z]|sqrt/i.test(value)) return null;
-    const node = parseMath(value);
-    if (!node) return null;
+    // Строка решения «3x − 6 = x + 4» — обе части; ответ «x = 5» — тоже целиком.
+    const node = value.includes('=') ? null : parseMath(value);
+    const latex = node ? mathToLatex(node) : mathLineToLatex(value);
+    if (!latex) return null;
     try {
-      return katex.renderToString(mathToLatex(node), { throwOnError: false });
+      return katex.renderToString(latex, { throwOnError: false });
     } catch {
       return null;
     }
@@ -65,6 +69,7 @@ export default function MathAnswerInput({ value, onChange, disabled, placeholder
         spellCheck={false}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onKeyDown={onEnter ? (event) => { if (event.key === 'Enter') { event.preventDefault(); onEnter(); } } : undefined}
         disabled={disabled}
         placeholder={placeholder}
         aria-label="Ваш ответ"

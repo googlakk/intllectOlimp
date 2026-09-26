@@ -16,7 +16,7 @@ ASSESSMENT_COMPONENTS = frozenset({
     "GuidedPractice", "IndependentProblem", "RetrievalCheck", "TextEvidencePicker", "ArgumentBuilder",
     "SortAndClassify", "ProcessBuilder", "ArgumentMap", "BranchingScenario", "MisconceptionDebugger",
     "PredictionLab", "DataInvestigation", "PhysicsSandbox", "HotspotInvestigation", "CodeBlocksLab", "ChronologyLine", "CauseEffectMap",
-    "MasteryCheck",
+    "StepSolver", "MasteryCheck",
 })
 LESSON_CONTEXT_LIMIT = 12000
 BLOCK_TEXT_LIMIT = 1200
@@ -55,7 +55,10 @@ def answer_spec(block: dict[str, Any], question_index: int | None = None) -> dic
     kind = str(item.get("type") or item.get("input_type") or "")
     numeric = kind in {"numeric", "number"} or bool(item.get("answer_unit"))
     return {
-        "correct": item.get("correct_answer", ""),
+        # У «Решаю по шагам» ответ — final_answer.
+        "correct": item.get("correct_answer", item.get("final_answer", "")),
+        "mode": "choice" if kind == "multiple_choice" or block.get("component") == "RetrievalCheck"
+        else item.get("answer_mode") if item.get("answer_mode") in {"form", "equivalent"} else None,
         "numeric": numeric and kind != "multiple_choice",
         "unit": item.get("answer_unit"),
         "accepted_units": item.get("accepted_units") if isinstance(item.get("accepted_units"), list) else None,
@@ -156,7 +159,9 @@ def turn_prompt(turn: TurnContext) -> str:
         lines.append(f"Разбор решения (для тебя): {str(item['explanation'])[:BLOCK_TEXT_LIMIT]}")
     if isinstance(steps, list) and steps:
         lines.append("Шаги решения (для тебя): " + " → ".join(
-            str(step.get("description", "")) for step in steps if isinstance(step, dict)
+            # WorkedExample — description; StepSolver — преобразование (hint) и строка после него (expected).
+            str(step.get("description") or " ".join(filter(None, [step.get("hint"), step.get("expected")])))
+            for step in steps if isinstance(step, dict)
         )[:BLOCK_TEXT_LIMIT])
     if turn.hints_shown:
         lines.append("Подсказки, которые ученик уже видел: " + " | ".join(turn.hints_shown))

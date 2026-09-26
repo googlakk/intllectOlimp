@@ -18,7 +18,7 @@ export type TutorBridge = { onAttempt?: (attempt: TutorAttempt) => void };
 export const ATTEMPT_VALUE_LIMIT = 200;
 
 /** Блоки этапа 1, которые сообщают тьютору значение ответа. */
-export const TUTOR_ATTEMPT_COMPONENTS: ReadonlySet<string> = new Set(['GuidedPractice', 'IndependentProblem']);
+export const TUTOR_ATTEMPT_COMPONENTS: ReadonlySet<string> = new Set(['GuidedPractice', 'IndependentProblem', 'StepSolver']);
 
 /** Пропсы для блока: onAttempt с привязкой к месту в уроке, или ничего. */
 export function tutorAttemptProps(

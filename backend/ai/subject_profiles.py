@@ -132,7 +132,7 @@ MATH: dict[str, Any] = {
         "explain": ["Presentation", "ShortExplanation"],
         "model": ["WorkedExample"],
         # Фирменный шаг — один допустимый блок, иначе модель выбирает привычный.
-        "first_practice": ["GuidedPractice"],
+        "first_practice": ["StepSolver"],
         "signature_practice": ["MisconceptionDebugger"],
         "practice": ["GuidedPractice", "SortAndClassify"],
         "apply": ["IndependentProblem"],
@@ -150,7 +150,7 @@ MATH: dict[str, Any] = {
     "check_lesson_types": ("study", None, ""),
     # Тема привязана к параграфу — у каждого примера и задачи должна быть ссылка на учебник (source_ref).
     # «Найди ошибку» строится на заблуждении, а не на задаче книги — его не проверяем.
-    "textbook_sourced": frozenset({"WorkedExample", "GuidedPractice", "IndependentProblem"}),
+    "textbook_sourced": frozenset({"WorkedExample", "StepSolver", "GuidedPractice", "IndependentProblem"}),
     "checks": (
         {
             "code": "math_without_worked_example",
@@ -159,7 +159,7 @@ MATH: dict[str, Any] = {
         },
         {
             "code": "math_without_step_practice",
-            "components": {"GuidedPractice"},
+            "components": {"StepSolver", "GuidedPractice"},
             "message": "В уроке математики нет задания, где ученик сам решает по шагам",
         },
         {
@@ -209,6 +209,7 @@ def subject_prompt(profile: dict[str, Any]) -> str:
 _TASK_COMPONENTS = frozenset({
     "GuidedPractice", "IndependentProblem", "RetrievalCheck", "TextEvidencePicker", "ArgumentBuilder", "SortAndClassify",
     "ProcessBuilder", "ArgumentMap", "BranchingScenario", "MisconceptionDebugger", "MasteryCheck", "ChronologyLine", "CauseEffectMap",
+    "StepSolver",
 })
 
 

@@ -56,6 +56,7 @@ REGISTRY_ID_TO_COMPONENT = {
     "code-blocks-lab": "CodeBlocksLab",
     "chronology-line": "ChronologyLine",
     "cause-effect-map": "CauseEffectMap",
+    "step-solver": "StepSolver",
 }
 
 

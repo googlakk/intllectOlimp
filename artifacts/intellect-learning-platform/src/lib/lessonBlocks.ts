@@ -18,6 +18,7 @@ const ASSESSMENT_COMPONENTS = new Set([
   'CodeBlocksLab',
   'ChronologyLine',
   'CauseEffectMap',
+  'StepSolver',
   'MasteryCheck',
 ]);
 
@@ -38,6 +39,7 @@ const OBJECTIVE_ASSESSMENT_COMPONENTS = new Set([
   'CodeBlocksLab',
   'ChronologyLine',
   'CauseEffectMap',
+  'StepSolver',
   'MasteryCheck',
 ]);
 

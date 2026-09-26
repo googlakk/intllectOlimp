@@ -169,7 +169,7 @@ class MathProfileTests(unittest.TestCase):
         steps = plan["component_plan"]
         self.assertTrue(any(step["allowed_components"] == ["WorkedExample"] for step in steps))
         practices = [step["allowed_components"] for step in steps if step["role"] == "practice"]
-        self.assertEqual(practices[:2], [["GuidedPractice"], ["MisconceptionDebugger"]])
+        self.assertEqual(practices[:2], [["StepSolver"], ["MisconceptionDebugger"]])
         self.assertTrue(all("источник" not in step["cognitive_action"] for step in steps))
         for step in steps:
             if step["evidence_stage"]:
@@ -226,3 +226,66 @@ class MathProfileTests(unittest.TestCase):
             asyncio.run(generate_lesson("Квадратные корни", "Алгебра", "Вычислять квадратные корни", None, None, grade=8))
         self.assertIn("Профиль предмета «Математика»", prompts[0])
         self.assertIn("меняй только числа и буквы", prompts[0])
+
+
+class StepSolverTests(unittest.TestCase):
+    def test_model_solution_is_verified(self):
+        from objectives import component_content_warnings
+
+        def block(**content):
+            return {"component": "StepSolver", "content": content}
+
+        good = [
+            block(kind="equation", start="3(x - 2) = x + 4", final_answer=["x = 5"],
+                  steps=[{"hint": "Раскройте скобки", "expected": "3x - 6 = x + 4"}, {"hint": "", "expected": "2x = 10"}],
+                  mistakes=[{"wrong": "3x - 6 = x - 4", "message": "Знак"}]),
+            block(kind="equation", start="x^2 = 3x", final_answer="x = 0 или x = 3",
+                  steps=[{"expected": "x(x - 3) = 0"}], mistakes=[{"wrong": "x = 3", "message": "Потерян корень"}]),
+            block(kind="expression", start="√12 + √27", final_answer=["5√3"], steps=[{"expected": "2√3 + 3√3"}],
+                  mistakes=[{"wrong": "√39", "message": "Корень суммы"}]),
+        ]
+        self.assertEqual(component_content_warnings(good), [])
+        bad = [
+            block(kind="equation", start="2x = 4", final_answer=["x = 3"]),
+            block(kind="expression", start="√12", final_answer=["2√3"], steps=[{"expected": "3√2"}]),
+            block(kind="expression", start="√12", final_answer=["2√3"], mistakes=[{"wrong": "2√3", "message": "?"}]),
+            block(start="", final_answer=["1"]),
+        ]
+        self.assertEqual([w["block"] for w in component_content_warnings(bad)], [0, 1, 2, 3])
+
+    def test_single_objective_math_plan_practises_by_steps(self):
+        steps = math_plan("Выносить множитель из-под знака корня")["component_plan"]
+        self.assertEqual(next(step for step in steps if step["role"] == "practice")["allowed_components"], ["StepSolver"])
+        self.assertEqual(next(step for step in steps if step["role"] == "apply")["allowed_components"], ["IndependentProblem"])
+
+    def test_tutor_judges_a_solution_line_not_the_final_answer(self):
+        from services.math_expression import solver_line_outcome
+        content = {"kind": "equation", "start": "3(x - 2) = x + 4", "final_answer": ["x = 5"]}
+        self.assertEqual(solver_line_outcome("3x - 6 = x + 4", content), "correct")
+        self.assertEqual(solver_line_outcome("3x - 2 = x + 4", content), "incorrect")
+
+    def test_rational_radical_identity_and_complete_roots(self):
+        from objectives import component_content_warnings
+
+        def block(**content):
+            return {"component": "StepSolver", "content": {"kind": "equation", **content}}
+
+        good = [
+            block(start="(x+1)/(x-2) = 2", final_answer=["x = 5"], steps=[{"expected": "x + 1 = 2(x - 2)"}]),
+            block(start="√x = 2", final_answer=["x = 4"], steps=[{"expected": "x = 4"}]),
+            block(start="2(x + 1) = 2x + 2", final_answer=["любое число"], steps=[{"expected": "0 = 0"}]),
+            block(start="x^2 - 5x + 6 = 0", final_answer=["x = 2 или x = 3"], steps=[{"expected": "(x - 2)(x - 3) = 0"}]),
+        ]
+        self.assertEqual(component_content_warnings(good), [])
+        missing_root = [block(start="x^2 = 9", final_answer=["x = 3"])]
+        self.assertEqual([w["code"] for w in component_content_warnings(missing_root)], ["step_solver_invalid"])
+
+    def test_shared_step_cases_match_the_browser(self):
+        import json
+        from pathlib import Path
+        from services.math_expression import check_solver_step
+        cases = json.loads((Path(__file__).parent / "fixtures" / "step_solver_cases.json").read_text(encoding="utf-8"))["cases"]
+        for case in cases:
+            status, done = check_solver_step(case["line"], kind=case["kind"], start=case["start"],
+                                             final_answer=case["final_answer"], answer_mode=case.get("answer_mode", "form"))
+            self.assertEqual((status, done), (case["status"], case["done"]), case["note"])

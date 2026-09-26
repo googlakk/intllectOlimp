@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mathToLatex, parseMath, sameMath } from './mathExpression';
+import { mathLineToLatex, mathToLatex, parseMath, sameMath } from './mathExpression';
 
 const latex = (text: string) => mathToLatex(parseMath(text)!);
 
@@ -30,5 +30,7 @@ describe('mathToLatex', () => {
     expect(latex('(a+b)^2')).toBe('{\\left(a + b\\right)}^{2}');
     expect(latex('(x+1)/(x-1)')).toBe('\\frac{x + 1}{x - 1}');
     expect(latex('0,5x')).toBe('0,5x');
+    expect(mathLineToLatex('3x - 6 = x + 4')).toBe('3x - 6 = x + 4');
+    expect(mathLineToLatex('x = 0 или x = 3')).toBe('x = 0\\quad\\text{или}\\quad x = 3');
   });
 });

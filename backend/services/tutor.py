@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from errors import ApplicationError
 from services.assessment import check_answer
+from services.math_expression import solver_line_outcome
 from tutor.context import (
     TurnContext, answer_spec, assessment_mode, authored_hints, lesson_context, nearest_theory_index,
     protected_items, turn_prompt,
@@ -250,10 +251,13 @@ async def take_tutor_turn(
     spec = answer_spec(block, payload.question_index)
     value = scrub_pii(payload.student_value)[:200] or None
     outcome = None
-    if value is not None:
+    if value is not None and block.get("component") == "StepSolver":
+        # Ученик присылает очередную строку решения: верна ли она, а не равна ли ответу.
+        outcome = solver_line_outcome(value, block.get("content") or {})
+    elif value is not None:
         outcome = check_answer(
             value, spec["correct"], numeric=spec["numeric"], unit=spec["unit"],
-            accepted_units=spec["accepted_units"], tolerance=spec["tolerance"],
+            accepted_units=spec["accepted_units"], tolerance=spec["tolerance"], mode=spec["mode"],
         )
     message = scrub_pii(payload.message)[: settings.max_message_chars] or None
 

@@ -33,6 +33,7 @@ const PRACTICE_COMPONENTS = [
   'CodeBlocksLab',
   'ChronologyLine',
   'CauseEffectMap',
+  'StepSolver',
 ];
 
 export type ObjectiveCoverage = {

@@ -41,6 +41,7 @@ const PHASE_LABELS: Record<string, string> = {
   CodeBlocksLab: 'Алгоритм из блоков',
   ChronologyLine: 'Лента событий',
   CauseEffectMap: 'Причины и следствия',
+  StepSolver: 'Решаю по шагам',
 };
 
 type ActiveLessonContentProps = {

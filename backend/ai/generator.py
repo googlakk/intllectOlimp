@@ -173,7 +173,7 @@ SYSTEM_PROMPT = """
 Каждый элемент массива имеет ровно такую оболочку:
 {"component": "ИмяКомпонента", "content": { ... }}
 
-Допустимы только следующие 27 компонентов и их точные схемы content:
+Допустимы только следующие 28 компонентов и их точные схемы content:
 
 1. ShortExplanation:
 {"title": string, "text": string, "key_concepts": string[], "callout"?: string}
@@ -326,7 +326,17 @@ vega_lite_spec должен быть простой Vega-Lite специфика
 отвлекающий фактор (unrelated). explanation у фактора — почему роль именно такая. Факты — из учебника.
 Используй в истории для причин и последствий; в обществознании — для анализа ситуаций.
 
-27. GeneratedMedia:
+27. StepSolver:
+{"title": string, "instruction": string, "kind": "expression"|"equation", "start": string, "steps": [{"hint": string, "expected": string}], "final_answer": string[], "answer_mode"?: "form"|"equivalent", "mistakes": [{"wrong": string, "message": string}], "explanation": string}
+Ученик сам пишет решение строка за строкой; каждая строка проверяется на равносильность с заданием.
+start — выражение или уравнение из задачи учебника (или её аналог), записанное как пишет ученик: 2√3, 3/4, x^2,
+3(x - 2) = x + 4 — без $ и LaTeX. steps — образец решения, 2–5 строк: hint называет преобразование
+(«раскройте скобки»), expected — строка после него. final_answer — все допустимые записи ответа;
+у уравнения — корни: "x = 5" или "x = 0 или x = 3". Для выражения answer_mode "form" — ответ в требуемом
+виде («вынесите множитель» → "5√3"). mistakes — 1–3 типичные ошибки этой задачи: wrong — неверная строка
+(«√39» при √12 + √27), message — что нарушено. Используй в математике как главное задание на отработку.
+
+28. GeneratedMedia:
 {"title": string, "description"?: string, "media_kind": "image"|"video", "url"?: string, "data_url"?: string, "poster_url"?: string, "alt_text"?: string, "caption"?: string, "pedagogical_role"?: string, "visual_intent"?: string, "success_check"?: string, "job_id"?: string, "generation_id"?: string, "prompt"?: string, "model"?: string}
 Не используй GeneratedMedia при обычной генерации урока: этот блок вставляется только после
 реального вызова OpenRouter media API из редактора. Никогда не выдумывай url, data_url или
@@ -346,7 +356,7 @@ $3 \\cdot 3 = 9$ → «значит, $3^2 = 9$». Нельзя: «формула
 предмете, передаётся в запросе.
 
 Следуй переданному предметному маршруту, а не одной универсальной последовательности.
-Для математических задач используй разобранные примеры, MisconceptionDebugger,
+Для математических задач используй разобранные примеры, StepSolver (решение по шагам), MisconceptionDebugger,
 SortAndClassify или ProcessBuilder; для наук — PredictionLab, DataInvestigation,
 PhysicsSandbox и ProcessBuilder; для языков — SortAndClassify,
 BranchingScenario и ArgumentMap; для гуманитарных предметов — источники,

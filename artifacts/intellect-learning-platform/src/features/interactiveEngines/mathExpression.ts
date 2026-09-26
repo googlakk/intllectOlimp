@@ -146,6 +146,14 @@ class Parser {
   }
 }
 
+/** Разобрать одну часть записи как есть, без «x = …». */
+export function parseExpression(source: unknown): MathNode | null {
+  const text = preprocess(String(source ?? ''));
+  if (!text || text.includes('=')) return null;
+  const tokens = tokenize(text);
+  return tokens && tokens.length ? new Parser(tokens).parse() : null;
+}
+
 /** Разобрать выражение; «x = …» в ответе — берём правую часть. null — не выражение (слова, пусто). */
 export function parseMath(source: unknown): MathNode | null {
   let text = preprocess(String(source ?? ''));
@@ -157,7 +165,7 @@ export function parseMath(source: unknown): MathNode | null {
   return tokens && tokens.length ? new Parser(tokens).parse() : null;
 }
 
-function variables(node: MathNode, into = new Set<string>()): Set<string> {
+export function variables(node: MathNode, into = new Set<string>()): Set<string> {
   if (node.kind === 'var') into.add(node.name);
   else if (node.kind === 'neg' || node.kind === 'sqrt') variables(node.arg, into);
   else if (node.kind === 'bin') { variables(node.left, into); variables(node.right, into); }
@@ -269,4 +277,19 @@ export function mathToLatex(node: MathNode): string {
       return `${left} ${node.op} ${right}`;
     }
   }
+}
+
+/** Строка решения для предпросмотра: выражение или уравнение «левая = правая». */
+export function mathLineToLatex(source: unknown): string | null {
+  // Ответ-корни «x = 0 или x = 3» — каждая часть формулой, «или» словом.
+  const parts = String(source ?? '').split(/\s+или\s+|\s*;\s*/i);
+  if (parts.length > 1) {
+    const rendered = parts.map((part) => mathLineToLatex(part));
+    return rendered.every(Boolean) ? rendered.join('\\quad\\text{или}\\quad ') : null;
+  }
+  const sides = String(source ?? '').split('=');
+  if (sides.length > 2) return null;
+  const nodes = sides.map(parseExpression);
+  if (nodes.some((node) => !node)) return null;
+  return nodes.map((node) => mathToLatex(node!)).join(' = ');
 }

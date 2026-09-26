@@ -1,0 +1,169 @@
+{
+  "cases": [
+    {
+      "kind": "equation",
+      "start": "3(x - 2) = x + 4",
+      "final_answer": [
+        "x = 5"
+      ],
+      "line": "3x - 6 = x + 4",
+      "status": "ok",
+      "done": false,
+      "note": "раскрыли скобки"
+    },
+    {
+      "kind": "equation",
+      "start": "3(x - 2) = x + 4",
+      "final_answer": [
+        "x = 5"
+      ],
+      "line": "3x - 6 = x - 4",
+      "status": "wrong",
+      "done": false,
+      "note": "ошибка знака"
+    },
+    {
+      "kind": "equation",
+      "start": "3(x - 2) = x + 4",
+      "final_answer": [
+        "x = 5"
+      ],
+      "line": "x = 5",
+      "status": "ok",
+      "done": true,
+      "note": "ответ"
+    },
+    {
+      "kind": "equation",
+      "start": "x^2 = 3x",
+      "final_answer": [
+        "x = 0 или x = 3"
+      ],
+      "line": "x = 3",
+      "status": "wrong",
+      "done": false,
+      "note": "потерян корень"
+    },
+    {
+      "kind": "equation",
+      "start": "x^2 = 3x",
+      "final_answer": [
+        "x = 0 или x = 3"
+      ],
+      "line": "x = 3 или x = 0",
+      "status": "ok",
+      "done": true,
+      "note": "корни в другом порядке"
+    },
+    {
+      "kind": "equation",
+      "start": "1/x = 1",
+      "final_answer": [
+        "x = 1"
+      ],
+      "line": "1 = x",
+      "status": "ok",
+      "done": false,
+      "note": "умножили на знаменатель"
+    },
+    {
+      "kind": "equation",
+      "start": "√x = 2",
+      "final_answer": [
+        "x = 4"
+      ],
+      "line": "x = 4",
+      "status": "ok",
+      "done": true,
+      "note": "возвели в квадрат"
+    },
+    {
+      "kind": "equation",
+      "start": "√(x+2) = x",
+      "final_answer": [
+        "x = 2"
+      ],
+      "line": "x + 2 = x^2",
+      "status": "wrong",
+      "done": false,
+      "note": "посторонний корень"
+    },
+    {
+      "kind": "equation",
+      "start": "2(x + 1) = 2x + 2",
+      "final_answer": [
+        "любое число"
+      ],
+      "line": "0 = 0",
+      "status": "ok",
+      "done": true,
+      "note": "тождество"
+    },
+    {
+      "kind": "equation",
+      "start": "x + 1 = x + 3",
+      "final_answer": [
+        "нет корней"
+      ],
+      "line": "1 = 3",
+      "status": "ok",
+      "done": true,
+      "note": "нет корней"
+    },
+    {
+      "kind": "equation",
+      "start": "x + 1 = x + 3",
+      "final_answer": [
+        "нет корней"
+      ],
+      "line": "0 = 0",
+      "status": "wrong",
+      "done": false,
+      "note": "не тождество"
+    },
+    {
+      "kind": "expression",
+      "start": "√12 + √27",
+      "final_answer": [
+        "5√3"
+      ],
+      "line": "2√3 + 3√3",
+      "status": "ok",
+      "done": false,
+      "note": "выражение: шаг"
+    },
+    {
+      "kind": "expression",
+      "start": "√12 + √27",
+      "final_answer": [
+        "5√3"
+      ],
+      "line": "5√3",
+      "status": "ok",
+      "done": true,
+      "note": "выражение: ответ"
+    },
+    {
+      "kind": "expression",
+      "start": "√12 + √27",
+      "final_answer": [
+        "5√3"
+      ],
+      "line": "√75",
+      "status": "ok",
+      "done": false,
+      "note": "равно, но не в нужном виде"
+    },
+    {
+      "kind": "expression",
+      "start": "√12 + √27",
+      "final_answer": [
+        "5√3"
+      ],
+      "line": "√39",
+      "status": "wrong",
+      "done": false,
+      "note": "корень суммы"
+    }
+  ]
+}
