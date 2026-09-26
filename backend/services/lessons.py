@@ -687,8 +687,11 @@ async def get_student_lesson_manifest(
 _UNSET: Any = object()
 
 
-async def with_textbook_warnings(report: dict[str, Any], db: AsyncSession, topic: Any, context: Any = _UNSET) -> dict[str, Any]:
-    """Добавить к проверке качества проверку по учебнику: урок без книги, выдуманные даты и ссылки, копирование задач."""
+async def with_textbook_warnings(report: dict[str, Any], db: AsyncSession, topic: Any, context: Any = _UNSET,
+                                 subject_name: str | None = None) -> dict[str, Any]:
+    """Добавить к проверке качества проверку по учебнику и по профилю предмета (например, у истории —
+    хронология, источник, причины и последствия)."""
+    from ai.subject_profiles import subject_warnings
     from ai.textbook_grounding import textbook_warnings
     from services.textbook_context import load_textbook_context, subject_has_textbook
 
@@ -696,7 +699,8 @@ async def with_textbook_warnings(report: dict[str, Any], db: AsyncSession, topic
         context = await load_textbook_context(db, topic)
     available = bool(context) or await subject_has_textbook(db, topic)
     quality = report["quality_report"]
-    quality["warnings"] = list(quality.get("warnings") or []) + textbook_warnings(report["normalized_blocks"], context, available)
+    quality["warnings"] = (list(quality.get("warnings") or []) + textbook_warnings(report["normalized_blocks"], context, available)
+                           + subject_warnings(report["normalized_blocks"], subject_name, getattr(topic, "lesson_type", "study")))
     return report
 
 
@@ -708,7 +712,7 @@ async def refresh_quality_contract(lesson: GeneratedLesson, db: AsyncSession) ->
         lesson.blocks or [],
         topic.learning_objectives,
         topic_contract=lesson_topic_contract(lesson, topic),
-    ), db, topic)
+    ), db, topic, subject_name=(lesson.lesson_metadata or {}).get("subject_name"))
     metadata = dict(lesson.lesson_metadata or {})
     metadata["learning_objectives"] = topic.learning_objectives
     metadata["objectives"] = report["objectives"]
@@ -763,7 +767,7 @@ async def refresh_quality_contract_for_blocks(
         blocks,
         topic.learning_objectives,
         topic_contract=lesson_topic_contract(lesson, topic),
-    ), db, topic)
+    ), db, topic, subject_name=(lesson.lesson_metadata or {}).get("subject_name"))
 
 
 async def get_lesson_quality(lesson_id: int, db: AsyncSession) -> dict[str, Any]:
@@ -775,7 +779,7 @@ async def get_lesson_quality(lesson_id: int, db: AsyncSession) -> dict[str, Any]
         lesson.blocks or [],
         topic.learning_objectives,
         topic_contract=lesson_topic_contract(lesson, topic),
-    ), db, topic)
+    ), db, topic, subject_name=(lesson.lesson_metadata or {}).get("subject_name"))
 
 
 async def unpublish_lesson(lesson_id: int, db: AsyncSession) -> GeneratedLesson:
@@ -906,7 +910,7 @@ async def generate_lesson_draft(
         blocks,
         topic.learning_objectives,
         topic_contract=plan["topic_contract"],
-    ), db, topic, textbook)
+    ), db, topic, textbook, subject.name)
     lesson.blocks = quality["normalized_blocks"]
     profile = classify_subject(subject.name)
     archetype = select_archetype(

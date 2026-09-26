@@ -649,6 +649,9 @@ async def generate_lesson(
         )
         topic_contract = topic_contract or plan["topic_contract"]
         component_plan = component_plan or plan["component_plan"]
+    from ai.subject_profiles import subject_profile, subject_prompt
+
+    subject_profile_data = subject_profile(subject_name)
     language_label = "кыргызском" if content_language == "ky" else "русском"
     teaching_requirement = (
         'Это контрольная без таймера. Используй только RetrievalCheck, IndependentProblem и MasteryCheck. '
@@ -665,7 +668,8 @@ async def generate_lesson(
 Семейство предмета: {profile["family_label"]} ({profile["family"]})
 Архетип урока: {archetype}
 Предметный маршрут: {route}
-Как показывать ход мысли: {SUBJECT_FAMILY_PROFILES[str(profile["family"])]["show_path"]}
+Как показывать ход мысли: {subject_profile_data["show_path"] if subject_profile_data else SUBJECT_FAMILY_PROFILES[str(profile["family"])]["show_path"]}
+{subject_prompt(subject_profile_data) if subject_profile_data else ""}
 Язык всего учебного содержания: на {language_label} языке.
 Проверка учителем: {"обязательна — предмет не распознан" if profile["teacher_review_required"] else "не требуется"}
 Предмет: {subject_name}

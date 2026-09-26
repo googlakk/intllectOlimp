@@ -416,10 +416,13 @@ async def _load_textbook(db: Any, topic_id: int) -> dict[str, Any] | None:
 
 def _subject_guidance(metadata: dict[str, Any]) -> tuple[str, str]:
     from ai.generator import SUBJECT_FAMILY_PROFILES
+    from ai.subject_profiles import subject_profile
 
     family = str(metadata.get("subject_family") or "general")
     profile = SUBJECT_FAMILY_PROFILES.get(family) or SUBJECT_FAMILY_PROFILES["general"]
-    return str(metadata.get("subject_name") or profile["label"]), str(profile["show_path"])
+    # Профиль предмета (история и др.) точнее семейства — его ход мысли и берём.
+    specific = subject_profile(str(metadata.get("subject_name") or ""))
+    return str(metadata.get("subject_name") or profile["label"]), str((specific or profile)["show_path"])
 
 
 async def get_tutor_session(

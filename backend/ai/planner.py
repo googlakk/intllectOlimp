@@ -165,8 +165,11 @@ def _step(
     }
 
 
-def build_component_plan(shape: LessonShape, objectives: list[dict[str, Any]], focus: str) -> list[dict[str, Any]]:
+def build_component_plan(shape: LessonShape, objectives: list[dict[str, Any]], focus: str,
+                         profile: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """profile — профиль предмета (ai/subject_profiles.py): уточняет блоки обычного урока."""
     ids = _objective_ids(objectives)
+    subject_plan = (profile or {}).get("plan") or {}
     plan: list[dict[str, Any]] = []
 
     if shape == "assessment_only":
@@ -206,9 +209,22 @@ def build_component_plan(shape: LessonShape, objectives: list[dict[str, Any]], f
 
     # A concise slide sequence is the shared visual spine. Simulations and
     # generated media may clarify it, but never become the only explanation.
-    explain_allowed = ["Presentation"]
-    for objective_id in ids:
+    explain_allowed = subject_plan.get("explain") or ["Presentation"]
+    for position, objective_id in enumerate(ids):
         plan.append(_step("explain", "explanation", [objective_id], explain_allowed, "Понять новое понятие или явление"))
+        if subject_plan:
+            plan.append(_step("model", "explanation", [objective_id], subject_plan.get("model") or ["WorkedExample"],
+                              "Разобрать пример: как рассуждать по шагам"))
+            if position == 0 and len(ids) > 1 and subject_plan.get("chronology"):
+                # Один раз на урок — порядок событий и связь причин со следствиями.
+                # При одной цели хронологию даёт лента времени в объяснении: урок не вылезает из бюджета.
+                plan.append(_step("practice", "practice", [objective_id], subject_plan["chronology"],
+                                  "Выстроить события по времени и связать причины со следствиями"))
+            # Первая цель — работа с источником, чтобы она гарантированно была в уроке.
+            practice = subject_plan.get("source") if position == 0 and subject_plan.get("source") else subject_plan["practice"]
+            plan.append(_step("practice", "practice", [objective_id], practice,
+                              "Найти доказательство в источнике и объяснить причины и последствия"))
+            continue
         if shape != "procedure_mastery":
             plan.append(_step("model", "explanation", [objective_id], ["WorkedExample"], "Разобрать пример применения"))
         if shape == "process_inquiry":
@@ -221,7 +237,9 @@ def build_component_plan(shape: LessonShape, objectives: list[dict[str, Any]], f
         else:
             plan.append(_step("practice", "practice", [objective_id], ["GuidedPractice", "SortAndClassify", "ProcessBuilder"], "Активно обработать материал"))
 
-    if shape in {"extended_concept", "process_inquiry", "source_argument"} or len(ids) > 1:
+    if subject_plan.get("apply"):
+        plan.append(_step("apply", "practice", ids, subject_plan["apply"], "Применить к новой ситуации: решение, аргумент, оценка"))
+    elif shape in {"extended_concept", "process_inquiry", "source_argument"} or len(ids) > 1:
         plan.append(_step("apply", "practice", ids, ["IndependentProblem", "ArgumentBuilder", "DataInvestigation", "ProcessBuilder"], "Связать цели и перенести знания"))
     else:
         plan.append(_step("apply", "practice", ids, ["IndependentProblem"], "Самостоятельно применить материал"))
@@ -326,9 +344,14 @@ def build_topic_contract(
             "Продолжить следующие цели темы отдельными частями модуля.",
             "Добавить повторение и итоговую работу после всех частей.",
         ]
+    from ai.subject_profiles import subject_profile
+
+    profile = subject_profile(subject_name)
+    if profile:
+        contract["subject_profile"] = profile["id"]
     return {
         "topic_contract": contract,
-        "component_plan": build_component_plan(shape, objectives, focus),
+        "component_plan": build_component_plan(shape, objectives, focus, profile),
     }
 
 
