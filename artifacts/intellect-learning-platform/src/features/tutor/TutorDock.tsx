@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ArrowLeft, ChevronDown, ChevronRight, EyeOff, Lightbulb, Loader2, Pause, Play, RotateCcw, Send } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, EyeOff, Lightbulb, Loader2, Pause, Play, RotateCcw, Send, UserRound, Volume2 } from 'lucide-react';
 import type { AvatarCue } from '@/lib/api/types';
 import { useAvatarNarration } from '@/features/lessons/useAvatarNarration';
 import { parseMathText } from '@/components/blocks/ShortExplanation';
@@ -40,9 +40,11 @@ const WIDTH: Record<DockMode, string> = {
 };
 
 /** «Живой» значок помощника: мягко дышит, при предложении помощи — светится. */
-function TutorOrb({ calling, imageUrl, speaking = false }: { calling: boolean; imageUrl?: string | null; speaking?: boolean }) {
+function TutorOrb({ calling, imageUrl, narrator = false, speaking = false }: {
+  calling: boolean; imageUrl?: string | null; narrator?: boolean; speaking?: boolean;
+}) {
   const reduceMotion = useReducedMotion();
-  if (imageUrl) {
+  if (imageUrl || narrator) {
     // Лицо рассказчика вместо шарика: говорит — вокруг пульсирует кольцо.
     return (
       <span className="relative grid h-9 w-9 shrink-0 place-items-center" aria-hidden>
@@ -50,7 +52,10 @@ function TutorOrb({ calling, imageUrl, speaking = false }: { calling: boolean; i
           <motion.span className="absolute inset-0 rounded-full bg-primary/50"
             animate={{ scale: [1, 1.45], opacity: [0.6, 0] }} transition={{ duration: 1.4, repeat: Infinity, ease: 'easeOut' }} />
         )}
-        <img src={imageUrl} alt="" className="relative h-8 w-8 rounded-full object-cover object-top ring-2 ring-primary/70" />
+        {imageUrl
+          ? <img src={imageUrl} alt="" className="relative h-8 w-8 rounded-full object-cover object-top ring-2 ring-primary/70" />
+          // Картинка аватара не настроена — силуэт рассказчика, чтобы было видно, что это персонаж.
+          : <span className="relative grid h-8 w-8 place-items-center rounded-full bg-primary text-white ring-2 ring-primary/40"><UserRound className="h-5 w-5" /></span>}
       </span>
     );
   }
@@ -104,6 +109,7 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
   });
   const cueText = companion?.avatarEnabled ? narration.narration : '';
   const faceUrl = companion?.avatarEnabled ? companion?.previewImageUrl : null;
+  const narrator = Boolean(cueText);
   const lastReply = useMemo(() => messages.filter((message) => message.role === 'tutor').at(-1), [messages]);
   const teasers = tutor
     ? tutorTeasers({ locked, hasOffer, lastReply: lastReply?.text })
@@ -323,6 +329,18 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
                 </div>
                 {!locked && (
                   <div className="flex flex-wrap gap-1.5 px-4 pb-2">
+                    {companion?.cue && !companion.avatarEnabled && (
+                      <button type="button" onClick={() => companion.onAvatarEnabledChange(true)}
+                        className="inline-flex min-h-[44px] items-center gap-1 rounded-full border border-white/15 px-3 text-xs font-semibold text-white/85 hover:bg-white/10">
+                        <UserRound className="h-3.5 w-3.5" aria-hidden /> Вернуть рассказчика
+                      </button>
+                    )}
+                    {narrator && (
+                      <button type="button" onClick={() => { setMode('speak'); narration.toggle(); }}
+                        className="inline-flex min-h-[44px] items-center gap-1 rounded-full border border-white/15 px-3 text-xs font-semibold text-white/85 hover:bg-white/10">
+                        <Volume2 className="h-3.5 w-3.5" aria-hidden /> Объяснение шага
+                      </button>
+                    )}
                     <button type="button" onClick={() => ask(() => tutor?.requestHint())} disabled={pending}
                       className="inline-flex min-h-[44px] items-center gap-1 rounded-full border border-white/15 px-3 text-xs font-semibold text-white/85 hover:bg-white/10 disabled:opacity-50">
                       <Lightbulb className="h-3.5 w-3.5" aria-hidden /> Подсказка
@@ -355,7 +373,7 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
             <button ref={idleRef} type="button" onClick={expand} aria-expanded={false} aria-controls={chatId}
               aria-label={hasOffer ? `Помощник: ${teaser}` : 'Открыть помощника'}
               className="flex h-12 w-full items-center gap-2 px-2 pr-4 text-left">
-              <TutorOrb calling={hasOffer} imageUrl={faceUrl} speaking={narration.state === 'speaking'} />
+              <TutorOrb calling={hasOffer} imageUrl={faceUrl} narrator={narrator} speaking={narration.state === 'speaking'} />
               <span className="relative h-5 min-w-0 flex-1 overflow-hidden text-sm text-white/75">
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.span
@@ -374,7 +392,7 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
             </button>
           ) : (
             <form onSubmit={submit} className="flex h-12 items-center gap-2 px-2">
-              <TutorOrb calling={hasOffer && !open} imageUrl={faceUrl} speaking={narration.state === 'speaking'} />
+              <TutorOrb calling={hasOffer && !open} imageUrl={faceUrl} narrator={narrator} speaking={narration.state === 'speaking'} />
               <input
                 ref={inputRef}
                 value={draft}
