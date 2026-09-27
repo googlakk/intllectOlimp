@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+import base64
+import hashlib
+import json
 import os
 import re
+import time
 from typing import Any
 
 import httpx
@@ -41,6 +46,45 @@ def _settings(*, admin: bool = False) -> tuple[str, str]:
     return url, key
 
 
+VERIFIED_TOKEN_TTL_S = 120
+VERIFIED_TOKEN_LIMIT = 5000
+_verified_tokens: dict[str, tuple[float, dict[str, Any]]] = {}
+_client: httpx.AsyncClient | None = None
+_client_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _http_client() -> httpx.AsyncClient:
+    """Один клиент на процесс: соединение с Supabase (TCP + TLS) переиспользуется, а не открывается
+    заново на каждый запрос. Новый цикл событий (тесты, перезапуск) — новый клиент."""
+    global _client, _client_loop
+    loop = asyncio.get_running_loop()
+    if _client is None or _client.is_closed or _client_loop is not loop:
+        _client = httpx.AsyncClient(timeout=httpx.Timeout(20, connect=10))
+        _client_loop = loop
+    return _client
+
+
+def _token_key(access_token: str) -> str:
+    return hashlib.sha256(access_token.encode()).hexdigest()
+
+
+def _seconds_until_expiry(access_token: str) -> float:
+    """Срок токена из поля exp (без проверки подписи: ей занимается Supabase при первой проверке)."""
+    try:
+        payload = access_token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        return float(claims["exp"]) - time.time()
+    except (IndexError, KeyError, TypeError, ValueError):
+        return 0.0
+
+
+def _prune_verified_tokens(now: float) -> None:
+    for key in [key for key, (expires, _) in _verified_tokens.items() if expires <= now]:
+        del _verified_tokens[key]
+    if len(_verified_tokens) >= VERIFIED_TOKEN_LIMIT:
+        _verified_tokens.clear()
+
+
 async def _request(
     method: str,
     path: str,
@@ -53,8 +97,7 @@ async def _request(
     url, key = _settings(admin=admin)
     headers = {"apikey": key, "Content-Type": "application/json"}
     headers["Authorization"] = f"Bearer {access_token or key}"
-    async with httpx.AsyncClient(timeout=20) as client:
-        response = await client.request(method, f"{url}{path}", json=payload, headers=headers)
+    response = await _http_client().request(method, f"{url}{path}", json=payload, headers=headers)
     if response.is_error:
         body = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
         message = body.get("msg") or body.get("message") or body.get("error_description")
@@ -84,7 +127,25 @@ async def refresh_session(refresh_token: str) -> dict[str, Any]:
 
 
 async def get_auth_user(access_token: str) -> dict[str, Any]:
-    return await _request("GET", "/auth/v1/user", access_token=access_token)
+    """Пользователь по токену. Проверенный Supabase токен помним до двух минут (не дольше его срока):
+    иначе каждый запрос API ждёт лишний сетевой вызов в Supabase Auth (0,4–0,7 с)."""
+    key = _token_key(access_token)
+    cached = _verified_tokens.get(key)
+    now = time.monotonic()
+    if cached and cached[0] > now:
+        return cached[1]
+    user = await _request("GET", "/auth/v1/user", access_token=access_token)
+    ttl = min(VERIFIED_TOKEN_TTL_S, _seconds_until_expiry(access_token) - 5)
+    if ttl > 0:
+        if len(_verified_tokens) >= VERIFIED_TOKEN_LIMIT:
+            _prune_verified_tokens(now)
+        _verified_tokens[key] = (now + ttl, user)
+    return user
+
+
+def forget_auth_token(access_token: str) -> None:
+    """После выхода или смены пароля токен снова проверяется в Supabase."""
+    _verified_tokens.pop(_token_key(access_token), None)
 
 
 async def change_auth_password(access_token: str, password: str) -> None:

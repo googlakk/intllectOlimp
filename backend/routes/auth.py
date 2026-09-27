@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -9,11 +10,13 @@ from models import AccountEvent, Profile
 from auth_dependencies import get_current_user, require_roles
 from services.auth import (
     AuthPrincipal,
+    forget_principal,
     principal_for_auth_user,
     serialize_principal,
 )
 from services.supabase_auth import (
     change_auth_password,
+    forget_auth_token,
     logout_auth_session,
     password_sign_in,
     refresh_session,
@@ -50,10 +53,9 @@ async def login(payload: LoginInput, db: AsyncSession = Depends(get_db)):
     principal = await principal_for_auth_user(
         str((session.get("user") or {}).get("id") or ""), session["access_token"], db
     )
-    profile = await db.get(Profile, principal.profile_id)
-    if profile is not None:
-        profile.last_login_at = datetime.now(timezone.utc)
-        await db.commit()
+    # Одна команда UPDATE вместо чтения профиля и записи: на далёкой базе каждый обмен — сотни мс.
+    await db.execute(update(Profile).where(Profile.id == principal.profile_id).values(last_login_at=datetime.now(timezone.utc)))
+    await db.commit()
     return _session_payload(session, principal)
 
 
@@ -93,10 +95,13 @@ async def change_password(
             metadata_json={},
         ))
         await db.commit()
+    forget_principal(user.auth_user_id)
     return {"ok": True}
 
 
 @router.post("/logout")
 async def logout(user: AuthPrincipal = Depends(get_current_user)):
+    forget_auth_token(user.access_token)
+    forget_principal(user.auth_user_id)
     await logout_auth_session(user.access_token)
     return {"ok": True}

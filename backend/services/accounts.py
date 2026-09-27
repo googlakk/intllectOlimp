@@ -20,7 +20,7 @@ from models import (
     Student,
     Teacher,
 )
-from services.auth import AuthPrincipal, AuthServiceError
+from services.auth import AuthPrincipal, AuthServiceError, forget_principal
 from services.curriculum_graph import refresh_student_access
 from services.supabase_auth import (
     admin_create_auth_user,
@@ -415,6 +415,7 @@ async def set_account_blocked(
         metadata_json={},
     ))
     await db.commit()
+    forget_principal(profile.auth_user_id)
 
 
 async def reset_temporary_password(
@@ -446,4 +447,5 @@ async def reset_temporary_password(
         metadata_json={},
     ))
     await db.commit()
+    forget_principal(profile.auth_user_id)
     return password

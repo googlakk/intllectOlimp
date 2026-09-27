@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 from uuid import UUID
 
@@ -46,11 +47,27 @@ def serialize_principal(user: AuthPrincipal) -> dict[str, Any]:
     }
 
 
+# Профиль активного пользователя помним недолго: это лишний запрос к базе на каждом вызове API.
+# Смена пароля, блокировка и сброс пароля сбрасывают запись сразу (forget_principal).
+PRINCIPAL_TTL_S = 30
+_principals: dict[UUID, tuple[float, AuthPrincipal]] = {}
+
+
+def forget_principal(auth_user_id: UUID | str | None) -> None:
+    try:
+        _principals.pop(UUID(str(auth_user_id)), None)
+    except (TypeError, ValueError):
+        pass
+
+
 async def principal_for_auth_user(auth_user_id: str, access_token: str, db: AsyncSession) -> AuthPrincipal:
     try:
         parsed_auth_user_id = UUID(auth_user_id)
     except (TypeError, ValueError) as exc:
         raise AuthServiceError(status_code=401, detail="Сессия недействительна.", code="session_invalid") from exc
+    cached = _principals.get(parsed_auth_user_id)
+    if cached and cached[0] > time.monotonic():
+        return replace(cached[1], access_token=access_token)
     row = (
         await db.execute(
             select(Profile, Student.grade)
@@ -65,7 +82,7 @@ async def principal_for_auth_user(auth_user_id: str, access_token: str, db: Asyn
         message = "Аккаунт заблокирован." if profile.status == "blocked" else "Аккаунт пока не активирован."
         code = "account_blocked" if profile.status == "blocked" else "account_inactive"
         raise AuthServiceError(status_code=403, detail=message, code=code)
-    return AuthPrincipal(
+    principal = AuthPrincipal(
         profile_id=profile.id,
         auth_user_id=profile.auth_user_id,
         organization_id=profile.organization_id,
@@ -78,6 +95,10 @@ async def principal_for_auth_user(auth_user_id: str, access_token: str, db: Asyn
         grade=grade,
         access_token=access_token,
     )
+    if len(_principals) > 5000:
+        _principals.clear()
+    _principals[parsed_auth_user_id] = (time.monotonic() + PRINCIPAL_TTL_S, principal)
+    return principal
 
 
 # Kept as pure helpers for old data migrations; they are not exposed as login APIs.
