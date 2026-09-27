@@ -19,6 +19,7 @@ const LessonEditor = lazy(() => import('@/pages/teacher/LessonEditor'));
 const Components = lazy(() => import('@/pages/teacher/Components'));
 const Textbooks = lazy(() => import('@/pages/teacher/Textbooks'));
 const Accounts = lazy(() => import('@/pages/teacher/Accounts'));
+const Feedback = lazy(() => import('@/pages/admin/Feedback'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -93,6 +94,7 @@ function Router() {
       <Route path="/dashboard/components" component={() => <RoutedPage component={Components} allowedRoles={['teacher', 'admin']} />} />
       <Route path="/dashboard/textbooks" component={() => <RoutedPage component={Textbooks} allowedRoles={['teacher', 'admin']} />} />
       <Route path="/admin/accounts" component={() => <RoutedPage component={Accounts} allowedRoles={['admin']} />} />
+      <Route path="/admin/feedback" component={() => <RoutedPage component={Feedback} allowedRoles={['admin']} />} />
       
       <Route>
         <div className="flex min-h-[100dvh] items-center justify-center bg-background">

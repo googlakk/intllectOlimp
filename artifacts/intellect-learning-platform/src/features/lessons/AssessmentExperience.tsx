@@ -6,6 +6,8 @@ import { parseMathText } from '@/components/blocks/ShortExplanation';
 import { assessmentQuestions } from './assessmentModel';
 import { applyProgressToCache } from './progressCache';
 import { lessonHeaderText } from './lessonMetadata';
+import { LessonFeedbackDialog } from '@/features/feedback/LessonFeedbackDialog';
+import { useLessonFeedbackPrompt } from '@/features/feedback/useLessonFeedbackPrompt';
 
 export function AssessmentExperience({ lesson, progress, studentId, subjectId, reload }: {
   lesson: GeneratedLesson; progress: ProgressRecord | null | undefined; studentId: number; subjectId: string;
@@ -18,6 +20,7 @@ export function AssessmentExperience({ lesson, progress, studentId, subjectId, r
   const [result, setResult] = useState<ProgressRecord | null>(progress ?? null);
   const started = useRef(Date.now());
   const restart = useRestartLessonProgress();
+  const feedback = useLessonFeedbackPrompt(lesson.topic_id, lesson.active_version_id);
   const save = useMutation({ mutationFn: (finish: boolean) => saveProgress({
     student_id: studentId, topic_id: lesson.topic_id, lesson_version_id: lesson.active_version_id,
     status: finish ? 'completed' : 'in_progress', responses, answers: {},
@@ -26,7 +29,7 @@ export function AssessmentExperience({ lesson, progress, studentId, subjectId, r
     attempts_by_step: Object.fromEntries(lesson.blocks.map((_, index) => [String(index), 1])),
   }), onSuccess: async (saved, finish) => {
     applyProgressToCache(queryClient, saved);
-    if (finish) { setCompleted(true); setResult(saved); }
+    if (finish) { setCompleted(true); setResult(saved); feedback.ask(); }
     await queryClient.invalidateQueries({ queryKey: ['progress', studentId] });
     await queryClient.invalidateQueries({ queryKey: ['curriculum-map', studentId] });
     await queryClient.invalidateQueries({ queryKey: ['subjects'] });
@@ -72,5 +75,6 @@ export function AssessmentExperience({ lesson, progress, studentId, subjectId, r
       <span aria-live="polite">{save.isPending ? 'Сохраняется…' : save.isSuccess ? 'Сохранено' : `Ответов: ${answered} из ${questions.length}`}</span>
       <button disabled={save.isPending || answered < questions.length} onClick={() => save.mutate(true)} className="rounded-lg bg-primary px-5 py-3 text-primary-foreground disabled:opacity-50">Сдать работу</button>
     </div>}
+    <LessonFeedbackDialog open={feedback.open} onClose={feedback.close} topicId={lesson.topic_id} />
   </div>;
 }

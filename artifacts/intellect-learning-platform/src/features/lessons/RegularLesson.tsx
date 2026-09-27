@@ -23,6 +23,8 @@ import { useNextLessonManifestPrefetch } from '@/features/lessons/lessonPrefetch
 import { buildLessonIntro } from '@/features/lessons/lessonIntro';
 import { useLessonTutor } from '@/features/tutor/useLessonTutor';
 import { TutorBridgeProvider } from '@/features/tutor/TutorBridgeContext';
+import { LessonFeedbackDialog } from '@/features/feedback/LessonFeedbackDialog';
+import { useLessonFeedbackPrompt } from '@/features/feedback/useLessonFeedbackPrompt';
 export function RegularLesson() {
   const { subjectId, topicId: topicIdParam } = useParams();
   const topicId = Number(topicIdParam);
@@ -43,6 +45,9 @@ export function RegularLesson() {
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [introDismissed, setIntroDismissed] = useState(false);
   const restartProgress = useRestartLessonProgress();
+  // Отзыв об уроке — сразу после прохождения, один раз на урок.
+  const feedback = useLessonFeedbackPrompt(topicId, lesson?.active_version_id);
+  const askFeedback = feedback.ask;
   const initializedForId = useRef<number | null>(null);
   const startTime = useRef(Date.now());
   const baseElapsedTime = useRef(0);
@@ -119,7 +124,8 @@ export function RegularLesson() {
     setResult({ score, level });
     setIsCompleted(true);
     saveState(activeBlocks.length, Math.max(maxOpenedStep, activeBlocks.length - 1), 'completed', ans, att, score, level, mastery, evidence, masteryStatus);
-  }, [activeBlocks, activeOriginalIndices, objectives, objectiveMastery, maxOpenedStep, saveState, savedObjectiveEvidence]);
+    askFeedback();
+  }, [activeBlocks, activeOriginalIndices, objectives, objectiveMastery, maxOpenedStep, saveState, savedObjectiveEvidence, askFeedback]);
   const completeDiagnostic = useCallback(() => {
     const { mastery, evidence } = calculateDiagnosticCompletion({
       blocks,
@@ -242,6 +248,7 @@ export function RegularLesson() {
         onAvatarEnabledChange={setAvatarEnabled}
         onAudioEnabledChange={setAudioEnabled}
       />
+      <LessonFeedbackDialog open={feedback.open} onClose={feedback.close} topicId={topicId} />
     </TutorBridgeProvider>
   );
 }
