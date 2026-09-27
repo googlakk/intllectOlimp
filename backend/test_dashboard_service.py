@@ -68,12 +68,27 @@ class LearningReportTests(unittest.IsolatedAsyncioTestCase):
         from unittest.mock import AsyncMock, patch
         from services.dashboard import get_student_learning_report
         from errors import ApplicationError
-        db = SimpleNamespace(get=AsyncMock())
-        with patch('services.dashboard._visible_student_ids', AsyncMock(return_value=[1])):
-            with self.assertRaises(ApplicationError):
-                await get_student_learning_report(2, db, user=SimpleNamespace(role='teacher'))
-        db.get.assert_not_awaited()
+        # Ученик вне классов учителя не находится запросом с проверкой доступа — дальше отчёт не читается.
+        db = SimpleNamespace(scalar=AsyncMock(return_value=None), execute=AsyncMock())
+        with self.assertRaises(ApplicationError) as denied:
+            await get_student_learning_report(2, db, user=SimpleNamespace(role='teacher', teacher_id=5))
+        self.assertEqual(denied.exception.status_code, 404)
+        db.execute.assert_not_awaited()
 
     def test_multiple_students_cannot_exceed_one_hundred_percent(self):
         self.assertEqual(build_dashboard_overview(students=2, subjects=1, topics=3, published_lessons=3, completed_lessons=6)['average_progress'], 100)
         self.assertEqual(build_dashboard_overview(students=2, subjects=1, topics=3, published_lessons=3, completed_lessons=2)['average_progress'], 33.3)
+
+
+class OverviewQueryCountTests(unittest.IsolatedAsyncioTestCase):
+    async def test_teacher_overview_is_a_single_query(self):
+        from unittest.mock import AsyncMock, MagicMock
+        from services.dashboard import get_dashboard_overview
+        result = MagicMock()
+        result.one.return_value = SimpleNamespace(students=2, subjects=1, topics=4, published=3, completed=4)
+        db = SimpleNamespace(execute=AsyncMock(return_value=result), scalar=AsyncMock(), scalars=AsyncMock())
+        overview = await get_dashboard_overview(db, user=SimpleNamespace(role="teacher", teacher_id=5))
+        self.assertEqual(db.execute.await_count, 1)
+        db.scalar.assert_not_awaited()
+        db.scalars.assert_not_awaited()
+        self.assertEqual(overview["average_progress"], 50.0)
