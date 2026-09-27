@@ -15,13 +15,30 @@ from sqlalchemy import select
 
 from database import AsyncSessionLocal
 from models import GenerationJob
-from services.avatar import refresh_avatar_job
+from services.avatar import AvatarServiceError, refresh_avatar_job
 
 logger = logging.getLogger(__name__)
 
 POLL_SEC = int(os.getenv("AVATAR_POLL_SEC", "30"))
 # Старше недели не опрашиваем вечно; неделя подхватывает и задания, зависшие без открытого редактора.
 MAX_AGE = timedelta(days=7)
+
+
+# Урока или версии нет, тема в архиве: повтор не поможет — задание закрываем с понятной причиной,
+# учитель увидит её в редакторе («Не удалось создать»), а опрос не повторяет его каждые 30 с.
+PERMANENT_ERRORS = frozenset({404, 409})
+
+
+async def _mark_failed(db, job_id: int, message: str) -> None:
+    job = await db.get(GenerationJob, job_id)
+    if job is None or job.status not in ("submitted", "processing"):
+        return
+    now = datetime.now(timezone.utc)
+    job.status = "failed"
+    job.error = {"message": message}
+    job.completed_at = now
+    job.updated_at = now
+    await db.commit()
 
 
 async def poll_pending_avatar_jobs() -> int:
@@ -39,6 +56,11 @@ async def poll_pending_avatar_jobs() -> int:
         async with AsyncSessionLocal() as db:
             try:
                 await refresh_avatar_job(job_id, db)
+            except AvatarServiceError as exc:
+                await db.rollback()
+                logger.warning("Avatar job %s refresh failed: %s %s", job_id, exc.status_code, exc.detail)
+                if exc.status_code in PERMANENT_ERRORS:
+                    await _mark_failed(db, job_id, str(exc.detail))
             except Exception as exc:  # временный сбой HeyGen или хранилища — попробуем в следующий раз
                 logger.warning("Avatar job %s refresh failed: %s", job_id, exc.__class__.__name__)
                 await db.rollback()

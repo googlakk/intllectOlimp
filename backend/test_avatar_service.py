@@ -262,3 +262,37 @@ class AvatarPollerTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(avatar_poller, "AsyncSessionLocal", Session), patch.object(avatar_poller, "refresh_avatar_job", refresh):
             self.assertEqual(await avatar_poller.poll_pending_avatar_jobs(), 2)
         self.assertEqual([call.args[0] for call in refresh.await_args_list], [1, 2])
+
+
+class AvatarPollerPermanentErrorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_job_of_archived_or_missing_lesson_is_closed(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from services import avatar_poller
+        from services.avatar import AvatarServiceError
+        job = SimpleNamespace(id=24, status="processing", error=None, completed_at=None, updated_at=None)
+
+        class Session:
+            def __init__(self):
+                self.rollback = AsyncMock()
+                self.commit = AsyncMock()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args):
+                return False
+
+            async def scalars(self, _statement):
+                result = MagicMock()
+                result.all.return_value = [24]
+                return result
+
+            async def get(self, _model, _id):
+                return job
+
+        refresh = AsyncMock(side_effect=AvatarServiceError(status_code=409, detail="Сначала восстановите тему из архива"))
+        with patch.object(avatar_poller, "AsyncSessionLocal", Session), patch.object(avatar_poller, "refresh_avatar_job", refresh):
+            await avatar_poller.poll_pending_avatar_jobs()
+        self.assertEqual(job.status, "failed")
+        self.assertEqual(job.error, {"message": "Сначала восстановите тему из архива"})
