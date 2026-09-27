@@ -39,7 +39,7 @@ Required project-local MCP/tools:
 Available global runtime tools:
 
 - browser and `node_repl` for UI smoke checks.
-- Supabase MCP servers exist globally but are not part of this project's required tool surface unless the product adopts Supabase.
+- The product uses Supabase (Postgres, Auth, Storage). Production and local development share one database — see `docs/CLAUDE_HANDOFF.md` §1–2 before touching data, migrations or deploys.
 
 Recommended plugin layer, when installed by the user:
 
@@ -70,4 +70,4 @@ If a check cannot run, state the reason and what evidence replaced it.
 - qa owns repeatable verification and evidence capture.
 - reviewer performs independent risk review.
 
-Do not auto-merge or auto-deliver. Stop at a clear, user-readable handoff unless the user explicitly asks to deploy, merge, or commit.
+Do not auto-merge or auto-deliver. Commit each finished step; deploy only after the owner says «выкладывай» (Railway via `railway up`, see `docs/CLAUDE_HANDOFF.md` §2).
