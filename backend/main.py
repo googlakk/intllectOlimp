@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import asyncio
 import os
 from pathlib import Path
 
@@ -57,7 +58,14 @@ async def lifespan(app: FastAPI):
         await apply_schema_compatibility(connection)
     await seed_if_empty()
     await warm_database_pool()
+    # Видео аватара дозревают в HeyGen минутами — сервер сам забирает готовые, не дожидаясь редактора.
+    from services.avatar_poller import run_avatar_poller
+
+    stop_poller = asyncio.Event()
+    poller = asyncio.create_task(run_avatar_poller(stop_poller))
     yield
+    stop_poller.set()
+    await poller
     await engine.dispose()
 
 

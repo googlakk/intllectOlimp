@@ -169,7 +169,7 @@ class MissingBucketTests(unittest.IsolatedAsyncioTestCase):
                               lesson_version_id=9, scene_id="scene-1", result_payload=None, error=None, completed_at=None, updated_at=None)
 
         class Session:
-            async def get(self, _model, _id):
+            async def get(self, _model, _id, **_kwargs):
                 return job
 
             async def commit(self):
@@ -194,3 +194,71 @@ class MissingBucketTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.status, "failed")
         self.assertIn("avatar-videos", result.error["message"])
+
+
+class StaleVersionAndPublishTests(unittest.IsolatedAsyncioTestCase):
+    def doc(self, script):
+        return {"episodes": [{"scenes": [{"id": "scene-1", "avatar_cues": [{"id": "cue-1", "script": script}]}]}]}
+
+    def session(self, lesson, versions):
+        from models import GeneratedLesson
+
+        class Session:
+            async def get(self, model, row_id, **_kwargs):
+                if model is GeneratedLesson:
+                    return lesson
+                return versions.get(row_id)
+        return Session()
+
+    async def test_stale_published_version_goes_to_current_draft(self):
+        from unittest.mock import AsyncMock, patch
+        from types import SimpleNamespace
+        from services import avatar as service
+        lesson = SimpleNamespace(active_version_id=12, published_version_id=10)
+        versions = {10: SimpleNamespace(id=10, lesson_id=3), 12: SimpleNamespace(id=12, lesson_id=3)}
+        with patch.object(service, "ensure_lesson_media_draft", AsyncMock(side_effect=lambda version_id, _db: version_id)) as ensure:
+            self.assertEqual(await service._avatar_draft_version(10, self.session(lesson, versions)), 12)
+        ensure.assert_awaited_once()
+        self.assertEqual(ensure.await_args.args[0], 12)
+
+    async def test_video_also_goes_to_published_version_when_the_cue_text_is_the_same(self):
+        from types import SimpleNamespace
+        from services.avatar import published_version_with_same_cue
+        from narration import spoken_text
+        lesson = SimpleNamespace(active_version_id=12, published_version_id=10)
+        script = "Дробь не имеет смысла, если знаменатель равен нулю."
+        versions = {12: SimpleNamespace(id=12, lesson_id=3, lesson_document=self.doc(script)),
+                    10: SimpleNamespace(id=10, lesson_id=3, lesson_document=self.doc(script))}
+        job = SimpleNamespace(lesson_version_id=12, request_payload={"cue_id": "cue-1", "script": spoken_text(script)})
+        self.assertEqual(await published_version_with_same_cue(job, self.session(lesson, versions)), 10)
+        # Текст реплики в опубликованном уроке другой — видео только в черновик.
+        versions[10] = SimpleNamespace(id=10, lesson_id=3, lesson_document=self.doc("Другой текст реплики."))
+        self.assertIsNone(await published_version_with_same_cue(job, self.session(lesson, versions)))
+        # Урок не опубликован — некуда.
+        self.assertIsNone(await published_version_with_same_cue(job, self.session(SimpleNamespace(active_version_id=12, published_version_id=None), versions)))
+
+
+class AvatarPollerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_poller_refreshes_pending_jobs_and_survives_a_failure(self):
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from services import avatar_poller
+
+        class Session:
+            def __init__(self):
+                self.rollback = AsyncMock()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args):
+                return False
+
+            async def scalars(self, _statement):
+                result = MagicMock()
+                result.all.return_value = [1, 2]
+                return result
+
+        refresh = AsyncMock(side_effect=[RuntimeError("HeyGen timeout"), None])
+        with patch.object(avatar_poller, "AsyncSessionLocal", Session), patch.object(avatar_poller, "refresh_avatar_job", refresh):
+            self.assertEqual(await avatar_poller.poll_pending_avatar_jobs(), 2)
+        self.assertEqual([call.args[0] for call in refresh.await_args_list], [1, 2])

@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from errors import ApplicationError
 from llm import LLMError
 from llm.heygen import AVATAR_ENGINE, HeyGenProvider
-from models import AvatarProfile, GenerationJob, LessonAsset, LessonVersion
+from models import AvatarProfile, GeneratedLesson, GenerationJob, LessonAsset, LessonVersion
 from narration import spoken_text
 from services.lessons import (LessonServiceError, clear_lesson_manifest_cache_for_version, ensure_lesson_media_draft)
 from storage import SupabaseStorage
@@ -220,6 +220,13 @@ async def refresh_custom_photo_profile(
 
 
 async def _avatar_draft_version(version_id: int, db: AsyncSession) -> int:
+    """Черновик урока, куда пишется видео. Номер версии мог устареть: первая реплика опубликованного урока
+    создаёт черновик с новым номером, а редактор шлёт остальные со старым; учитель мог поправить урок,
+    пока HeyGen делал видео. Тогда пишем в актуальный черновик того же урока, а не отказываем."""
+    version = await db.get(LessonVersion, version_id)
+    lesson = await db.get(GeneratedLesson, version.lesson_id) if version is not None and getattr(version, "lesson_id", None) else None
+    if lesson is not None and lesson.active_version_id and lesson.active_version_id != version_id:
+        version_id = lesson.active_version_id
     try:
         return await ensure_lesson_media_draft(version_id, db)
     except LessonServiceError as exc:
@@ -295,10 +302,42 @@ async def submit_avatar_job(payload: Any, db: AsyncSession,
     return job
 
 
+def _cue_script(document: Any, cue_id: str | None) -> str | None:
+    for episode in (document or {}).get("episodes", []) if isinstance(document, dict) else []:
+        for scene in episode.get("scenes", []) if isinstance(episode, dict) else []:
+            for cue in scene.get("avatar_cues", []) if isinstance(scene, dict) else []:
+                if isinstance(cue, dict) and cue.get("id") == cue_id:
+                    return spoken_text(str(cue.get("script") or ""))
+    return None
+
+
+async def published_version_with_same_cue(job: Any, db: AsyncSession) -> int | None:
+    """Опубликованная версия урока, если в ней та же реплика с тем же текстом.
+
+    Видео пишется в черновик, а ученик видит опубликованную версию — без переопубликации он видео
+    не увидит. Если реплика в опубликованном уроке дословно та же, видео — лишь её озвучка, содержание
+    урока не меняется: прикрепляем и туда. Текст реплики изменился — только черновик, учитель переопубликует.
+    """
+    payload = job.request_payload or {}
+    cue_id, script = payload.get("cue_id"), payload.get("script")
+    if not cue_id or not script:
+        return None
+    draft = await db.get(LessonVersion, job.lesson_version_id)
+    lesson = await db.get(GeneratedLesson, draft.lesson_id) if draft is not None and getattr(draft, "lesson_id", None) else None
+    published_id = getattr(lesson, "published_version_id", None)
+    if not published_id or published_id == job.lesson_version_id:
+        return None
+    published = await db.get(LessonVersion, published_id)
+    if published is None or _cue_script(published.lesson_document, cue_id) != script:
+        return None
+    return published_id
+
+
 async def refresh_avatar_job(job_id: int, db: AsyncSession,
                              provider: HeyGenProvider | None = None,
                              storage: SupabaseStorage | None = None) -> GenerationJob:
-    job = await db.get(GenerationJob, job_id)
+    # Строка задания под блокировкой: опрос из редактора и фоновый опрос не создадут видео дважды.
+    job = await db.get(GenerationJob, job_id, with_for_update=True)
     if job is None or job.provider != "heygen" or not job.external_job_id:
         raise AvatarServiceError(status_code=404, detail="Задание HeyGen не найдено")
     if job.status in {"completed", "failed", "cancelled"}:
@@ -332,8 +371,7 @@ async def refresh_avatar_job(job_id: int, db: AsyncSession,
                 return job
             # Корзина закрытая: публичной ссылки нет, ученику выдаётся подписанная (avatar_video_urls).
             asset_url = f"storage:{bucket}/{path}"
-        db.add(LessonAsset(
-            lesson_version_id=job.lesson_version_id,
+        asset_fields = dict(
             generation_job_id=job.id,
             scene_id=job.scene_id,
             kind="avatar_video",
@@ -353,8 +391,13 @@ async def refresh_avatar_job(job_id: int, db: AsyncSession,
                 "pedagogical_role": "avatar_explanation",
                 "placement": "avatar",
             },
-        ))
+        )
+        db.add(LessonAsset(lesson_version_id=job.lesson_version_id, **asset_fields))
         await clear_lesson_manifest_cache_for_version(job.lesson_version_id, db)
+        published_id = await published_version_with_same_cue(job, db)
+        if published_id is not None:
+            db.add(LessonAsset(lesson_version_id=published_id, **asset_fields))
+            await clear_lesson_manifest_cache_for_version(published_id, db)
         job.status = "completed"
         job.completed_at = datetime.now(timezone.utc)
     elif result.status == "failed":

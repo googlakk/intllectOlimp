@@ -239,10 +239,13 @@ export default function AvatarConfigurationPanel({ lesson }: AvatarConfiguration
     }
     try {
       setStatus(`Отправка реплик: 0 из ${cues.length}`);
+      // У опубликованного урока первая реплика создаёт черновик с новым номером версии —
+      // остальные отправляем уже в него (раньше они падали с «Черновик урока изменился»).
+      let versionId = lesson.active_version_id;
       for (let index = 0; index < cues.length; index += 1) {
         const { scene, cue } = cues[index];
-        await createJob.mutateAsync({
-          lesson_version_id: lesson.active_version_id,
+        const job = await createJob.mutateAsync({
+          lesson_version_id: versionId,
           scene_id: scene.id,
           beat_id: cue.beat_id,
           cue_id: cue.id,
@@ -250,10 +253,13 @@ export default function AvatarConfigurationPanel({ lesson }: AvatarConfiguration
           script: cue.script,
           locale: 'ru-RU',
         });
+        if (job?.lesson_version_id) versionId = job.lesson_version_id;
         setStatus(`Отправка реплик: ${index + 1} из ${cues.length}`);
       }
-      await jobs.refetch();
-      setStatus('HeyGen создаёт реплики. Готовые видео автоматически появятся на своих слайдах.');
+      // Урок перечитываем: номер черновика мог смениться, и опрос готовности должен идти по нему.
+      await queryClient.invalidateQueries({ queryKey: ['lesson', lesson.topic_id] });
+      await queryClient.invalidateQueries({ queryKey: ['avatar-jobs'] });
+      setStatus('HeyGen создаёт реплики — это несколько минут. Готовые видео сами появятся в уроке, даже если закрыть редактор.');
     } catch (error) {
       setStatus('');
       setActionError(error instanceof Error ? error.message : 'Не удалось создать реплики аватара');
@@ -459,7 +465,7 @@ export default function AvatarConfigurationPanel({ lesson }: AvatarConfiguration
       )}
       {completedJobs > 0 && lesson.published_version_id && lesson.active_version_id !== lesson.published_version_id && (
         // Видео пишутся в черновик: опубликованная версия, которую видит ученик, не меняется сама.
-        <p className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-amber-700"><CircleAlert className="h-4 w-4 shrink-0" />Видео аватара готовы в черновике. Ученики увидят их после «Обновить публикацию» на шаге «Проверка и публикация».</p>
+        <p className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-amber-700"><CircleAlert className="h-4 w-4 shrink-0" />Видео аватара готовы. Реплики с прежним текстом ученики уже видят; если вы меняли текст урока — нажмите «Обновить публикацию» на шаге «Проверка и публикация».</p>
       )}
       {status && <p className="mt-3 text-sm font-medium text-muted-foreground" aria-live="polite">{status}</p>}
       {jobs.data?.some((job) => job.status === 'failed') && (
