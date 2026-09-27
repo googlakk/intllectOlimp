@@ -594,10 +594,13 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
         <AnimatePresence mode="wait" initial={false}>
           {speaking ? (mobile ? null : speechLine) : tutor ? (
             mobile ? (
+              // Телефон: не кнопка, а «поле» — сразу видно, что помощнику можно написать. Нажатие открывает чат с клавиатурой.
               <motion.button key="ask" type="button" onClick={openChat} aria-expanded={open} aria-controls={chatId}
+                aria-label="Написать вопрос помощнику"
                 initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={reduceMotion ? undefined : { opacity: 0 }}
-                className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full border border-white/10 bg-neutral-900/95 px-4 text-sm font-semibold text-white/85 shadow-lg">
-                <MessageCircle className="h-4 w-4 shrink-0 text-primary" aria-hidden /> Спросить
+                className="flex h-12 min-w-0 flex-1 items-center gap-2 rounded-full border border-white/15 bg-neutral-900/95 px-4 text-left text-sm text-white/60 shadow-lg">
+                <MessageCircle className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                <span className="min-w-0 flex-1 truncate">{locked ? 'Помощник' : 'Спросить…'}</span>
               </motion.button>
             ) : (
               <motion.div key="form" className="flex min-w-0 flex-1"

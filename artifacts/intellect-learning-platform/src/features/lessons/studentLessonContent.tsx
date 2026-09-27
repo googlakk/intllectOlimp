@@ -381,7 +381,10 @@ function LessonContinueBar({ canContinue, isLastStep, isCompleted, isDiagnosticR
             ? 'h-12 rounded-[26px] border border-white/10 bg-neutral-900/95 px-5 text-white shadow-2xl hover:bg-neutral-800 sm:w-[240px] sm:px-8'
             : 'w-[240px] rounded-xl bg-primary px-8 text-primary-foreground shadow-sm hover:bg-primary/90'} font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40`}
         >
-          {isLastStep ? (isDiagnosticRoute ? 'Начать урок' : 'Завершить урок') : 'Продолжить'}
+          {isLastStep ? (isDiagnosticRoute ? 'Начать урок' : 'Завершить урок') : (
+            // Телефон с помощником: короче, чтобы полю вопроса хватило места.
+            leading ? <><span className="sm:hidden">Далее</span><span className="hidden sm:inline">Продолжить</span></> : 'Продолжить'
+          )}
           <ChevronDown className="h-5 w-5 -rotate-90" />
         </button>
       </div>
