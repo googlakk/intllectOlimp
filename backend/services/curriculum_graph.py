@@ -39,8 +39,12 @@ class CurriculumGraphError(ApplicationError):
     pass
 
 
-CURRICULUM_MAP_CACHE_TTL_SEC = 30
+# Карта сбрасывается при каждом изменении прогресса, тем и публикации уроков; срок — страховка.
+CURRICULUM_MAP_CACHE_TTL_SEC = 120
 _curriculum_map_cache: dict[tuple[int, int | None], tuple[float, dict[str, Any]]] = {}
+# «Замок после пройденной темы», который остался и после пересчёта (тему открывает другая связь графа):
+# для тех же строк пересчёт не повторяем — иначе он шёл на каждом открытии карты.
+_confirmed_locks: dict[tuple[int, int | None], tuple[Any, ...]] = {}
 
 
 def clear_curriculum_map_cache(student_id: int | None = None, subject_id: int | None = None) -> None:
@@ -859,6 +863,13 @@ async def _upsert_topic_access(db: AsyncSession, values: list[dict[str, Any]]) -
         ))
 
 
+def _rows_signature(rows: list[Any]) -> tuple[Any, ...]:
+    return tuple(
+        (getattr(topic, "id", topic), getattr(access, "state", None), getattr(progress, "status", None))
+        for topic, _section, _subject, access, _lesson_status, progress in rows
+    )
+
+
 def _has_stale_lock(rows: list[Any]) -> bool:
     """Тема закрыта, хотя предыдущая в том же предмете уже пройдена — строки доступа устарели
     (например, записаны старой версией или пересчёт после урока не случился)."""
@@ -908,10 +919,16 @@ async def get_student_curriculum_map(
 
     rows = await load_rows()
     has_materialized_access = any(access is not None for _topic, _section, _subject, access, _lesson_status, _progress in rows)
-    if refresh or (rows and not has_materialized_access) or _has_stale_lock(rows):
+    lock_key = (student_id, subject_id)
+    stale_lock = _has_stale_lock(rows) and _confirmed_locks.get(lock_key) != _rows_signature(rows)
+    if refresh or (rows and not has_materialized_access) or stale_lock:
         await refresh_student_access(student_id, db)
         await db.flush()
         rows = await load_rows()
+        if _has_stale_lock(rows):
+            if len(_confirmed_locks) > 10000:
+                _confirmed_locks.clear()
+            _confirmed_locks[lock_key] = _rows_signature(rows)
     topics = []
     for topic, section, subject, access, lesson_status, progress in rows:
         topics.append({

@@ -465,3 +465,36 @@ class StaleLockTests(unittest.TestCase):
         available = SimpleNamespace(state="available")
         self.assertTrue(_has_stale_lock([(1, 1, subject, available, "published", done), (2, 1, subject, locked, "published", None)]))
         self.assertFalse(_has_stale_lock([(1, 1, subject, available, "published", None), (2, 1, subject, locked, "published", None)]))
+
+
+class ConfirmedLockTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        from services import curriculum_graph
+        clear_curriculum_map_cache()
+        curriculum_graph._confirmed_locks.clear()
+
+    async def test_lock_that_survives_recount_is_not_recounted_again(self):
+        from services import curriculum_graph
+        db = FakeCurriculumMapSession(materialized_access=1)
+        subject = db.rows[0][2]
+        done = SimpleNamespace(status="completed", mastery_status="mastered", attempts=1)
+        locked = SimpleNamespace(state="locked", readiness_score=0.0, reason="Закрыто.", unlocked_by_topic_id=None)
+        first_topic = SimpleNamespace(id=1, name="Первая", hours=1)
+        second_topic = SimpleNamespace(id=2, name="Вторая", hours=1)
+        db.rows = [
+            (first_topic, db.rows[0][1], subject, SimpleNamespace(state="mastered", readiness_score=1.0, reason="", unlocked_by_topic_id=None), "published", done),
+            (second_topic, db.rows[0][1], subject, locked, "published", None),
+        ]
+        with patch("services.curriculum_graph.refresh_student_access", new=AsyncMock(return_value=[])) as refresh:
+            await get_student_curriculum_map(7, db, subject_id=4)  # type: ignore[arg-type]
+            clear_curriculum_map_cache()
+            await get_student_curriculum_map(7, db, subject_id=4)  # type: ignore[arg-type]
+        refresh.assert_awaited_once()
+        # Прогресс изменился — строки другие, пересчёт снова нужен.
+        db.rows[1] = (second_topic, db.rows[1][1], subject, locked, "published", SimpleNamespace(status="in_progress", mastery_status=None, attempts=1))
+        db.rows[0] = (first_topic, db.rows[0][1], subject, db.rows[0][3], "published", SimpleNamespace(status="completed", mastery_status="mastered", attempts=2))
+        clear_curriculum_map_cache()
+        curriculum_graph._confirmed_locks[(7, 4)] = ("другие строки",)
+        with patch("services.curriculum_graph.refresh_student_access", new=AsyncMock(return_value=[])) as refresh:
+            await get_student_curriculum_map(7, db, subject_id=4)  # type: ignore[arg-type]
+        refresh.assert_awaited_once()

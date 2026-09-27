@@ -814,6 +814,9 @@ async def unpublish_lesson(lesson_id: int, db: AsyncSession) -> GeneratedLesson:
     lesson.published_by = None
     clear_lesson_manifest_cache(lesson.topic_id)
     await clear_subject_outline_cache_for_topic(lesson.topic_id, db)
+    # На карте ученика урок сразу «опубликован» или «готовится», а не через срок кэша.
+    from services.curriculum_graph import clear_curriculum_map_cache
+    clear_curriculum_map_cache()
     await db.commit()
     await db.refresh(lesson)
     return lesson
@@ -1075,6 +1078,9 @@ async def publish_lesson(
     lesson.published_version_id = lesson.active_version_id
     clear_lesson_manifest_cache(lesson.topic_id)
     await clear_subject_outline_cache_for_topic(lesson.topic_id, db)
+    # На карте ученика урок сразу «опубликован» или «готовится», а не через срок кэша.
+    from services.curriculum_graph import clear_curriculum_map_cache
+    clear_curriculum_map_cache()
     await db.commit()
     await db.refresh(lesson)
     return lesson
