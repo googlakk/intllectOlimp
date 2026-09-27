@@ -190,16 +190,19 @@ export default function Presentation({ title, slides, activeBeatId, onTeachingBe
           <span className="hidden sm:inline">Назад</span>
         </button>
         
-        <div className="flex gap-1">
+        <div className="flex">
           {slides.map((_, i) => (
+            // Точка маленькая, а зона нажатия — под палец (32 px).
             <button
               key={i}
               onClick={() => selectSlide(i)}
-              className={`w-2.5 h-2.5 rounded-full transition-colors ${
-                currentIndex === i ? 'bg-primary' : 'bg-border hover:bg-primary/50'
-              }`}
+              className="group flex h-8 w-6 items-center justify-center"
               aria-label={`Перейти к слайду ${i + 1}`}
-            />
+            >
+              <span className={`block h-2.5 w-2.5 rounded-full transition-colors ${
+                currentIndex === i ? 'bg-primary' : 'bg-border group-hover:bg-primary/50'
+              }`} />
+            </button>
           ))}
         </div>
 

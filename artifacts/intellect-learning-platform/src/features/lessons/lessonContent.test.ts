@@ -31,3 +31,17 @@ describe('lesson content normalization', () => {
     expect(segments.join(' ')).toBe(source);
   });
 });
+
+describe('LaTeX commands that start with \\n', () => {
+  it('keeps \\neq and friends inside formulas', async () => {
+    const { normalizeLessonMarkup } = await import('./lessonContent');
+    expect(normalizeLessonMarkup('Смысл при $x \\neq 0$ и $x \\ne 5$')).toBe('Смысл при $x \\neq 0$ и $x \\ne 5$');
+    expect(normalizeLessonMarkup('$\\neg p$, $\\nabla f$, $a \\notin B$, $\\nu$')).toBe('$\\neg p$, $\\nabla f$, $a \\notin B$, $\\nu$');
+  });
+
+  it('still turns a literal \\n into a new line', async () => {
+    const { normalizeLessonMarkup } = await import('./lessonContent');
+    expect(normalizeLessonMarkup('Шаг 1.\\nВычислим')).toBe('Шаг 1.\nВычислим');
+    expect(normalizeLessonMarkup('Ответ:\\n2x')).toBe('Ответ:\n2x');
+  });
+});

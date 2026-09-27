@@ -137,12 +137,12 @@ export default function StepSolver({ title, instruction, kind, start, steps, fin
           <div className="flex flex-wrap gap-3 text-sm">
             {nextStep?.hint && !hintOpen && (
               <button type="button" onClick={() => { setHintOpen(true); setHintsSeen((count) => count + 1); }}
-                className="inline-flex items-center gap-1.5 font-medium text-primary hover:text-primary/80">
+                className="inline-flex min-h-9 items-center gap-1.5 py-2 font-medium text-primary hover:text-primary/80">
                 <Lightbulb className="h-4 w-4" /> Какое преобразование?
               </button>
             )}
             {nextStep && misses >= REVEAL_AFTER && (
-              <button type="button" onClick={showStep} className="inline-flex items-center gap-1.5 font-medium text-muted-foreground hover:text-foreground">
+              <button type="button" onClick={showStep} className="inline-flex min-h-9 items-center gap-1.5 py-2 font-medium text-muted-foreground hover:text-foreground">
                 <Eye className="h-4 w-4" /> Показать этот шаг
               </button>
             )}

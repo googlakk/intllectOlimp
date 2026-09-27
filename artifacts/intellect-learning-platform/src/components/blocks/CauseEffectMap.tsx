@@ -68,10 +68,12 @@ function Diagram({ eventLabel, factors, chosen, verdicts }: {
     };
   });
   const layoutKey = nodes.map((node) => `${node.id}:${node.position.x}:${node.position.y}`).join('|');
+  // Подгонка и при смене ширины: на телефоне первая подгонка идёт до замера экрана, узел события
+  // стоит на том же месте, и без повторной подгонки остаётся за краем пустой рамки.
   useEffect(() => {
-    const frame = requestAnimationFrame(() => { void fitView({ padding: 0.15 }); });
+    const frame = requestAnimationFrame(() => { void fitView({ padding: 0.15, maxZoom: 1.1 }); });
     return () => cancelAnimationFrame(frame);
-  }, [layoutKey, fitView]);
+  }, [layoutKey, width, height, fitView]);
   return (
     <div ref={box} className="overflow-hidden rounded-xl border border-border bg-background" style={{ height: vertical ? height : Math.min(height, 520) }}
       role="img" aria-label="Схема: причины и повод ведут к событию, событие ведёт к последствиям. Роли выбираются в списке ниже.">

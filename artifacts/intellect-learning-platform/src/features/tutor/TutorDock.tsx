@@ -608,9 +608,12 @@ export function TutorDock({ tutor, companion }: { tutor?: LessonTutor; companion
           ) : narrator ? (
             <motion.button key="listen" type="button" onClick={() => { setMode('speak'); narration.toggle(); }}
               initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={reduceMotion ? undefined : { opacity: 0 }}
-              className="relative flex h-12 min-w-0 flex-1 items-center gap-2 rounded-full border border-white/10 bg-neutral-900/95 px-4 text-left text-sm text-white/75 shadow-lg">
+              aria-label={`${name}: послушать`}
+              className={`relative flex h-12 items-center gap-2 rounded-full border border-white/10 bg-neutral-900/95 text-sm text-white/75 shadow-lg ${
+                mobile ? 'w-12 flex-none justify-center' : 'min-w-0 flex-1 px-4 text-left'}`}>
               <Play className="h-4 w-4 shrink-0 fill-current text-primary" aria-hidden />
-              <span className="truncate">{name}: нажми, чтобы послушать</span>
+              {/* На телефоне ряд узкий, рядом «Продолжить»: подпись обрезалась до «Ра…» — оставляем кнопку-значок. */}
+              {!mobile && <span className="truncate">{name}: нажми, чтобы послушать</span>}
             </motion.button>
           ) : null}
         </AnimatePresence>

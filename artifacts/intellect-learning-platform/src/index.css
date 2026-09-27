@@ -89,6 +89,17 @@
   * {
     @apply border-border;
   }
+  /* Ползунки под палец: у стандартного высота 16 px — на телефоне в бегунок трудно попасть. */
+  @media (pointer: coarse) {
+    input[type='range'] {
+      min-height: 32px;
+    }
+    /* Кнопки масштаба схем (React Flow) — под палец. */
+    .react-flow__controls-button {
+      width: 34px;
+      height: 34px;
+    }
+  }
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
@@ -118,4 +129,14 @@
     linear-gradient(hsl(var(--primary) / 0.05) 1px, transparent 1px),
     linear-gradient(90deg, hsl(var(--primary) / 0.05) 1px, transparent 1px);
   background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
+}
+
+/* iPhone увеличивает страницу при нажатии на поле со шрифтом меньше 16 px — на сенсорных экранах
+   поля ввода не мельче 16 px. Вне слоёв и с !important: иначе перекрывают классы вроде text-sm. */
+@media (pointer: coarse) {
+  input:not([type='range']):not([type='radio']):not([type='checkbox']),
+  textarea,
+  select {
+    font-size: max(16px, 1em) !important;
+  }
 }

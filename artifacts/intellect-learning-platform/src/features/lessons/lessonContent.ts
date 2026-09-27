@@ -1,3 +1,4 @@
+const LITERAL_NEWLINE = /\\n(?!(?:eq|e|eg|abla|ot|otin|u|leq|geq|mid|parallel|exists|subseteq|supseteq|sim|cong|ewline)(?![a-zA-Z]))/g;
 const PROTECTED_CONTENT = /(```[\s\S]*?```|`[^`]*`|\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g;
 
 function normalizePlainSegment(value: string): string {
@@ -16,7 +17,9 @@ export function normalizeLessonMarkup(value: string): string {
   if (!value) return '';
   const normalized = value
     .replace(/\r\n?/g, '\n')
-    .replace(/\\n/g, '\n')
+    // «\n» от модели — перевод строки, но не начало команды LaTeX: \neq, \ne, \neg, \nabla, \not, \nu…
+    // Иначе «x \neq 0» превращалось в «x», новую строку и «eq0».
+    .replace(LITERAL_NEWLINE, '\n')
     .replace(/\u00a0/g, ' ');
   const parts = normalized.split(PROTECTED_CONTENT);
   const repaired = parts.map((part, index) => index % 2 === 1 ? part : normalizePlainSegment(part)).join('');

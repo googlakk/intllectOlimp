@@ -19,6 +19,18 @@ export interface DataInvestigationProps {
   onAnswer?: (isCorrect: boolean) => void;
 }
 
+/**
+ * График на всю ширину блока: по умолчанию Vega-Lite рисует его шириной 200 px, и на телефоне
+ * он занимает треть экрана, а на компьютере — угол. Составные графики (concat, facet, repeat)
+ * так растягивать нельзя — их оставляем как есть.
+ */
+function responsiveSpec(spec: DataInvestigationProps['vega_lite_spec']): DataInvestigationProps['vega_lite_spec'] {
+  if (!spec || typeof spec !== 'object') return spec;
+  const composite = ['hconcat', 'vconcat', 'concat', 'facet', 'repeat'].some((key) => key in spec);
+  if (composite) return spec;
+  return { height: 260, ...spec, width: 'container', autosize: { type: 'fit', contains: 'padding' } } as DataInvestigationProps['vega_lite_spec'];
+}
+
 export default function DataInvestigation({ title, description, vega_lite_spec, question, explanation, onAnswer }: DataInvestigationProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [selected, setSelected] = useState('');
@@ -27,7 +39,7 @@ export default function DataInvestigation({ title, description, vega_lite_spec, 
   useEffect(() => {
     let view: Result | undefined;
     if (!containerRef.current) return undefined;
-    embed(containerRef.current, vega_lite_spec, { actions: false, renderer: 'svg' })
+    embed(containerRef.current, responsiveSpec(vega_lite_spec), { actions: false, renderer: 'svg' })
       .then((resultView) => { view = resultView; })
       .catch(() => {
         if (containerRef.current) {
@@ -45,7 +57,10 @@ export default function DataInvestigation({ title, description, vega_lite_spec, 
 
   return (
     <BlockShell title={title} subtitle={description}>
-      <div ref={containerRef} className="min-h-[320px] rounded-xl border border-border bg-background p-4" />
+      {/* Отступ — у обёртки: Vega меряет ширину контейнера вместе с padding и иначе вылезает за рамку. */}
+      <div className="min-h-[320px] rounded-xl border border-border bg-background p-4">
+        <div ref={containerRef} className="block w-full" />
+      </div>
       <div className="mt-5 rounded-lg border border-border bg-muted/20 p-4">
         <h4 className="mb-3 text-sm font-bold text-foreground"><RichText text={question.question} inline /></h4>
         <div className="grid gap-2 md:grid-cols-2">

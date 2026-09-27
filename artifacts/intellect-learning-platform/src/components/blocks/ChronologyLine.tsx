@@ -181,7 +181,7 @@ export default function ChronologyLine({ title, instruction, events, lanes, tole
       <div className="chronology-line rounded-lg border border-border bg-background" ref={containerRef} role="group"
         aria-label="Лента времени. Годы можно также ввести в списке событий ниже." />
       <p className="mt-2 text-xs text-muted-foreground">
-        Перетаскивайте карточки по ленте{hasLanes ? ' в своей строке' : ''} или введите год в списке. Масштаб — колесо мыши с Ctrl.
+        Перетаскивайте карточки по ленте{hasLanes ? ' в своей строке' : ''} или введите год в списке. Масштаб — двумя пальцами или колесом мыши с Ctrl.
       </p>
 
       <ol className="mt-4 space-y-2" aria-label="События и годы">

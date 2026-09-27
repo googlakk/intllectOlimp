@@ -58,6 +58,10 @@ export default function PhysicsSandbox({ title, prompt, bodies, params, question
         background: 'transparent',
       },
     });
+    // Мир всегда 720×360, а холст сжимается под ширину экрана: на телефоне видна вся сцена, а не её середина.
+    render.canvas.style.width = '100%';
+    render.canvas.style.height = 'auto';
+    render.canvas.style.display = 'block';
     const worldBodies = bodies.map((body) => {
       const options = {
         isStatic: body.is_static === true,
@@ -91,7 +95,7 @@ export default function PhysicsSandbox({ title, prompt, bodies, params, question
   return (
     <BlockShell title={title} subtitle={prompt}>
       <div className="overflow-hidden rounded-xl border border-border bg-background">
-        <div ref={hostRef} className="flex justify-center" />
+        <div ref={hostRef} className="mx-auto w-full max-w-[720px]" />
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         {params.map((param) => (

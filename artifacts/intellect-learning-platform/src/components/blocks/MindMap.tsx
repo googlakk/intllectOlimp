@@ -161,7 +161,26 @@ export default function MindMap({ title, central_concept, branches }: MindMapPro
         <h3 className="text-base font-semibold text-foreground"><RichText text={title} inline /></h3>
       </header>
 
-      <div className="relative w-full overflow-x-auto overscroll-x-contain" tabIndex={0} aria-label="Горизонтальная карта связей">
+      {/* Телефон: схема шире экрана, и видно только главное понятие — показываем её списком сверху вниз. */}
+      <div className="space-y-3 p-4 sm:hidden">
+        <div className="rounded-xl border-2 border-primary bg-primary/10 px-4 py-3 text-center font-semibold">
+          <RichText text={central_concept} inline />
+        </div>
+        {branches.map((branch, index) => (
+          <div key={index} className="ml-3 border-l-2 border-primary/30 pl-3">
+            <div className="rounded-lg border border-primary/30 bg-card px-3 py-2 text-sm font-medium"><RichText text={branch.label} inline /></div>
+            {(branch.children || []).length > 0 && (
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {branch.children.map((child, childIndex) => (
+                  <li key={childIndex} className="rounded-lg border bg-muted/50 px-3 py-1.5 text-sm text-muted-foreground"><RichText text={child} inline /></li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="relative hidden w-full overflow-x-auto overscroll-x-contain sm:block" tabIndex={0} aria-label="Горизонтальная карта связей">
         <svg
           width={layout.width}
           height={layout.height}
