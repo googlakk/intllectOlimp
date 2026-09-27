@@ -56,3 +56,9 @@ import-result.json
 
 # Локальный запуск через start.sh (PID и логи)
 /.run/
+
+# Скриншоты, логи и отчёты браузерных прогонов и скриптов — пересоздаются при запуске
+output/
+outputs/
+undefined/
+.playwright-cli/
