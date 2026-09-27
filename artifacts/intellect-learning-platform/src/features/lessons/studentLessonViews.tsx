@@ -1,9 +1,6 @@
 import { Link } from 'wouter';
-import { BookOpen, CheckCircle, Loader2, LockKeyhole, RotateCcw, Sparkles, Trophy } from 'lucide-react';
-import type { Block, LearningObjective, LessonDocument, ObjectiveMastery, WarpGate } from '@/lib/api/types';
-import { isAssessmentBlock, type LessonAnswers } from './studentProgress';
-import { lessonPositionForBlock } from './lessonExperience';
-import { narrationSpeechText } from './lessonContent';
+import { BookOpen, CheckCircle, Loader2, LockKeyhole, RotateCcw, Sparkles } from 'lucide-react';
+import type { LearningObjective, ObjectiveMastery, WarpGate } from '@/lib/api/types';
 
 export function LessonLoadingState() {
   return (
@@ -191,95 +188,3 @@ export function LessonCompletionSummary({
   );
 }
 
-type LessonStepperProps = {
-  activeBlocks: Block[];
-  activeOriginalIndices: number[];
-  answers: LessonAnswers;
-  currentStep: number;
-  isCompleted: boolean;
-  maxOpenedStep: number;
-  lessonDocument?: LessonDocument;
-  onNavigate: (index: number) => void;
-  onOpenSummary: () => void;
-};
-
-export function LessonStepper({
-  activeBlocks,
-  activeOriginalIndices,
-  answers,
-  currentStep,
-  isCompleted,
-  maxOpenedStep,
-  lessonDocument,
-  onNavigate,
-  onOpenSummary,
-}: LessonStepperProps) {
-  return (
-    <div className="w-full" aria-label="Прогресс урока">
-      <div className="flex flex-col gap-2">
-        {activeBlocks.slice(0, maxOpenedStep + 1).map((block, index) => {
-          const isActive = index === currentStep;
-          const originalIndex = activeOriginalIndices[index] ?? index;
-          const isCompletedBlock = index < maxOpenedStep || answers[originalIndex] !== undefined;
-          const isAssessment = isAssessmentBlock(block);
-          const position = lessonPositionForBlock(lessonDocument, originalIndex);
-          const previousOriginalIndex = index > 0 ? activeOriginalIndices[index - 1] : undefined;
-          const previousPosition = lessonPositionForBlock(lessonDocument, previousOriginalIndex);
-          const showEpisode = position && position.episode.id !== previousPosition?.episode.id;
-
-          return (
-            <div key={position?.scene.id || index} className="space-y-2">
-            {showEpisode && (
-              <div className="px-1 pt-2 text-xs font-bold text-foreground">{plainLessonText(position.episode.title)}</div>
-            )}
-            <button
-              onClick={() => onNavigate(index)}
-              className={`w-full text-left p-3 rounded-lg border transition-all duration-300 flex items-start gap-3 ${
-                isActive
-                  ? 'bg-primary/5 border-primary shadow-sm ring-1 ring-primary/20'
-                  : 'bg-card border-border hover:border-primary/50'
-              }`}
-            >
-              <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                isCompletedBlock ? 'bg-primary text-primary-foreground' : (isActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground')
-              }`}>
-                {isCompletedBlock ? <CheckCircle className="w-3.5 h-3.5" /> : index + 1}
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <div className={`text-sm font-semibold truncate ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}>
-                  {plainLessonText(position?.scene.title || (isAssessment ? 'Практика' : 'Теория'))}
-                </div>
-              </div>
-            </button>
-            </div>
-          );
-        })}
-        {isCompleted && (
-          <button
-            onClick={onOpenSummary}
-            className={`text-left p-3 rounded-xl border transition-all duration-300 flex items-start gap-3 mt-4 ${
-              currentStep === activeBlocks.length
-                ? 'bg-primary/5 border-primary shadow-sm ring-1 ring-primary/20'
-                : 'bg-card border-border hover:border-primary/50'
-            }`}
-          >
-            <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-              currentStep === activeBlocks.length ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-            }`}>
-              <Trophy className="w-3.5 h-3.5" />
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <div className={`text-sm font-semibold truncate ${currentStep === activeBlocks.length ? 'text-foreground' : 'text-muted-foreground'}`}>
-                Итоги
-              </div>
-            </div>
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function plainLessonText(value: string) {
-  return narrationSpeechText(value) || value;
-}

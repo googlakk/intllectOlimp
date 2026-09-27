@@ -9,10 +9,6 @@ const OUTLINE_CACHE_MS = 5 * 60 * 1000;
 const subjectsPath = (studentId?: number) => `/subjects${studentParam(studentId)}`;
 const sectionsPath = (subjectId: number, studentId?: number) =>
   `/subjects/${subjectId}/sections${studentParam(studentId)}`;
-const subjectOutlinePath = (subjectId: number, studentId?: number) =>
-  `/subjects/${subjectId}/outline${studentParam(studentId)}`;
-const topicsPath = (sectionId: number, studentId?: number) =>
-  `/sections/${sectionId}/topics${studentParam(studentId)}`;
 
 export const useSubjects = (studentId?: number) =>
   useQuery({
@@ -34,29 +30,6 @@ export const useSections = (subjectId: number, enabled = true, studentId?: numbe
     staleTime: OUTLINE_CACHE_MS,
     gcTime: 30 * 60 * 1000,
   });
-
-export const useSubjectOutline = (subjectId: number, enabled = true, studentId?: number) =>
-  useQuery({
-    queryKey: ['subject-outline', subjectId, studentId ?? 'teacher'],
-    queryFn: () => requestCached<SectionOutline[]>(subjectOutlinePath(subjectId, studentId), OUTLINE_CACHE_MS),
-    enabled: enabled && subjectId > 0,
-    initialData: () => readPersistentRequestCache<SectionOutline[]>(subjectOutlinePath(subjectId, studentId))?.data,
-    initialDataUpdatedAt: () => readPersistentRequestCache<SectionOutline[]>(subjectOutlinePath(subjectId, studentId))?.updatedAt,
-    staleTime: OUTLINE_CACHE_MS,
-    gcTime: 30 * 60 * 1000,
-  });
-
-export const useTopics = (sectionId: number, enabled = true, studentId?: number) =>
-  useQuery({
-    queryKey: ['topics', sectionId, studentId ?? 'teacher'],
-    queryFn: () => requestCached<Topic[]>(topicsPath(sectionId, studentId), OUTLINE_CACHE_MS),
-    enabled: enabled && sectionId > 0,
-    initialData: () => readPersistentRequestCache<Topic[]>(topicsPath(sectionId, studentId))?.data,
-    initialDataUpdatedAt: () => readPersistentRequestCache<Topic[]>(topicsPath(sectionId, studentId))?.updatedAt,
-    staleTime: OUTLINE_CACHE_MS,
-    gcTime: 30 * 60 * 1000,
-  });
-
 
 export type TopicInput = {
   name: string; lesson_type: string; learning_objectives?: string; hours?: number;

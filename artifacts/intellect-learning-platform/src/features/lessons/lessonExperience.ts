@@ -39,20 +39,3 @@ export function avatarCueForBeat(
     || scene.avatar_cues[0];
 }
 
-export function episodeProgress(
-  document: LessonDocument | undefined,
-  openedOriginalIndices: number[],
-): Array<{ episode: LessonEpisode; completed: boolean; active: boolean }> {
-  if (!document) return [];
-  const opened = new Set(openedOriginalIndices);
-  return document.episodes.map((episode) => {
-    const sceneIndices = episode.scenes
-      .map((scene) => scene.original_block_index)
-      .filter((index): index is number => index !== undefined);
-    return {
-      episode,
-      active: sceneIndices.some((index) => opened.has(index)),
-      completed: sceneIndices.length > 0 && sceneIndices.every((index) => opened.has(index)),
-    };
-  });
-}

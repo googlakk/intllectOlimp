@@ -60,18 +60,6 @@ export const createAvatarJob = (data: {
 export const getAvatarJobs = (lessonVersionId: number) => (
   request<AvatarGenerationJob[]>(`/avatar/jobs?lesson_version_id=${lessonVersionId}`)
 );
-export const getAvatarCueAsset = (data: {
-  lessonVersionId: number;
-  cueId: string;
-  sceneId?: string;
-}) => {
-  const params = new URLSearchParams({
-    lesson_version_id: String(data.lessonVersionId),
-    cue_id: data.cueId,
-  });
-  if (data.sceneId) params.set('scene_id', data.sceneId);
-  return request<AvatarCueAsset | null>(`/avatar/cue-asset?${params.toString()}`);
-};
 export const getAvatarCueAssets = (lessonVersionId: number) => (
   request<AvatarCueAsset[]>(`/avatar/cue-assets?lesson_version_id=${lessonVersionId}`)
 );

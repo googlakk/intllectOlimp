@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeNarrationSentence, activeSubtitle, narrationSentences, narrationSpeechText, subtitleChunks } from './avatarNarration';
+import { activeSubtitle, narrationSentences, narrationSpeechText, subtitleChunks } from './avatarNarration';
 
 describe('avatar narration', () => {
   it('splits an explanation into readable phrases', () => {
@@ -8,13 +8,6 @@ describe('avatar narration', () => {
       'Затем пример!',
       'Теперь попробуйте?',
     ]);
-  });
-
-  it('selects a phrase using normalized playback progress', () => {
-    const text = 'Один. Два. Три.';
-    expect(activeNarrationSentence(text, 0)).toBe('Один.');
-    expect(activeNarrationSentence(text, 0.5)).toBe('Два.');
-    expect(activeNarrationSentence(text, 1)).toBe('Три.');
   });
 
   it('cuts long sentences into short subtitle phrases timed by their length', () => {

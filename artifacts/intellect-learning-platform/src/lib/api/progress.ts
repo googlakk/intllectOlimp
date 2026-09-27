@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { request, requestNullable } from './client';
+import { request } from './client';
 import type {
   MasteryStatus,
   ObjectiveEvidence,
@@ -37,24 +37,8 @@ export const saveProgress = (data: SaveProgressInput) =>
     body: JSON.stringify(data),
   });
 
-export const getLessonProgress = async (
-  studentId: number,
-  topicId: number,
-): Promise<ProgressRecord | null> => {
-  return requestNullable<ProgressRecord>(`/progress/${studentId}/${topicId}`);
-};
-
 export const getStudentProgress = (studentId: number) =>
   request<ProgressRecord[]>(`/progress/${studentId}`);
-
-export const useGetLessonProgress = (studentId: number, topicId: number, enabled = true) =>
-  useQuery({
-    queryKey: ['progress', studentId, topicId],
-    queryFn: () => getLessonProgress(studentId, topicId),
-    enabled: enabled && studentId > 0 && topicId > 0,
-    staleTime: 30 * 1000,
-    gcTime: 15 * 60 * 1000,
-  });
 
 export const useGetStudentProgress = (studentId: number, enabled = true) =>
   useQuery({

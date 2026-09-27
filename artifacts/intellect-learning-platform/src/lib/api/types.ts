@@ -7,7 +7,6 @@ export type User = {
   grade: number | null;
   must_change_password: boolean;
 };
-export type LoginUsers = { students: User[]; teachers: User[] };
 export type Subject = { id: number; name: string; grade: number; hours_per_week: number; hours_per_year: number; source_info: string | null; instruction_language?: 'ru' | 'ky'; progress?: number };
 export type Section = { id: number; subject_id: number; name: string; sort_order: number; total_hours: number };
 export type LessonType = 'study' | 'review' | 'assessment' | 'reflection' | 'project';
@@ -72,11 +71,6 @@ export type QualityReport = {
   errors?: Array<{ code?: string; block?: number; message?: string } | string>;
   warnings?: Array<{ code?: string; block?: number; message?: string } | string>;
   legacy?: boolean;
-};
-export type ObjectiveResult = {
-  status: MasteryStatus;
-  score?: number;
-  evidence?: ObjectiveEvidence[];
 };
 export type WarpGate = {
   from_topic_id: number;

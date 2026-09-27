@@ -113,13 +113,6 @@ export const useUnpublishLesson = () =>
     mutationFn: (lessonId: number) => unpublishLesson(lessonId),
   });
 
-export const useLessonStatus = (topicId: number, enabled = true) =>
-  useQuery({
-    queryKey: ['lesson-status', topicId],
-    queryFn: () => getLessonByTopic(topicId, 'teacher'),
-    enabled: enabled && topicId > 0,
-  });
-
 export const useCreateLessonDraft = () => useMutation({
   mutationFn: (data: { topic_id: number; teacher_id: number }) => request<GeneratedLesson>('/lessons/draft', { method: 'POST', body: JSON.stringify(data) }),
 });
