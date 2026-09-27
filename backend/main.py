@@ -23,6 +23,8 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from sqlalchemy import bindparam, text
+
 from cache_policy import api_cache_control
 from database import Base, engine, warm_database_pool
 from errors import ApplicationError
@@ -33,10 +35,25 @@ from static_site import mount_frontend
 from auth_dependencies import require_roles
 
 
+async def missing_tables(connection) -> set[str]:
+    """Каких таблиц моделей нет в базе — одним запросом. create_all проверяет каждую таблицу
+    отдельно: на далёкой базе это десятки секунд старта, хотя таблицы давно есть."""
+    names = set(Base.metadata.tables)
+    if connection.dialect.name != "postgresql":
+        return names
+    existing = await connection.execute(
+        text("SELECT table_name FROM information_schema.tables "
+             "WHERE table_schema = current_schema() AND table_name IN :names").bindparams(bindparam("names", expanding=True)),
+        {"names": sorted(names)},
+    )
+    return names - {row[0] for row in existing}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
+        if await missing_tables(connection):
+            await connection.run_sync(Base.metadata.create_all)
         await apply_schema_compatibility(connection)
     await seed_if_empty()
     await warm_database_pool()
