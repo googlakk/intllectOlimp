@@ -18,6 +18,7 @@ const Lessons = lazy(() => import('@/pages/teacher/Lessons'));
 const LessonEditor = lazy(() => import('@/pages/teacher/LessonEditor'));
 const LessonPresenter = lazy(() => import('@/pages/teacher/LessonPresenter'));
 const Components = lazy(() => import('@/pages/teacher/Components'));
+const MiniGamesShowcase = lazy(() => import('@/features/miniGames/MiniGamesShowcase'));
 const Textbooks = lazy(() => import('@/pages/teacher/Textbooks'));
 const Accounts = lazy(() => import('@/pages/teacher/Accounts'));
 const Feedback = lazy(() => import('@/pages/admin/Feedback'));
@@ -76,6 +77,7 @@ function RoutedPage({ component: Component, allowedRoles }: { component: Compone
 function Router() {
   return (
     <Switch>
+      <Route path="/visual/mini-games" component={() => <Suspense fallback={<PageLoader />}><MiniGamesShowcase /></Suspense>} />
       <Route path="/visual/density" component={() => <Suspense fallback={<PageLoader />}><SampleLesson kind="density" /></Suspense>} />
       <Route path="/visual/silk-road" component={() => <Suspense fallback={<PageLoader />}><SampleLesson kind="silk-road" /></Suspense>} />
       <Route path="/visual/square-roots" component={() => <Suspense fallback={<PageLoader />}><GardenLesson /></Suspense>} />

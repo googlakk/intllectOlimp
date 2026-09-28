@@ -1,6 +1,7 @@
 import type { ComponentRegistryEntry, ComponentSchema } from '@/lib/api/types';
+import { GAME_IDS } from '@/features/miniGames/model';
 
-export type ComponentCatalogFilter = 'all' | 'assessment' | 'math' | 'literature' | 'language' | 'science' | 'humanities' | 'computing' | 'arts_practical';
+export type ComponentCatalogFilter = 'all' | 'mini-games' | 'assessment' | 'math' | 'literature' | 'language' | 'science' | 'humanities' | 'computing' | 'arts_practical';
 
 export const CATEGORY_LABELS: Record<string, string> = {
   explain: 'Объяснение',
@@ -40,6 +41,7 @@ export const SUBJECT_LABELS: Record<string, string> = {
 
 export const CATALOG_FILTERS: Array<{ value: ComponentCatalogFilter; label: string }> = [
   { value: 'all', label: 'Все' },
+  { value: 'mini-games', label: 'Мини-игры · 5 + 2' },
   { value: 'assessment', label: 'Проверка знаний' },
   { value: 'math', label: 'Математика' },
   { value: 'literature', label: 'Литература' },
@@ -84,6 +86,7 @@ export function filterComponents(
       || component.id.toLowerCase().includes(normalizedQuery)
       || component.purpose.toLowerCase().includes(normalizedQuery);
     const matchesFilter = filter === 'all'
+      || (filter === 'mini-games' && GAME_IDS.includes(component.id))
       || (filter === 'assessment' && component.is_assessment)
       || (filter !== 'assessment' && component.subjects.includes(filter));
     return matchesQuery && matchesFilter;

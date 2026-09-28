@@ -22,6 +22,7 @@ from models import (
 )
 from services.auth import AuthPrincipal, AuthServiceError, forget_principal
 from services.curriculum_graph import refresh_student_access
+from services.teacher_assignments import add_subject_assignments, subjects_by_teacher, validate_teacher_assignments
 from services.supabase_auth import (
     admin_create_auth_user,
     admin_delete_auth_user,
@@ -112,6 +113,7 @@ async def list_classrooms(user: AuthPrincipal, db: AsyncSession) -> list[dict[st
 async def list_teachers(user: AuthPrincipal, db: AsyncSession) -> list[dict[str, Any]]:
     if user.role != "admin":
         raise AuthServiceError(status_code=403, detail="Список учителей доступен только администратору.")
+    assigned_subjects = await subjects_by_teacher(user, db)
     rows = (await db.execute(
         select(Profile, Teacher)
         .join(Teacher, Teacher.id == Profile.teacher_id)
@@ -125,6 +127,7 @@ async def list_teachers(user: AuthPrincipal, db: AsyncSession) -> list[dict[str,
         "login": profile.login_name,
         "status": profile.status,
         "must_change_password": profile.must_change_password,
+        "subjects": assigned_subjects.get(teacher.id, []),
     } for profile, teacher in rows]
 
 
@@ -208,8 +211,12 @@ async def _create_profile_with_auth(
 
 
 async def create_teacher_account(
-    user: AuthPrincipal, *, login: str, display_name: str, db: AsyncSession
+    user: AuthPrincipal, *, login: str, display_name: str, db: AsyncSession,
+    subject_ids: list[int] | None = None, classroom_ids: list[int] | None = None,
 ) -> dict[str, Any]:
+    subject_ids, classroom_ids = await validate_teacher_assignments(
+        user, subject_ids or [], classroom_ids or [], db,
+    )
     teacher = Teacher(name=display_name.strip())
     db.add(teacher)
     await db.flush()
@@ -224,8 +231,13 @@ async def create_teacher_account(
             student_id=None,
             db=db,
         )
+        add_subject_assignments(user, profile, subject_ids, db)
+        for classroom_id in classroom_ids:
+            db.add(ClassroomTeacher(
+                classroom_id=classroom_id, teacher_id=teacher.id,
+                assigned_by_profile_id=user.profile_id,
+            ))
         await db.commit()
-        await db.refresh(profile)
     except Exception:
         await db.rollback()
         if auth_user_id:

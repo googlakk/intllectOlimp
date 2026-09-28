@@ -10,8 +10,8 @@ from services.auth import AuthPrincipal
 from services.educator_access import (
     require_section_management,
     require_subject_management,
-    teacher_max_grade,
 )
+from services.teacher_assignments import teacher_subject_ids
 
 router = APIRouter(prefix="/api", tags=["subjects"])
 
@@ -23,11 +23,11 @@ async def subjects(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        max_grade = await teacher_max_grade(user, db) if user.role == "teacher" else None
+        subject_ids = await teacher_subject_ids(user, db) if user.role == "teacher" else None
         return await list_subjects(
             db,
             student_id=user.student_id if user.role == "student" else None,
-            max_grade=max_grade,
+            subject_ids=subject_ids,
         )
     except GradeAccessError as exc:
         raise_http_error(exc)

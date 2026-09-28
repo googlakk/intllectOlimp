@@ -112,7 +112,7 @@ class ChronologyContractTests(unittest.TestCase):
         import re
         from ai.generator import SYSTEM_PROMPT
         from objectives import GENERATION_COMPONENTS
-        header = int(re.search(r"Допустимы только следующие (\d+) компонент", SYSTEM_PROMPT).group(1))
+        header = int(re.search(r"Допустимы следующие (\d+) компонент", SYSTEM_PROMPT).group(1))
         numbered = re.findall(r"^(\d+)\. ([A-Za-z]+):", SYSTEM_PROMPT, re.MULTILINE)
         self.assertEqual(header, len(GENERATION_COMPONENTS))
         self.assertEqual([int(number) for number, _ in numbered], list(range(1, len(numbered) + 1)))
@@ -210,6 +210,21 @@ class MathProfileTests(unittest.TestCase):
         self.assertEqual(textbook_source_warnings(blocks, "Алгебра", {"sections": [{"items": []}]}), [])
         self.assertEqual(textbook_source_warnings(blocks, "Алгебра", None), [])
         self.assertEqual(textbook_source_warnings(blocks, "История Кыргызстана", context), [])
+
+    def test_numeric_models_can_reference_a_section_without_claiming_a_book_exercise(self):
+        from copy import deepcopy
+        from ai.subject_profiles import textbook_source_warnings
+        blocks = [{"component": component, "content": {"source_ref": {"kind": "section", "page": 12}}}
+                  for component in ("RuleDiscovery", "TransformationMachine")]
+        original = deepcopy(blocks)
+        context = {"sections": [{"items": [{"id": 7}]}]}
+        self.assertEqual(textbook_source_warnings(blocks, "Алгебра", context), [])
+        self.assertEqual(blocks, original)
+        for block in blocks:
+            self.assertEqual(block["content"]["source_ref"]["kind"], "section")
+            self.assertNotIn("item_id", block["content"]["source_ref"])
+            block["content"]["source_ref"] = {"kind": "textbook", "page": 12}
+        self.assertEqual(textbook_source_warnings(blocks, "Алгебра", context)[0]["blocks"], [0, 1])
 
     def test_math_rules_reach_the_generator_prompt(self):
         from ai.generator import generate_lesson

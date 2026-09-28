@@ -1,6 +1,7 @@
 import asyncio
 import unittest
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 from llm.base import STOP_TOOL, ToolResult
 from services.textbooks import (
@@ -83,7 +84,7 @@ class Storage:
 
 
 def book():
-    return Textbook(id=1, organization_id=5, grade=8, language="ru", title="Физика 8", storage_path="5/x/f.pdf",
+    return Textbook(id=1, organization_id=5, subject_id=11, grade=8, language="ru", title="Физика 8", storage_path="5/x/f.pdf",
                     status="uploaded", progress={})
 
 
@@ -246,7 +247,17 @@ class IngestTests(unittest.TestCase):
         self.assertEqual(section_text({4: "A", 5: " ", 6: "B"}, 4, 6, 2), "[стр. 2]\nA\n\n[стр. 4]\nB")
 
 
-class Db:
+class AssignmentDb:
+    async def execute(self, statement):
+        result = MagicMock()
+        result.all.return_value = [(11,)]
+        return result
+
+    async def get(self, model, key):
+        return SimpleNamespace(id=11, grade=8)
+
+
+class Db(AssignmentDb):
     def __init__(self):
         self.added = []
 
@@ -257,13 +268,13 @@ class Db:
         pass
 
 
-USER = SimpleNamespace(organization_id=5, profile_id=9, role="teacher")
+USER = SimpleNamespace(organization_id=5, profile_id=9, teacher_id=3, role="teacher")
 
 
 class CreateTests(unittest.TestCase):
     def test_creates_book_with_private_path_and_upload_link(self):
         db = Db()
-        result = run(create_textbook({"title": "Физика", "grade": 8, "file_name": "Fizika 8 klass.pdf", "file_size": 1000},
+        result = run(create_textbook({"title": "Физика", "subject_id": 11, "grade": 8, "file_name": "Fizika 8 klass.pdf", "file_size": 1000},
                                      db, user=USER, storage=Storage(), settings=ON))
         self.assertTrue(db.added[0].storage_path.startswith("5/"))
         self.assertTrue(db.added[0].storage_path.endswith("/Fizika_8_klass.pdf"))
@@ -272,7 +283,7 @@ class CreateTests(unittest.TestCase):
     def test_rejects_non_pdf_and_huge_files(self):
         for payload, code in (({"file_name": "a.docx", "file_size": 10}, 422), ({"file_name": "a.pdf", "file_size": 300 * 1024 * 1024}, 413)):
             with self.assertRaises(TextbookServiceError) as error:
-                run(create_textbook({"title": "x", "grade": 8, **payload}, Db(), user=USER, storage=Storage(), settings=ON))
+                run(create_textbook({"title": "x", "subject_id": 11, "grade": 8, **payload}, Db(), user=USER, storage=Storage(), settings=ON))
             self.assertEqual(error.exception.status_code, code)
 
 
@@ -281,8 +292,21 @@ async def CLAIM_OK(book_id):
 
 
 class AccessTests(unittest.TestCase):
+    def test_same_organization_unassigned_subject_is_hidden(self):
+        class GetDb(AssignmentDb):
+            async def get(self, model, key):
+                other = book()
+                other.subject_id = 12
+                return other
+
+        started = []
+        with self.assertRaises(TextbookServiceError) as denied:
+            run(process_textbook(1, GetDb(), user=USER, starter=started.append, claim=CLAIM_OK))
+        self.assertEqual(denied.exception.status_code, 404)
+        self.assertEqual(started, [])
+
     def test_book_without_organization_is_hidden(self):
-        class GetDb:
+        class GetDb(AssignmentDb):
             async def get(self, model, key):
                 orphan = book()
                 orphan.organization_id = None
@@ -292,7 +316,7 @@ class AccessTests(unittest.TestCase):
             run(process_textbook(1, GetDb(), user=USER, starter=lambda book_id: True, claim=CLAIM_OK))
 
     def test_other_organization_cannot_process_book(self):
-        class GetDb:
+        class GetDb(AssignmentDb):
             async def get(self, model, key):
                 return book()  # книга организации 5
 
@@ -306,7 +330,7 @@ class AccessTests(unittest.TestCase):
         self.assertEqual(started, [1])
 
     def test_busy_book_is_not_started_again(self):
-        class GetDb:
+        class GetDb(AssignmentDb):
             async def get(self, model, key):
                 return book()
 
@@ -319,7 +343,7 @@ class AccessTests(unittest.TestCase):
 
 
 class DeleteTests(unittest.TestCase):
-    class Db:
+    class Db(AssignmentDb):
         def __init__(self, status="ready"):
             self.row, self.deleted = book(), False
             self.row.status = status

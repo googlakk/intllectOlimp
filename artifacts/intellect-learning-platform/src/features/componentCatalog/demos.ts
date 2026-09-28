@@ -1,4 +1,5 @@
 import type { Block } from '@/lib/api';
+import { miniGameDemos } from '@/features/miniGames/demos';
 
 export type ComponentDemo = {
   block: Block;
@@ -7,6 +8,27 @@ export type ComponentDemo = {
 };
 
 export const componentDemos: Record<string, ComponentDemo> = {
+  ...miniGameDemos,
+  'rule-discovery': {
+    usage: 'Открыть закономерность через собственные эксперименты перед изучением формулы.',
+    interaction: 'Испытайте числа, сформулируйте гипотезу и предскажите три новых результата.',
+    block: { component: 'RuleDiscovery', content: {
+      title: 'Что скрывает машина?', prompt: 'Исследуйте входы и выходы. Как машина меняет число?',
+      rule: { kind: 'affine', multiplier: 3, offset: 2 }, examples: [0, 1, 3], challenge_inputs: [2, 5, -2],
+      explanation: 'Машина умножает число на 3 и прибавляет 2: $y = 3x + 2$. Для 2, 5 и −2 получаем 8, 17 и −4.',
+    } },
+  },
+  'transformation-machine': {
+    usage: 'Исследовать порядок действий и собрать алгоритм преобразования нескольких чисел.',
+    interaction: 'Добавляйте станки, меняйте их порядок стрелками и запускайте всю цепочку.',
+    block: { component: 'TransformationMachine', content: {
+      title: 'Запустите фабрику чисел', prompt: 'Превратите 1, 2 и 4 в 9, 12 и 18 одной цепочкой. Порядок важен!',
+      inputs: [1, 2, 4], target_outputs: [9, 12, 18],
+      operations: [ { id: 'add2', label: 'Прибавить 2', kind: 'add', value: 2 }, { id: 'times3', label: 'Умножить на 3', kind: 'multiply', value: 3 }, { id: 'minus1', label: 'Вычесть 1', kind: 'subtract', value: 1 } ],
+      solution: ['add2', 'times3'], max_steps: 4,
+      explanation: 'Сначала прибавляем 2, затем умножаем на 3. Получаем $(x + 2) × 3$. Если поменять станки местами, результат изменится.',
+    } },
+  },
   'short-explanation': {
     usage: 'В начале новой темы, чтобы коротко объяснить правило и выделить главные идеи.',
     interaction: 'Информационный блок: формулы, ключевые понятия и важная подсказка.',

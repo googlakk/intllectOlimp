@@ -20,10 +20,11 @@ type SubjectPickerProps = {
   selectedSubject: number | null;
   subjects: Subject[] | undefined;
   onSelect: (subjectId: number) => void;
+  canManage?: boolean;
 };
 
 /** Выпадающий список предметов выбранного класса и переименование выбранного. */
-export function SubjectPicker({ isLoading, selectedSubject, subjects, onSelect }: SubjectPickerProps) {
+export function SubjectPicker({ isLoading, selectedSubject, subjects, onSelect, canManage = false }: SubjectPickerProps) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState('');
   const rename = useRenameSubject();
@@ -49,7 +50,7 @@ export function SubjectPicker({ isLoading, selectedSubject, subjects, onSelect }
     } catch { /* ошибка показана ниже, введённое название сохраняется */ }
   };
 
-  if (editing && current) {
+  if (canManage && editing && current) {
     return (
       <form onSubmit={save} className="flex flex-wrap items-center gap-2" aria-label="Переименование предмета">
         <span className="shrink-0 text-sm font-semibold text-muted-foreground">Предмет</span>
@@ -89,7 +90,7 @@ export function SubjectPicker({ isLoading, selectedSubject, subjects, onSelect }
           ))}
         </SelectContent>
       </Select>
-      {current && (
+      {canManage && current && (
         <button type="button" onClick={startEditing} title="Переименовать предмет" className="inline-flex h-11 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm font-semibold text-muted-foreground hover:border-primary/40 hover:text-foreground">
           <Pencil className="h-4 w-4" /> Переименовать
         </button>
@@ -103,12 +104,12 @@ export function NoSubjectSelected() {
     <div className="py-24 text-center text-muted-foreground bg-card rounded-[2rem] border border-dashed border-border/80">
       <BookOpen className="w-16 h-16 mx-auto mb-6 opacity-40 text-primary" />
       <p className="text-xl font-bold text-foreground mb-2">Выберите предмет</p>
-      <p className="text-sm font-medium">Для просмотра и редактирования структуры курса</p>
+      <p className="text-sm font-medium">Чтобы открыть темы и подготовить уроки</p>
     </div>
   );
 }
 
-export function SectionsList({ subjectId }: { subjectId: number }) {
+export function SectionsList({ subjectId, canManage = false }: { subjectId: number; canManage?: boolean }) {
   const [showArchive, setShowArchive] = useState(false);
   const [creatingIn, setCreatingIn] = useState<number | null>(null);
   const { data: sections, isLoading, error, refetch } = useTeacherOutline(subjectId, showArchive);
@@ -123,8 +124,8 @@ export function SectionsList({ subjectId }: { subjectId: number }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-4"><button type="button" onClick={() => setShowArchive(!showArchive)} className="rounded-lg border px-4 py-2 font-semibold">{showArchive ? 'Вернуться к программе' : 'Архив уроков'}</button>{showArchive && <p className="text-sm text-muted-foreground">Результаты учеников сохранены. Восстановленные уроки вернутся черновиками.</p>}</div>
-      {!showArchive && <CreateSection subjectId={subjectId} />}
+      {canManage && <div className="flex flex-wrap items-center gap-4"><button type="button" onClick={() => setShowArchive(!showArchive)} className="rounded-lg border px-4 py-2 font-semibold">{showArchive ? 'Вернуться к программе' : 'Архив уроков'}</button>{showArchive && <p className="text-sm text-muted-foreground">Результаты учеников сохранены. Восстановленные уроки вернутся черновиками.</p>}</div>}
+      {canManage && !showArchive && <CreateSection subjectId={subjectId} />}
       {error && <p role="alert">Не удалось загрузить программу. <button onClick={() => refetch()}>Повторить</button></p>}
       {sections?.map((section) => (
         <div key={section.id} className="bg-card rounded-[2rem] border border-border shadow-sm overflow-hidden">
@@ -136,20 +137,20 @@ export function SectionsList({ subjectId }: { subjectId: number }) {
               {section.total_hours} часов
             </span>
           </div>
-          {!showArchive && <div className="p-4"><button type="button" onClick={() => setCreatingIn(section.id)} className="rounded-lg bg-primary px-4 py-2 font-semibold text-primary-foreground">Создать урок</button></div>}
-          {creatingIn === section.id && <TopicForm section={section} onClose={() => setCreatingIn(null)} />}
-          <TopicsList section={{ ...section, topics: section.topics.filter(topic => Boolean(topic.archived_at) === showArchive) }} />
+          {canManage && !showArchive && <div className="p-4"><button type="button" onClick={() => setCreatingIn(section.id)} className="rounded-lg bg-primary px-4 py-2 font-semibold text-primary-foreground">Создать урок</button></div>}
+          {canManage && creatingIn === section.id && <TopicForm section={section} onClose={() => setCreatingIn(null)} />}
+          <TopicsList canManage={canManage} section={{ ...section, topics: section.topics.filter(topic => Boolean(topic.archived_at) === showArchive) }} />
         </div>
       ))}
     </div>
   );
 }
 
-function TopicsList({ section }: { section: SectionOutline }) {
+function TopicsList({ section, canManage }: { section: SectionOutline; canManage: boolean }) {
   return (
     <div className="divide-y divide-border/50">
       {section.topics.map((topic) => (
-        <TopicRow key={topic.id} topic={topic} />
+        <TopicRow key={topic.id} topic={topic} canManage={canManage} />
       ))}
       {section.topics.length === 0 && (
         <div className="p-8 text-center text-sm font-medium text-muted-foreground">Нет тем в этом разделе</div>
@@ -158,7 +159,7 @@ function TopicsList({ section }: { section: SectionOutline }) {
   );
 }
 
-function TopicRow({ topic }: { topic: Topic }) {
+function TopicRow({ topic, canManage }: { topic: Topic; canManage: boolean }) {
   const status = lessonStatusView(topic, false);
   const archive = useArchiveTopic();
   const queryClient = useQueryClient();
@@ -227,10 +228,10 @@ function TopicRow({ topic }: { topic: Topic }) {
           <Edit3 className="w-4 h-4" />
           {topic.lesson_status === 'published' ? 'Посмотреть опубликованный урок' : topic.lesson_id ? 'Продолжить редактирование' : 'Создать материалы'}
       </Link>}
-      <button type="button" disabled={archive.isPending} onClick={() => {
+      {canManage && <button type="button" disabled={archive.isPending} onClick={() => {
         if (!topic.archived_at && !window.confirm(`Убрать «${topic.name}» из программы? Результаты учеников сохранятся. Урок можно восстановить из архива.`)) return;
         archive.mutate({ topicId: topic.id, restore: Boolean(topic.archived_at) });
-      }} className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50">{archive.isPending ? 'Сохраняется…' : topic.archived_at ? 'Восстановить черновиком' : 'Убрать из программы'}</button>
+      }} className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50">{archive.isPending ? 'Сохраняется…' : topic.archived_at ? 'Восстановить черновиком' : 'Убрать из программы'}</button>}
       {archive.error && <p role="alert" className="max-w-xs text-sm text-destructive">{archive.error.message}</p>}
       </div>
     </div>

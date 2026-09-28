@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from errors import ApplicationError
 from models import Skill, StudentSkillMastery, Classroom, ClassroomStudent, ClassroomTeacher, GeneratedLesson, Progress, Section, Student, Subject, Topic
 from services.auth import AuthPrincipal
+from services.teacher_assignments import teacher_subject_ids
 
 
 def build_dashboard_overview(
@@ -57,16 +58,6 @@ def _visible_students_subquery(user: AuthPrincipal):
     )
 
 
-def _visible_max_grade_subquery(user: AuthPrincipal):
-    """Старший класс учителя (0 — классов нет): предметы и темы старше ему не видны."""
-    return (
-        select(func.coalesce(func.max(Classroom.grade), 0))
-        .join(ClassroomTeacher, ClassroomTeacher.classroom_id == Classroom.id)
-        .where(ClassroomTeacher.teacher_id == user.teacher_id, Classroom.status == "active")
-        .scalar_subquery()
-    )
-
-
 async def get_dashboard_overview(db: AsyncSession, *, user: AuthPrincipal) -> dict[str, int | float]:
     # Все счётчики — одной командой: на далёкой базе каждый отдельный запрос стоит сотни миллисекунд.
     scoped = user.role != "admin"
@@ -84,11 +75,11 @@ async def get_dashboard_overview(db: AsyncSession, *, user: AuthPrincipal) -> di
     if scoped:
         students_query = students_query.where(Student.id.in_(_visible_students_subquery(user)))
         completed_query = completed_query.where(Progress.student_id.in_(_visible_students_subquery(user)))
-        max_grade = _visible_max_grade_subquery(user)
-        subjects_query = subjects_query.where(Subject.grade <= max_grade)
-        topics_query = topics_query.where(Subject.grade <= max_grade)
-        completed_query = completed_query.where(Subject.grade <= max_grade)
-        published_query = published_query.where(Subject.grade <= max_grade)
+        subject_ids = await teacher_subject_ids(user, db)
+        subjects_query = subjects_query.where(Subject.id.in_(subject_ids))
+        topics_query = topics_query.where(Subject.id.in_(subject_ids))
+        completed_query = completed_query.where(Subject.id.in_(subject_ids))
+        published_query = published_query.where(Subject.id.in_(subject_ids))
     row = (await db.execute(select(
         students_query.scalar_subquery().label("students"),
         subjects_query.scalar_subquery().label("subjects"),

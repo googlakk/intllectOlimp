@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ai.planner import build_topic_contract, split_component_plan
 from objectives import GENERATION_COMPONENTS, decompose_objectives
+from services.mini_games import GROUP_MINI_GAMES, INDIVIDUAL_MINI_GAMES
 
 if TYPE_CHECKING:
     from llm import Route
@@ -32,7 +33,7 @@ LESSON_TOOL = {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "component": {"type": "string", "enum": sorted(GENERATION_COMPONENTS)},
+                        "component": {"type": "string", "enum": sorted(GENERATION_COMPONENTS - GROUP_MINI_GAMES)},
                         "content": {"type": "object"},
                     },
                     "required": ["component", "content"],
@@ -173,7 +174,8 @@ SYSTEM_PROMPT = """
 Каждый элемент массива имеет ровно такую оболочку:
 {"component": "ИмяКомпонента", "content": { ... }}
 
-Допустимы только следующие 29 компонентов и их точные схемы content:
+Допустимы следующие 38 компонентов с точными схемами content. Пять групповых мини-игр
+создаются только по отдельному выбору учителя; при генерации целого урока они запрещены:
 
 1. ShortExplanation:
 {"title": string, "text": string, "key_concepts": string[], "callout"?: string}
@@ -355,6 +357,83 @@ target — значения параметров, при которых граф
 реального вызова OpenRouter media API из редактора. Никогда не выдумывай url, data_url или
 base64-контент.
 
+30. RuleDiscovery:
+{"title": string, "prompt": string, "rule": {"kind": "affine"|"square"|"absolute", "multiplier": number, "offset": number}, "examples": number[], "challenge_inputs": number[], "explanation": string}
+Числовая машина: ученик исследует примеры, вводит пробные числа, затем прогнозирует новые результаты.
+Формула строго multiplier*x+offset, multiplier*x*x+offset или multiplier*abs(x)+offset.
+В examples и challenge_inputs обычно по 3 числа (допустимо 1–6); все числа уникальны и наборы не пересекаются.
+Числа и коэффициенты от −100 до 100, результат не больше 1000000 по модулю. Не раскрывай правило в prompt.
+Это только простые числовые закономерности, линейная/квадратичная функция или модуль числа — не произвольная алгебра.
+
+31. TransformationMachine:
+{"title": string, "prompt": string, "inputs": number[], "target_outputs": number[], "operations": [{"id": string, "label": string, "kind": "add"|"subtract"|"multiply"|"divide", "value": number}], "solution": string[], "max_steps": number, "explanation": string}
+Ученик собирает одну цепочку арифметических действий для ВСЕХ входных чисел. inputs: 1–6 чисел,
+target_outputs такой же длины. operations: 1–8 операций с уникальными id, solution: 1–max_steps id,
+max_steps — целое 1–8. Входы и операнды от −100 до 100, делить на ноль нельзя; все промежуточные и
+итоговые результаты не больше 1000000 по модулю. Просчитай solution для каждого входа: результат должен
+совпадать с target_outputs с абсолютной погрешностью не более 0.000001. Альтернативные верные цепочки допустимы.
+Это только числовые арифметические действия; не используй для символьных преобразований или решения уравнений.
+
+Оба новых числовых блока используй ТОЛЬКО если они разрешены в allowed_components конкретного шага плана,
+есть подтверждённый материал учебника и конкретная цель относится к возможностям движка. В content обязательны
+objective_ids и source_ref по формату учебника. Копируй вид правила/действий из материала, не подменяй тему игрой.
+Если соответствующего материала нет, выбери другой разрешённый блок. title, prompt, explanation непустые.
+
+Мини-игры 32–38 — короткие вставки внутри урока. Общие обязательные поля content:
+{"title": string, "instruction": string, "duration_minutes": integer 3–7, "takeaway": string}.
+Все строки непустые. instruction объясняет правила за одну короткую фразу, takeaway фиксирует
+учебный вывод. Добавь objective_ids ровно одной цели и source_ref подтверждённого материала учебника.
+Вопросы, правильные ответы и объяснения должны опираться на эту цель и выбранный параграф.
+Групповые результаты НЕ являются индивидуальным подтверждением освоения темы.
+
+32. BossRaid:
+Только ручная вставка учителем, evidence_stage "practice".
+{"rounds": [{"question": string, "answer": string, "explanation": string}]}
+3–5 раундов: команды обсуждают каждый вопрос одновременно, учитель открывает ответ и отмечает результат.
+Снимают щиты общего противника; никто не выбывает.
+
+33. CodeVault:
+Только ручная вставка учителем, evidence_stage "practice".
+{"clues": [{"label": string, "question": string, "options": string[], "correct_index": integer, "digit": integer 0–9, "explanation": string}]}
+3–5 загадок по одной теме; каждая открывает цифру кода. options: 2–4 разных ответа,
+correct_index — индекс верного ответа с нуля. Цифра награды не обязана быть числовым ответом задания.
+
+34. KnowledgeAuction:
+Только ручная вставка учителем, evidence_stage "practice".
+{"statements": [{"text": string, "is_true": boolean, "explanation": string}]}
+3–5 утверждений: обязательно хотя бы одно верное и одно ложное. Команды тратят игровой бюджет,
+затем обосновывают покупку. Объясни истину/ошибку из материала урока без неподтверждённых фактов.
+
+35. WordRelay:
+Только ручная вставка учителем, evidence_stage "practice".
+{"cards": [{"term": string, "forbidden": string[], "hint": string}]}
+4–8 понятий из материала урока, у каждого 3–5 разных запрещённых слов, не равных самому term.
+Подсказка помогает объясняющему; угадывающие не должны видеть карточку до завершения раунда.
+
+36. PuzzleAssembly:
+Только ручная вставка учителем, evidence_stage "practice".
+{"slots": [{"id": string, "label": string}], "pieces": [{"id": string, "text": string, "slot_id": string}]}
+4–8 мест и столько же фрагментов. Все id уникальны внутри массива. Каждому slot соответствует
+ровно один piece: slot_id ссылается на существующее место. Создай содержательную схему или цепочку.
+
+37. ErrorHunt:
+{"lines": [{"text": string, "is_error": boolean, "fixes": string[], "correct_index": integer|null, "explanation": string}]}
+3–6 строк небольшого решения, текста или схемы. Хотя бы одна ошибочная и одна верная строка.
+У ошибочной строки fixes содержит 2–4 разных исправления, correct_index указывает верное с нуля.
+У верной строки fixes=[], correct_index=null. Ошибка учебная и понятная, объяснение показывает исправление.
+
+38. LearningPath:
+{"checkpoints": [{"label": string, "support": {"question": string, "options": string[], "correct_index": integer, "explanation": string}, "challenge": {"question": string, "options": string[], "correct_index": integer, "explanation": string}}]}
+Ровно 3 этапа одной цели; у каждого простое задание support и более сложное challenge.
+У каждого задания 2–4 разных варианта ответа и правильный индекс с нуля. Оба маршрута упражняют
+один навык, отличаются поддержкой и сложностью, но не вводят новую тему.
+
+При генерации ЦЕЛОГО урока разрешены только ErrorHunt и LearningPath, только когда названы в
+allowed_components шага practice/apply, и не больше ОДНОЙ мини-игры на весь урок.
+Выбор необязателен: если игра не помогает данной цели, используй обычную практику.
+Не заменяй игрой объяснение или итоговую независимую проверку. Без материала учебника игр не создавай.
+Первые пять игр доступны лишь при явной одиночной подготовке выбранного учителем компонента.
+
 Как объяснять: покажи путь, а не только результат. Ученик должен видеть, откуда взялся ответ.
 1) От конкретного к общему: сначала маленький знакомый случай, потом правило.
 2) Раскрой запись: запиши то же самое более простыми действиями или словами.
@@ -420,7 +499,34 @@ def _validate_blocks(value: Any) -> list[dict[str, Any]]:
             or not isinstance(block.get("content"), dict)
         ):
             raise ValueError("Некорректная структура блока")
+        if block["component"] in GROUP_MINI_GAMES:
+            raise ValueError("Групповая мини-игра добавляется учителем отдельно, не в автоматический урок")
     return value
+
+
+def _validate_mini_game_selection(blocks: list[dict[str, Any]], plan: list[dict[str, Any]],
+                                  textbook: dict[str, Any] | None) -> list[dict[str, Any]]:
+    games = [block for block in blocks if block.get("component") in INDIVIDUAL_MINI_GAMES]
+    if len(games) > 1:
+        raise ValueError("Автоматический урок может содержать не больше одной мини-игры")
+    if not games:
+        return blocks
+    has_material = bool(textbook) and any(
+        str(section.get("text") or "").strip()
+        or any(str(item.get("text") or "").strip() for item in section.get("items") or [])
+        for section in textbook.get("sections") or []
+    )
+    block = games[0]
+    content = block["content"]
+    matching_step = any(
+        step.get("role") in {"practice", "apply"}
+        and block["component"] in (step.get("allowed_components") or [])
+        and content.get("objective_ids") == step.get("objective_ids")
+        for step in plan
+    )
+    if not has_material or not matching_step or content.get("evidence_stage") != "practice":
+        raise ValueError("Мини-игра должна соответствовать разрешённому шагу практики, цели КТП и материалу учебника")
+    return blocks
 
 
 def _parse_blocks(raw: str) -> list[dict[str, Any]]:
@@ -689,6 +795,11 @@ async def generate_lesson(
             hours=hours,
             lesson_type=lesson_type,
             content_language=content_language,
+            textbook_grounded=bool(textbook) and any(
+                str(section.get("text") or "").strip()
+                or any(str(item.get("text") or "").strip() for item in section.get("items") or [])
+                for section in textbook.get("sections") or []
+            ),
         )
         topic_contract = topic_contract or plan["topic_contract"]
         component_plan = component_plan or plan["component_plan"]
@@ -749,12 +860,15 @@ GeneratedMedia является только опциональным усиле
     )
     parts = split_component_plan(component_plan)
     if len(parts) > 1 and should_generate_in_parts(topic_contract, len(objective_catalog), len(component_plan)):
-        return await _generate_in_parts(request, user_prompt, parts, objective_catalog)
+        blocks = await _generate_in_parts(request, user_prompt, parts, objective_catalog)
+        return _validate_mini_game_selection(blocks, component_plan, textbook)
     try:
-        return await request.blocks(user_prompt)
+        blocks = await request.blocks(user_prompt)
     except Exception as exc:
         # Одним ответом урок не поместился или не успел за тайм-аут поставщика —
         # собираем его по частям: каждая короче и укладывается в лимиты.
         if len(parts) > 1 and (isinstance(exc, LessonTruncated) or _is_timeout(exc)):
-            return await _generate_in_parts(request, user_prompt, parts, objective_catalog)
+            blocks = await _generate_in_parts(request, user_prompt, parts, objective_catalog)
+            return _validate_mini_game_selection(blocks, component_plan, textbook)
         raise
+    return _validate_mini_game_selection(blocks, component_plan, textbook)

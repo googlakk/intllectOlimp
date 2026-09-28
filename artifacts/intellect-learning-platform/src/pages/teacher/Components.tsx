@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'wouter';
 import { Blocks, Info, MousePointerClick, Sparkles } from 'lucide-react';
 import { useComponents, type ComponentRegistryEntry } from '@/lib/api';
 import BlockRenderer from '@/components/blocks/BlockRenderer';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { componentDemos } from '@/features/componentCatalog/demos';
 import { ComponentCard, ComponentCatalogToolbar } from '@/features/componentCatalog/views';
+import { CatalogLessonPicker } from '@/features/componentCatalog/CatalogLessonPicker';
 import { categoryLabel, categoryStyle, filterComponents, type ComponentCatalogFilter } from '@/features/componentCatalog/model';
 
 export default function Components() {
@@ -29,6 +31,7 @@ export default function Components() {
               Конструктор уроков
             </div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">Библиотека компонентов</h1>
+            <Link href="/visual/mini-games" className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#263530] px-4 py-2 text-sm font-semibold text-white"><Sparkles size={16} /> 7 новых мини-игр · попробовать</Link>
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground md:text-base">
               Здесь собраны блоки, из которых ИИ формирует уроки. Откройте живую демонстрацию,
               чтобы увидеть компонент глазами ученика и попробовать его в действии.
@@ -71,7 +74,12 @@ export default function Components() {
         )}
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {filteredComponents.map((component) => (
-            <ComponentCard key={component.id} component={component} onOpenDemo={setSelectedComponent} />
+            <ComponentCard
+              key={component.id}
+              component={component}
+              demo={componentDemos[component.id]}
+              onOpenDemo={setSelectedComponent}
+            />
           ))}
         </div>
       </section>
@@ -95,6 +103,7 @@ export default function Components() {
               </DialogHeader>
 
               <div className="space-y-6 px-4 py-5 sm:px-6">
+                <CatalogLessonPicker key={selectedComponent.id} componentId={selectedComponent.id} />
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
                     <div className="mb-2 flex items-center gap-2 text-sm font-bold text-foreground">

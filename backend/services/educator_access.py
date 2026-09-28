@@ -1,10 +1,11 @@
-"""Scope teacher content operations to the grades of assigned classrooms."""
+"""Scope teacher content operations to explicitly assigned subject/grade courses."""
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Classroom, ClassroomTeacher, GeneratedLesson, LessonVersion, Section, Subject, Topic
 from services.auth import AuthPrincipal, AuthServiceError
+from services.teacher_assignments import teacher_subject_ids
 
 
 async def teacher_max_grade(user: AuthPrincipal, db: AsyncSession) -> int | None:
@@ -26,16 +27,16 @@ async def teacher_max_grade(user: AuthPrincipal, db: AsyncSession) -> int | None
 
 
 async def require_grade_management(user: AuthPrincipal, grade: int, db: AsyncSession) -> None:
-    max_grade = await teacher_max_grade(user, db)
-    if max_grade is not None and grade > max_grade:
-        raise AuthServiceError(status_code=404, detail="Материал не относится к назначенным классам.")
+    if user.role != "admin":
+        raise AuthServiceError(status_code=403, detail="Новые программы и КТП добавляет администратор.")
 
 
 async def require_subject_management(user: AuthPrincipal, subject_id: int, db: AsyncSession) -> Subject:
     subject = await db.get(Subject, subject_id)
     if subject is None:
         raise AuthServiceError(status_code=404, detail="Предмет не найден.")
-    await require_grade_management(user, subject.grade, db)
+    if user.role != "admin" and subject_id not in await teacher_subject_ids(user, db):
+        raise AuthServiceError(status_code=404, detail="Предмет не назначен этому учителю.")
     return subject
 
 

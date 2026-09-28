@@ -110,6 +110,82 @@ async def _confirmed_links(db: AsyncSession, topic_ids: list[int]) -> list[Topic
     )).all())
 
 
+async def load_component_textbook_context(
+    db: AsyncSession, topic: Any, *, source_section_id: int | None = None,
+    source_item_id: int | None = None,
+) -> dict[str, Any] | None:
+    """Адресный источник блока: только подтверждённый, без обрезки упражнения.
+
+    Без выбора возвращает каталог всех связанных параграфов. С выбором — ровно
+    один полный элемент либо параграф. Не использует ограничения целого урока.
+    """
+    if not hasattr(db, "begin_nested"):
+        return None
+    try:
+        async with db.begin_nested():
+            links = await _confirmed_links(db, [topic.id])
+            if not links and topic.lesson_type in COVERED_LESSON_TYPES and topic.covered_topic_ids:
+                links = await _confirmed_links(db, [int(value) for value in topic.covered_topic_ids])
+            section_ids = list(dict.fromkeys(link.section_id for link in links))
+            if not section_ids:
+                return None
+            sections = list((await db.scalars(
+                select(TextbookSection).where(TextbookSection.id.in_(section_ids))
+                .order_by(TextbookSection.position, TextbookSection.id)
+            )).all())
+            items = list((await db.scalars(
+                select(TextbookItem).where(TextbookItem.section_id.in_(section_ids))
+                .order_by(TextbookItem.position, TextbookItem.id)
+            )).all())
+            if source_item_id is not None:
+                item = next((item for item in items if item.id == source_item_id), None)
+                if item is None or (source_section_id is not None and item.section_id != source_section_id):
+                    return None
+                source_section_id = item.section_id
+                items = [item]
+            if source_section_id is not None:
+                sections = [section for section in sections if section.id == source_section_id]
+                if not sections:
+                    return None
+            output = []
+            for section in sections:
+                book = await db.get(Textbook, section.textbook_id)
+                if book is None:
+                    continue
+                offset = book.page_offset or 0
+                text = ""
+                if source_section_id is not None and source_item_id is None:
+                    pages = (await db.execute(
+                        select(TextbookPage.page_index, TextbookPage.text).where(
+                            TextbookPage.textbook_id == book.id,
+                            TextbookPage.page_index.between(section.pdf_from, section.pdf_to),
+                        )
+                    )).all()
+                    text = section_text({row.page_index: row.text or "" for row in pages},
+                                        section.pdf_from, section.pdf_to, offset)
+                output.append({
+                    "id": section.id, "number": section.number, "title": section.title,
+                    "textbook_id": book.id, "textbook_title": book.title,
+                    "student_display": book.student_display,
+                    "page_from": section.pdf_from - offset, "page_to": section.pdf_to - offset,
+                    "text": text,
+                    "items": [{"id": item.id, "kind": item.kind, "label": item.label,
+                               "page": item.page, "text": item.text, "answer": item.answer,
+                               "difficulty": item.difficulty}
+                              for item in items if item.section_id == section.id and item.textbook_id == book.id],
+                })
+            if not output:
+                return None
+            if source_section_id is None:
+                return {"sections": output}
+            first = output[0]
+            return {"textbook_id": first["textbook_id"], "title": first["textbook_title"],
+                    "student_display": first["student_display"], "sections": output}
+    except SQLAlchemyError as exc:
+        logger.warning("Component textbook context unavailable for topic %s: %s", topic.id, exc.__class__.__name__)
+        return None
+
+
 async def subject_has_textbook(db: AsyncSession, topic: Any) -> bool:
     """Есть ли по предмету темы учебник с параграфами — тогда урок без учебника стоит отметить."""
     from models import Section

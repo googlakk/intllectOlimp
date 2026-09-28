@@ -37,14 +37,15 @@ class ToolSchemaTests(unittest.TestCase):
     def test_component_enum_matches_allowed_components(self):
         enum = LESSON_TOOL["input_schema"]["properties"]["blocks"]["items"] \
             ["properties"]["component"]["enum"]
-        self.assertEqual(set(enum), GENERATION_COMPONENTS)
-        self.assertEqual(set(enum), ALLOWED_COMPONENTS - RETIRED_COMPONENTS)
+        from services.mini_games import GROUP_MINI_GAMES
+        self.assertEqual(set(enum), GENERATION_COMPONENTS - GROUP_MINI_GAMES)
+        self.assertEqual(set(enum), ALLOWED_COMPONENTS - RETIRED_COMPONENTS - GROUP_MINI_GAMES)
 
     def test_retired_hotspot_is_not_offered_to_the_model(self):
         from ai.generator import SYSTEM_PROMPT
         from ai.planner import build_topic_contract
         self.assertNotIn("HotspotInvestigation", SYSTEM_PROMPT)
-        self.assertIn("29 компонентов", SYSTEM_PROMPT)
+        self.assertIn("38 компонент", SYSTEM_PROMPT)
         for subject in ("География", "Физика", "История"):
             plan = build_topic_contract(topic_name="Т", subject_name=subject, learning_objectives="Цель один. Цель два.",
                                         skills=[], resources=None, grade=7, hours=3, lesson_type="study")["component_plan"]

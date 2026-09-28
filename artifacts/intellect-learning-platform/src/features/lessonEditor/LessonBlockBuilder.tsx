@@ -8,11 +8,11 @@ import {
   SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ChevronUp, Eye, GripVertical, Loader2, Pencil, Plus, Search, Trash2, WandSparkles, X } from 'lucide-react';
+import { ChevronUp, Eye, GripVertical, Loader2, Pencil, Plus, Trash2, WandSparkles, X } from 'lucide-react';
 import BlockRenderer from '@/components/blocks/BlockRenderer';
-import { componentDemos } from '@/features/componentCatalog/demos';
+import PrepareComponentDialog from './PrepareComponentDialog';
 import { lessonEditorInvalidationKeys } from './workflow';
-import { useComponents, useUpdateLessonBlocks, type Block, type ComponentRegistryEntry, type GeneratedLesson } from '@/lib/api';
+import { lessonQueryKey, useComponents, useUpdateLessonBlocks, type Block, type GeneratedLesson } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import BlockMediaGenerator, { MEDIA_CAPABLE_COMPONENTS } from './BlockMediaGenerator';
 import { getEducationalVideoStatus } from '@/lib/api';
@@ -23,11 +23,11 @@ type BuilderItem = { id: string; block: Block };
 export default function LessonBlockBuilder({ lesson, topicId, onUnsavedChange }: { lesson: GeneratedLesson; topicId: number; onUnsavedChange?: (value: boolean) => void }) {
   const [items, setItems] = useState<BuilderItem[]>(() => toItems(lesson.blocks));
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [addAfter, setAddAfter] = useState<number | null>(null);
+  const [initialComponent] = useState(() => new URLSearchParams(window.location.search).get('add_component') ?? undefined);
+  const [addAfter, setAddAfter] = useState<number | null>(() => initialComponent ? lesson.blocks.length - 1 : null);
   const [editing, setEditing] = useState<{ index: number; block: Block } | null>(null);
   const [mediaBlockIndex, setMediaBlockIndex] = useState<number | null>(null);
   const [unsaved, setUnsaved] = useState(false);
-  const [query, setQuery] = useState('');
   const componentsQuery = useComponents();
   const updateMutation = useUpdateLessonBlocks();
   const queryClient = useQueryClient();
@@ -41,7 +41,7 @@ export default function LessonBlockBuilder({ lesson, topicId, onUnsavedChange }:
 
   const pendingVideoJobs = useMemo(() => collectPendingVideoJobs(lesson.blocks), [lesson.blocks]);
   useEffect(() => {
-    if (pendingVideoJobs.length === 0 || updateMutation.isPending || unsaved) return;
+    if (pendingVideoJobs.length === 0 || updateMutation.isPending || unsaved || addAfter !== null) return;
     const timer = window.setTimeout(async () => {
       let nextBlocks = lesson.blocks;
       let changed = false;
@@ -66,14 +66,14 @@ export default function LessonBlockBuilder({ lesson, topicId, onUnsavedChange }:
       }
     }, 8000);
     return () => window.clearTimeout(timer);
-  }, [lesson.blocks, lesson.id, pendingVideoJobs, queryClient, topicId, updateMutation.isPending, unsaved]);
+  }, [lesson.blocks, lesson.id, pendingVideoJobs, queryClient, topicId, updateMutation.isPending, unsaved, addAfter]);
 
   const persist = async (next: BuilderItem[]) => {
     setItems(next);
     setUnsaved(true);
     try {
       const saved = await updateMutation.mutateAsync({ lesson_id: lesson.id, blocks: next.map((item) => item.block) });
-      queryClient.setQueryData(['lesson', topicId, 'teacher', undefined], saved);
+      queryClient.setQueryData(lessonQueryKey(topicId, 'teacher'), saved);
       setUnsaved(false);
       await Promise.all(lessonEditorInvalidationKeys(topicId).map((queryKey) => queryClient.invalidateQueries({ queryKey })));
     } catch { /* Preserve local blocks and expose retry below. */ }
@@ -92,16 +92,18 @@ export default function LessonBlockBuilder({ lesson, topicId, onUnsavedChange }:
     void persist(items.filter((_, itemIndex) => itemIndex !== index));
   };
 
-  const addBlock = (entry: ComponentRegistryEntry) => {
-    const demo = componentDemos[entry.id]?.block;
-    if (!demo) return;
-    const item = { id: makeId(), block: cloneBlock(demo) };
-    const index = addAfter === null ? items.length : addAfter + 1;
-    const next = [...items];
-    next.splice(index, 0, item);
+  const closeAdd = () => {
     setAddAfter(null);
-    setQuery('');
-    void persist(next);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('add_component');
+    window.history.replaceState(window.history.state, '', url);
+  };
+
+  const inserted = (saved: GeneratedLesson) => {
+    setItems(toItems(saved.blocks));
+    queryClient.setQueryData(lessonQueryKey(topicId, 'teacher'), saved);
+    closeAdd();
+    void Promise.all(lessonEditorInvalidationKeys(topicId).map((queryKey) => queryClient.invalidateQueries({ queryKey })));
   };
 
   const saveEditedBlock = () => {
@@ -112,16 +114,6 @@ export default function LessonBlockBuilder({ lesson, topicId, onUnsavedChange }:
     void persist(next);
   };
 
-  const subject = String(lesson.lesson_metadata?.subject_name || '');
-  const available = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const subjectCode = subjectSlug(subject);
-    return (componentsQuery.data || [])
-      .filter((entry) => entry.id !== 'generated-media')
-      .filter((entry) => !needle || `${entry.purpose} ${entry.id} ${categoryLabel(entry.category)}`.toLowerCase().includes(needle))
-      .sort((a, b) => Number(b.subjects.includes(subjectCode)) - Number(a.subjects.includes(subjectCode)));
-  }, [componentsQuery.data, query, subject]);
-
   return (
     <section data-testid="lesson-block-builder" className="mt-8">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -131,7 +123,7 @@ export default function LessonBlockBuilder({ lesson, topicId, onUnsavedChange }:
         </div>
         <button
           type="button"
-          disabled={updateMutation.isPending} onClick={() => setAddAfter(items.length - 1)}
+          disabled={updateMutation.isPending || unsaved} onClick={() => setAddAfter(items.length - 1)}
           className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 text-sm font-bold text-foreground hover:bg-muted"
         >
           <Plus className="h-4 w-4" /> Добавить блок
@@ -157,7 +149,7 @@ export default function LessonBlockBuilder({ lesson, topicId, onUnsavedChange }:
                 expanded={expandedId === item.id}
                 disabled={updateMutation.isPending}
                 onToggle={() => setExpandedId((current) => current === item.id ? null : item.id)}
-                onAdd={() => setAddAfter(index)}
+                onAdd={() => { if (!unsaved) setAddAfter(index); }}
                 onEdit={() => setEditing({ index, block: cloneBlock(item.block) })}
                 onMedia={!unsaved && MEDIA_CAPABLE_COMPONENTS.has(item.block.component) ? () => setMediaBlockIndex(index) : undefined}
                 onRemove={() => remove(index)}
@@ -168,32 +160,9 @@ export default function LessonBlockBuilder({ lesson, topicId, onUnsavedChange }:
       </DndContext>
 
       {addAfter !== null && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-label="Добавить блок">
-          <div className="max-h-[82vh] w-full max-w-3xl overflow-hidden rounded-t-lg border border-border bg-background shadow-2xl sm:rounded-lg">
-            <div className="flex items-center justify-between border-b border-border px-5 py-4">
-              <div>
-                <h3 className="font-bold text-foreground">Добавить учебный блок</h3>
-                <p className="text-xs text-muted-foreground">Подходящие для предмета «{subject || 'текущий'}» показаны первыми.</p>
-              </div>
-              <button type="button" onClick={() => setAddAfter(null)} aria-label="Закрыть" className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-muted"><X className="h-5 w-5" /></button>
-            </div>
-            <div className="border-b border-border p-4">
-              <label className="flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-3">
-                <Search className="h-4 w-4 text-muted-foreground" />
-                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Найти объяснение, практику, схему..." className="min-w-0 flex-1 bg-transparent text-sm outline-none" autoFocus />
-              </label>
-            </div>
-            <div className="grid max-h-[58vh] gap-2 overflow-y-auto p-4 sm:grid-cols-2">
-              {available.map((entry) => (
-                <button key={entry.id} type="button" onClick={() => addBlock(entry)} className="min-h-24 rounded-lg border border-border bg-card p-4 text-left transition-colors hover:border-primary hover:bg-primary/5">
-                  <span className="text-xs font-bold uppercase text-primary">{categoryLabel(entry.category)}</span>
-                  <span className="mt-1 block font-bold text-foreground">{entry.purpose}</span>
-                  <span className="mt-1 line-clamp-2 block text-xs leading-relaxed text-muted-foreground">{componentDemos[entry.id]?.usage || entry.rendering_notes}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+        <PrepareComponentDialog lessonId={lesson.id} afterIndex={addAfter}
+          components={componentsQuery.data ?? []} initialComponent={initialComponent}
+          onInserted={inserted} onClose={closeAdd} />
       )}
       {editing && (
         <BlockEditorDialog
@@ -341,7 +310,7 @@ function FieldShell({ label, children }: { label: string; children: React.ReactN
 }
 
 const inputClass = 'min-h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary';
-const TECHNICAL_FIELDS = new Set(['objective_ids', 'anchor', 'prompt', 'model', 'job_id', 'generation_id', 'media_slot']);
+const TECHNICAL_FIELDS = new Set(['objective_ids', 'source_ref', 'anchor', 'model', 'job_id', 'generation_id', 'media_slot']);
 
 function setAtPath(source: unknown, path: Array<string | number>, value: unknown): unknown {
   if (path.length === 0) return value;
@@ -371,6 +340,9 @@ function fieldLabel(key: string): string {
     explanation: 'Обратная связь', hints: 'Подсказки', slides: 'Слайды', learning_point: 'Учебный смысл', steps: 'Шаги',
     description: 'Описание', math: 'Формула', events: 'События', date: 'Дата', label: 'Название', final_answer: 'Итоговый ответ',
     type: 'Тип взаимодействия', avatar_script: 'Реплика помощника', evidence_stage: 'Этап обучения',
+    prompt: 'Задание', rule: 'Правило', kind: 'Вид', multiplier: 'Множитель', offset: 'Сдвиг', examples: 'Примеры',
+    challenge_inputs: 'Числа для проверки', inputs: 'Исходные числа', target_outputs: 'Целевые результаты',
+    operations: 'Операции', solution: 'Образец цепочки', max_steps: 'Максимум шагов', value: 'Значение',
   };
   return labels[key] || key.replaceAll('_', ' ');
 }
@@ -417,29 +389,16 @@ function blockTitle(block: Block): string {
 function componentLabel(component: string): string {
   const labels: Record<string, string> = {
     ShortExplanation: 'Объяснение', KeyConcept: 'Ключевое понятие', WorkedExample: 'Разбор примера',
+    BossRaid: 'Одолей босса · групповая игра', CodeVault: 'Секретный код · групповая игра',
+    KnowledgeAuction: 'Аукцион утверждений · групповая игра', WordRelay: 'Объясни без запретных слов · групповая игра',
+    PuzzleAssembly: 'Собери целое · групповая игра', ErrorHunt: 'Почини решение · индивидуальная игра', LearningPath: 'Мой маршрут · индивидуальная игра',
     GuidedPractice: 'Практика с поддержкой', IndependentProblem: 'Самостоятельное задание', RetrievalCheck: 'Быстрая проверка',
     Presentation: 'Презентация', GeneratedMedia: 'AI-медиа', MasteryCheck: 'Итоговая проверка', Reflection: 'Рефлексия',
     MindMap: 'Карта понятий', Timeline: 'Лента времени', SortAndClassify: 'Сортировка', ProcessBuilder: 'Сборка процесса',
     ArgumentMap: 'Карта аргументов', BranchingScenario: 'Сценарий решений', MisconceptionDebugger: 'Разбор ошибки',
+    RuleDiscovery: 'Скрытое правило', TransformationMachine: 'Фабрика преобразований',
     PredictionLab: 'Лаборатория прогноза', DataInvestigation: 'Исследование данных', PhysicsSandbox: 'Физическая модель',
     HotspotInvestigation: 'Исследование изображения', CodeBlocksLab: 'Блоковое программирование', ChronologyLine: 'Лента событий', CauseEffectMap: 'Причины и следствия', StepSolver: 'Решаю по шагам', FunctionExplorer: 'График по формуле', Illustration: 'Иллюстрация',
   };
   return labels[component] || component;
-}
-
-function categoryLabel(category: string): string {
-  return ({ explain: 'Объяснение', model: 'Пример', practice: 'Практика', assess: 'Проверка', represent: 'Визуализация', interact: 'Интерактив', communicate: 'Рассуждение', reflect: 'Рефлексия', media: 'Медиа' } as Record<string, string>)[category] || category;
-}
-
-function subjectSlug(subject: string): string {
-  const value = subject.toLowerCase();
-  if (value.includes('математ') || value.includes('алгебр') || value.includes('геометр')) return 'math';
-  if (value.includes('литератур') || value.includes('язык')) return 'literature';
-  if (value.includes('физик')) return 'physics';
-  if (value.includes('биолог')) return 'biology';
-  if (value.includes('хими')) return 'chemistry';
-  if (value.includes('истори')) return 'history';
-  if (value.includes('географ')) return 'geography';
-  if (value.includes('информат')) return 'informatics';
-  return 'general';
 }

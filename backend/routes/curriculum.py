@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/curriculum", tags=["curriculum"])
 @router.post("/subjects/{subject_id}/build")
 async def build_subject_graph(
     subject_id: int,
-    user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
+    user: AuthPrincipal = Depends(require_roles("admin")),
     db: AsyncSession = Depends(get_db),
 ):
     await require_subject_management(user, subject_id, db)

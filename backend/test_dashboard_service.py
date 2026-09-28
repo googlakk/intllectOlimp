@@ -81,14 +81,21 @@ class LearningReportTests(unittest.IsolatedAsyncioTestCase):
 
 
 class OverviewQueryCountTests(unittest.IsolatedAsyncioTestCase):
-    async def test_teacher_overview_is_a_single_query(self):
+    async def test_teacher_overview_uses_assignments_then_scoped_counters(self):
         from unittest.mock import AsyncMock, MagicMock
         from services.dashboard import get_dashboard_overview
         result = MagicMock()
         result.one.return_value = SimpleNamespace(students=2, subjects=1, topics=4, published=3, completed=4)
-        db = SimpleNamespace(execute=AsyncMock(return_value=result), scalar=AsyncMock(), scalars=AsyncMock())
-        overview = await get_dashboard_overview(db, user=SimpleNamespace(role="teacher", teacher_id=5))
-        self.assertEqual(db.execute.await_count, 1)
+        assignments = MagicMock()
+        assignments.all.return_value = [(12,)]
+        db = SimpleNamespace(execute=AsyncMock(side_effect=[assignments, result]), scalar=AsyncMock(), scalars=AsyncMock())
+        overview = await get_dashboard_overview(db, user=SimpleNamespace(role="teacher", teacher_id=5, organization_id=1))
+        self.assertEqual(db.execute.await_count, 2)
+        scope_query = str(db.execute.await_args_list[0].args[0])
+        self.assertIn("teacher_subject_assignments.organization_id", scope_query)
+        count_query = str(db.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True}))
+        self.assertEqual(count_query.count("subjects.id IN (12)"), 4)
+        self.assertNotIn("subjects.grade <=", count_query)
         db.scalar.assert_not_awaited()
         db.scalars.assert_not_awaited()
         self.assertEqual(overview["average_progress"], 50.0)

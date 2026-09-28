@@ -895,6 +895,11 @@ async def generate_lesson_draft(
         hours=topic.hours,
         lesson_type=topic.lesson_type,
         content_language=subject.instruction_language,
+        textbook_grounded=bool(textbook) and any(
+            str(section.get("text") or "").strip()
+            or any(str(item.get("text") or "").strip() for item in section.get("items") or [])
+            for section in textbook.get("sections") or []
+        ),
     )
     try:
         generated = await generator(

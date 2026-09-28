@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { request } from './client';
+import { ApiError, request } from './client';
 
 export type Classroom = {
   id: number; name: string; grade: number; academic_year: string; student_count: number;
@@ -12,10 +12,23 @@ export type ClassroomStudent = {
 export type TeacherAccount = {
   teacher_id: number; profile_id: number; name: string; login: string;
   status: string; must_change_password: boolean;
+  subjects: Array<{ id: number; name: string; grade: number }>;
 };
 export type IssuedCredentials = {
   profile_id: number; login: string; temporary_password: string; student_id?: number; teacher_id?: number; classroom_id?: number;
 };
+
+export const useTeacherSubjectOptions = () => useQuery({
+  queryKey: ['accounts', 'teacher-subject-options'],
+  queryFn: async () => {
+    try {
+      return await request<Array<{ id: number; name: string; grade: number }>>('/accounts/teacher-subjects/options');
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) throw new Error('Перезапустите локальный сервер после применения миграции назначений учителей.');
+      throw error;
+    }
+  },
+});
 
 export const useClassrooms = () => useQuery({
   queryKey: ['accounts', 'classrooms'],
@@ -30,7 +43,8 @@ export const useClassroomStudents = (classroomId: number | null) => useQuery({
 
 export const useTeachers = (enabled = true) => useQuery({
   queryKey: ['accounts', 'teachers'],
-  queryFn: () => request<TeacherAccount[]>('/accounts/teachers'),
+  queryFn: async () => (await request<Array<Omit<TeacherAccount, 'subjects'> & { subjects?: TeacherAccount['subjects'] }>>('/accounts/teachers'))
+    .map(teacher => ({ ...teacher, subjects: teacher.subjects ?? [] })),
   enabled,
 });
 
@@ -51,8 +65,13 @@ export const useCreateClassroom = () => useRefreshingMutation(
 );
 
 export const useCreateTeacher = () => useRefreshingMutation(
-  (data: { login: string; display_name: string }) => request<IssuedCredentials>('/accounts/teachers', { method: 'POST', body: JSON.stringify(data) }),
-  [['accounts', 'teachers']],
+  (data: { login: string; display_name: string; subject_ids: number[]; classroom_ids?: number[] }) => request<IssuedCredentials>('/accounts/teachers', { method: 'POST', body: JSON.stringify(data) }),
+  [['accounts', 'teachers'], ['accounts', 'classrooms'], ['subjects'], ['dashboard-overview'], ['dashboard-students']],
+);
+
+export const useSetTeacherSubjects = () => useRefreshingMutation(
+  (data: { profileId: number; subject_ids: number[] }) => request<{ ok: boolean }>(`/accounts/teachers/${data.profileId}/subjects`, { method: 'PUT', body: JSON.stringify({ subject_ids: data.subject_ids }) }),
+  [['accounts', 'teachers'], ['accounts', 'classrooms'], ['subjects'], ['dashboard-overview'], ['dashboard-students']],
 );
 
 export const useCreateStudent = () => useRefreshingMutation(

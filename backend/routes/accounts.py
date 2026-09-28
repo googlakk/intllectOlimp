@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -18,6 +18,7 @@ from services.accounts import (
     unassign_teacher,
 )
 from services.auth import AuthPrincipal
+from services.teacher_assignments import replace_teacher_subjects, teacher_subject_options
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -35,6 +36,23 @@ class AccountInput(BaseModel):
 
 class StudentAccountInput(AccountInput):
     classroom_id: int
+
+
+class TeacherAccountInput(AccountInput):
+    subject_ids: list[int] = Field(min_length=1, max_length=200)
+    classroom_ids: list[int] = Field(default_factory=list, max_length=200)
+
+    @field_validator("display_name")
+    @classmethod
+    def teacher_name(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 2:
+            raise ValueError("Введите имя учителя (не менее двух символов).")
+        return value
+
+
+class TeacherSubjectsInput(BaseModel):
+    subject_ids: list[int] = Field(max_length=200)
 
 
 class BulkStudentAccountInput(BaseModel):
@@ -69,7 +87,7 @@ async def add_classroom(
 
 @router.post("/teachers")
 async def add_teacher(
-    payload: AccountInput,
+    payload: TeacherAccountInput,
     user: AuthPrincipal = Depends(require_roles("admin")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -82,6 +100,25 @@ async def teachers(
     db: AsyncSession = Depends(get_db),
 ):
     return await list_teachers(user, db)
+
+
+@router.put("/teachers/{teacher_profile_id}/subjects")
+async def update_teacher_subjects(
+    teacher_profile_id: int,
+    payload: TeacherSubjectsInput,
+    user: AuthPrincipal = Depends(require_roles("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    await replace_teacher_subjects(user, teacher_profile_id=teacher_profile_id, subject_ids=payload.subject_ids, db=db)
+    return {"ok": True}
+
+
+@router.get("/teacher-subjects/options")
+async def subject_assignment_options(
+    user: AuthPrincipal = Depends(require_roles("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    return await teacher_subject_options(user, db)
 
 
 @router.post("/students")

@@ -11,7 +11,6 @@ import {
   useClassroomStudents,
   useCreateClassroom,
   useCreateStudent,
-  useCreateTeacher,
   useResetAccountPassword,
   useSetAccountBlocked,
   useTeachers,
@@ -19,6 +18,7 @@ import {
   useUnassignTeacher,
 } from '@/lib/api';
 import { parseStudentCsv } from './studentCsv';
+import { SubjectTeachersPanel } from './SubjectTeachersPanel';
 
 export function AccountsManager() {
   const { user } = useAuth();
@@ -32,7 +32,6 @@ export function AccountsManager() {
   const fileRef = useRef<HTMLInputElement>(null);
   const createClassroom = useCreateClassroom();
   const createStudent = useCreateStudent();
-  const createTeacher = useCreateTeacher();
   const assignTeacher = useAssignTeacher();
   const unassignTeacher = useUnassignTeacher();
   const bulkCreate = useBulkCreateStudents();
@@ -78,15 +77,18 @@ export function AccountsManager() {
     });
   };
 
-  if (isLoading) return <div className="grid min-h-64 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
-
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
-        <div><h1 className="text-3xl font-bold">Классы и ученики</h1><p className="mt-1 text-muted-foreground">Управление доступом к учебной программе</p></div>
+        <div><h1 className="text-3xl font-bold">{isAdmin ? 'Учителя, классы и ученики' : 'Классы и ученики'}</h1><p className="mt-1 text-muted-foreground">Управление доступом к учебной программе</p></div>
         {isAdmin && <ClassroomForm onSubmit={(payload) => run(() => createClassroom.mutateAsync(payload))} />}
       </header>
       {error && <p role="alert" className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+      {isAdmin && <SubjectTeachersPanel onCredentials={setCredentials}
+        onBlock={(teacher) => run(() => setBlocked.mutateAsync({ profileId: teacher.profile_id, blocked: teacher.status !== 'blocked' }))}
+        onReset={(teacher) => run(async () => { const result = await resetPassword.mutateAsync(teacher.profile_id); setCredentials([{ profile_id: teacher.profile_id, login: teacher.login, temporary_password: result.temporary_password }]); })}
+      />}
+      {isLoading && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Загружаем учебные классы…</p>}
       <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
         <aside className="border-r pr-4">
           <p className="mb-3 text-xs font-bold uppercase text-muted-foreground">Учебные классы</p>
@@ -123,11 +125,8 @@ export function AccountsManager() {
             {isAdmin && <AdminTeacherPanel
               classroom={classrooms.find((room) => room.id === classroomId)!}
               teachers={teachers}
-              onCreate={(payload) => run(async () => setCredentials([await createTeacher.mutateAsync(payload)]))}
               onAssign={(profileId) => run(() => assignTeacher.mutateAsync({ classroom_id: classroomId, teacher_profile_id: profileId }))}
               onUnassign={(profileId) => run(() => unassignTeacher.mutateAsync({ classroom_id: classroomId, teacher_profile_id: profileId }))}
-              onBlock={(teacher) => run(() => setBlocked.mutateAsync({ profileId: teacher.profile_id, blocked: teacher.status !== 'blocked' }))}
-              onReset={(teacher) => run(async () => { const result = await resetPassword.mutateAsync(teacher.profile_id); setCredentials([{ profile_id: teacher.profile_id, login: teacher.login, temporary_password: result.temporary_password }]); })}
             />}
           </> : <div className="grid min-h-64 place-items-center text-muted-foreground"><Users className="h-8 w-8" /></div>}
         </section>
@@ -143,21 +142,18 @@ function ClassroomForm({ onSubmit }: { onSubmit: (data: { name: string; grade: n
   return <form onSubmit={(e) => { e.preventDefault(); const data = new FormData(e.currentTarget); onSubmit({ name: String(data.get('name')), grade: Number(data.get('grade')), academic_year: String(data.get('year')) }); setOpen(false); }} className="flex flex-wrap gap-2"><input name="name" required placeholder="7А" className="h-10 w-24 rounded-md border px-3" /><input name="grade" required type="number" min="1" max="12" placeholder="Класс" className="h-10 w-24 rounded-md border px-3" /><input name="year" required defaultValue="2026/27" className="h-10 w-28 rounded-md border px-3" /><button className="h-10 rounded-md bg-primary px-4 font-semibold text-primary-foreground">Создать</button></form>;
 }
 
-function AdminTeacherPanel({ classroom, teachers, onCreate, onAssign, onUnassign, onBlock, onReset }: {
+function AdminTeacherPanel({ classroom, teachers, onAssign, onUnassign }: {
   classroom: { teachers: Array<{ profile_id: number; name: string; status: string }> };
   teachers: TeacherAccount[];
-  onCreate: (data: { login: string; display_name: string }) => void;
   onAssign: (id: number) => void;
   onUnassign: (id: number) => void;
-  onBlock: (teacher: TeacherAccount) => void;
-  onReset: (teacher: TeacherAccount) => void;
 }) {
   const assignedIds = new Set(classroom.teachers.map((teacher) => teacher.profile_id));
   const available = teachers.filter((teacher) => teacher.status === 'active' && !assignedIds.has(teacher.profile_id));
   return <section className="space-y-4 border-t pt-5">
     <div><h3 className="font-bold">Учителя класса</h3><div className="mt-2 flex flex-wrap gap-2">{classroom.teachers.map((teacher) => <span key={teacher.profile_id} className="inline-flex h-9 items-center gap-2 rounded-md border bg-muted/30 px-3 text-sm font-semibold">{teacher.name}{teacher.status === 'blocked' && <span className="text-destructive">заблокирован</span>}<button title="Снять назначение" onClick={() => onUnassign(teacher.profile_id)} className="text-muted-foreground hover:text-foreground"><UserMinus className="h-4 w-4" /></button></span>)}{!classroom.teachers.length && <span className="text-sm text-muted-foreground">Учитель пока не назначен</span>}</div></div>
-    <div className="flex flex-wrap gap-2"><select defaultValue="" onChange={(e) => { if (e.target.value) { onAssign(Number(e.target.value)); e.target.value = ''; } }} className="h-10 rounded-md border bg-background px-3"><option value="">Назначить учителя</option>{available.map((teacher) => <option key={teacher.profile_id} value={teacher.profile_id}>{teacher.name}</option>)}</select><form onSubmit={(e) => { e.preventDefault(); const data = new FormData(e.currentTarget); onCreate({ display_name: String(data.get('name')), login: String(data.get('login')) }); e.currentTarget.reset(); }} className="flex flex-wrap gap-2"><input name="name" required placeholder="Имя учителя" className="h-10 rounded-md border px-3" /><input name="login" required placeholder="Логин" pattern="[a-zA-Z0-9._-]{3,50}" className="h-10 rounded-md border px-3" /><button className="h-10 rounded-md border px-3 font-semibold">Создать учителя</button></form></div>
-    <div className="overflow-x-auto rounded-md border"><table className="w-full text-sm"><thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground"><tr><th className="p-3">Учитель</th><th className="p-3">Логин</th><th className="p-3">Статус</th><th className="p-3 text-right">Действия</th></tr></thead><tbody>{teachers.map((teacher) => <tr key={teacher.profile_id} className="border-t"><td className="p-3 font-semibold">{teacher.name}</td><td className="p-3 font-mono text-xs">{teacher.login}</td><td className="p-3">{teacher.status === 'blocked' ? 'Заблокирован' : teacher.must_change_password ? 'Временный пароль' : 'Активен'}</td><td className="p-3"><div className="flex justify-end gap-1"><button title="Сбросить пароль" onClick={() => onReset(teacher)} className="grid h-8 w-8 place-items-center rounded-md hover:bg-muted"><KeyRound className="h-4 w-4" /></button><button title={teacher.status === 'blocked' ? 'Восстановить' : 'Заблокировать'} onClick={() => onBlock(teacher)} className="grid h-8 w-8 place-items-center rounded-md hover:bg-muted">{teacher.status === 'blocked' ? <RotateCcw className="h-4 w-4" /> : <Ban className="h-4 w-4" />}</button></div></td></tr>)}</tbody></table></div>
+    <p className="text-sm text-muted-foreground">Назначение в учебный класс даёт доступ к списку учеников. Предметы и классы программы назначаются отдельно, выше.</p>
+    <select aria-label="Назначить учителя классу" defaultValue="" onChange={(e) => { if (e.target.value) { onAssign(Number(e.target.value)); e.target.value = ''; } }} className="h-10 rounded-md border bg-background px-3"><option value="">Назначить учителя</option>{available.map((teacher) => <option key={teacher.profile_id} value={teacher.profile_id}>{teacher.name}</option>)}</select>
   </section>;
 }
 

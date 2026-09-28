@@ -152,7 +152,7 @@ MATH: dict[str, Any] = {
     "check_lesson_types": ("study", None, ""),
     # Тема привязана к параграфу — у каждого примера и задачи должна быть ссылка на учебник (source_ref).
     # «Найди ошибку» строится на заблуждении, а не на задаче книги — его не проверяем.
-    "textbook_sourced": frozenset({"WorkedExample", "StepSolver", "GuidedPractice", "IndependentProblem"}),
+    "textbook_sourced": frozenset({"WorkedExample", "StepSolver", "GuidedPractice", "IndependentProblem", "RuleDiscovery", "TransformationMachine"}),
     "checks": (
         {
             "code": "math_without_worked_example",
@@ -186,6 +186,19 @@ MATH: dict[str, Any] = {
 SUBJECT_PROFILES: tuple[dict[str, Any], ...] = (HISTORY, MATH)
 
 
+def numeric_model_candidates(objective_text: str) -> list[str]:
+    """Conservative candidates for the small numeric engines, never general algebra."""
+    text = objective_text.casefold().replace("ё", "е")
+    if re.search(r"неравен|уравнен|одз|допустим|рациональн.*дроб|логариф|тригоном|производн|многочлен|корень|корни", text):
+        return []
+    candidates = []
+    if re.search(r"линейн.*функц|квадратичн.*функц|модул.*числ|числов.*закономерност|закономерност.*числ", text):
+        candidates.append("RuleDiscovery")
+    if re.search(r"порядок.*действ|арифметическ.*действ|числов.*выражен|вычисл.*выражен", text):
+        candidates.append("TransformationMachine")
+    return candidates
+
+
 def subject_profile(subject_name: str | None) -> dict[str, Any] | None:
     """Профиль по названию предмета: «История Кыргызстана», «Всемирная история», «Кыргызстан тарыхы»."""
     name = (subject_name or "").casefold()
@@ -211,7 +224,7 @@ def subject_prompt(profile: dict[str, Any]) -> str:
 _TASK_COMPONENTS = frozenset({
     "GuidedPractice", "IndependentProblem", "RetrievalCheck", "TextEvidencePicker", "ArgumentBuilder", "SortAndClassify",
     "ProcessBuilder", "ArgumentMap", "BranchingScenario", "MisconceptionDebugger", "MasteryCheck", "ChronologyLine", "CauseEffectMap",
-    "StepSolver", "FunctionExplorer",
+    "StepSolver", "FunctionExplorer", "RuleDiscovery", "TransformationMachine",
 })
 
 
@@ -253,8 +266,10 @@ def _has_textbook_ref(block: dict[str, Any]) -> bool:
     ref = block.get("content", {}).get("source_ref") if isinstance(block.get("content"), dict) else None
     if not isinstance(ref, dict):
         return False
-    # Разобранный пример может идти по тексту параграфа, без отдельного элемента.
-    return ref.get("item_id") is not None or (block.get("component") == "WorkedExample" and ref.get("kind") == "section")
+    # Пример и числовая модель могут опираться на правило из параграфа.
+    # section подтверждает происхождение правила, а не дословную задачу книги.
+    section_based = {"WorkedExample", "RuleDiscovery", "TransformationMachine"}
+    return ref.get("item_id") is not None or (block.get("component") in section_based and ref.get("kind") == "section")
 
 
 def textbook_source_warnings(blocks: list[dict[str, Any]], subject_name: str | None,

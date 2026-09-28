@@ -29,7 +29,7 @@ from sqlalchemy import bindparam, text
 from cache_policy import api_cache_control
 from database import Base, engine, warm_database_pool
 from errors import ApplicationError
-from routes import topics, accounts, ai_models, auth, avatar, components, curriculum, dashboard, feedback, ktp, lessons, media, progress, subjects, textbooks, tutor
+from routes import topics, accounts, ai_models, auth, avatar, components, curriculum, dashboard, feedback, ktp, lesson_components, lessons, media, progress, subjects, textbooks, tutor
 from schema_compat import apply_schema_compatibility
 from seed import seed_if_empty
 from static_site import mount_frontend
@@ -107,6 +107,7 @@ for router in (ktp.router, components.router, avatar.router, dashboard.router, a
 app.include_router(media.router)
 app.include_router(avatar.asset_router)
 app.include_router(media.content_router)
+app.include_router(lesson_components.router)
 for router in (subjects.router, curriculum.router, lessons.router, progress.router, tutor.router):
     app.include_router(router, dependencies=[Depends(require_roles("admin", "teacher", "student"))])
 

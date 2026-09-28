@@ -330,6 +330,7 @@ def build_topic_contract(
     hours: int | None,
     lesson_type: str | None,
     content_language: str = "ru",
+    textbook_grounded: bool = False,
 ) -> dict[str, Any]:
     objectives = decompose_objectives(learning_objectives)
     volume = infer_volume(hours, len(objectives), learning_objectives)
@@ -364,14 +365,39 @@ def build_topic_contract(
             "Продолжить следующие цели темы отдельными частями модуля.",
             "Добавить повторение и итоговую работу после всех частей.",
         ]
-    from ai.subject_profiles import subject_profile
+    from ai.subject_profiles import numeric_model_candidates, subject_profile
 
     profile = subject_profile(subject_name)
     if profile:
         contract["subject_profile"] = profile["id"]
+    component_plan = build_component_plan(shape, objectives, focus, profile)
+    if textbook_grounded and profile and profile["id"] == "math" and shape != "assessment_only":
+        by_id = {objective["id"]: objective.get("text", "") for objective in objectives}
+        for step in component_plan:
+            if step["role"] != "apply":
+                continue
+            # Every mapped objective must fit: do not replace a mixed-goal task
+            # with a numeric game that demonstrates only one of its objectives.
+            matching = [set(numeric_model_candidates(by_id.get(identity, ""))) for identity in step["objective_ids"]]
+            candidates = set.intersection(*matching) if matching else set()
+            if candidates:
+                step["allowed_components"] = [*step["allowed_components"], *sorted(candidates)]
+                step["source_ref_required"] = True
+                step["cognitive_action"] += "; числовую модель выбирай только по материалу учебника с source_ref"
+    if textbook_grounded and shape != "assessment_only":
+        # One optional short game, while retaining the normal teaching and final assessment.
+        # Group activities require teacher facilitation and are inserted manually.
+        for step in component_plan:
+            suitable = {"GuidedPractice", "IndependentProblem", "MisconceptionDebugger", "SortAndClassify"}
+            if (step["role"] in {"practice", "apply"} and len(step["objective_ids"]) == 1
+                    and suitable.intersection(step["allowed_components"])):
+                step["allowed_components"] = [*step["allowed_components"], "ErrorHunt", "LearningPath"]
+                step["source_ref_required"] = True
+                step["cognitive_action"] += "; необязательно: одна мини-игра на 3–7 минут по этой цели и учебнику"
+                break
     return {
         "topic_contract": contract,
-        "component_plan": build_component_plan(shape, objectives, focus, profile),
+        "component_plan": component_plan,
     }
 
 

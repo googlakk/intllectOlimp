@@ -45,7 +45,7 @@ class KtpUploadInput(BaseModel):
 @router.post("/upload")
 async def upload_ktp(
     payload: KtpUploadInput,
-    user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
+    user: AuthPrincipal = Depends(require_roles("admin")),
     db: AsyncSession = Depends(get_db),
 ):
     await require_grade_management(user, payload.grade, db)
@@ -56,7 +56,7 @@ async def upload_ktp(
 
 
 @router.post("/parse")
-async def parse_ktp(file: UploadFile = File(...)):
+async def parse_ktp(file: UploadFile = File(...), user: AuthPrincipal = Depends(require_roles("admin"))):
     """Разбирает файл КТП и возвращает ЧЕРНОВИК. В базу ничего не пишет.
 
     Черновик проверяет и правит учитель, после чего отправляет на /api/ktp/upload.

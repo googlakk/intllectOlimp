@@ -18,6 +18,13 @@ REQUIRED_FIELDS = {
 }
 
 COMPONENT_METADATA: dict[str, dict[str, Any]] = {
+    **{component: {"roles": ["practice", "apply"], "cognitive_actions": [action],
+                   "heavy_engine": False, "best_for_volume": ["standard", "extended", "unit"]}
+       for component, action in {"BossRaid": "collaborate", "CodeVault": "solve",
+           "KnowledgeAuction": "justify", "WordRelay": "explain", "PuzzleAssembly": "construct",
+           "ErrorHunt": "debug", "LearningPath": "apply"}.items()},
+    "RuleDiscovery": {"roles": ["practice", "apply"], "cognitive_actions": ["infer", "predict"], "heavy_engine": False, "best_for_volume": ["micro", "standard", "extended"]},
+    "TransformationMachine": {"roles": ["practice", "apply"], "cognitive_actions": ["construct", "verify"], "heavy_engine": False, "best_for_volume": ["micro", "standard", "extended"]},
     "RetrievalCheck": {"roles": ["diagnose", "assess"], "cognitive_actions": ["remember"], "heavy_engine": False, "best_for_volume": ["micro", "standard", "extended"]},
     "ShortExplanation": {"roles": ["explain"], "cognitive_actions": ["understand"], "heavy_engine": False, "best_for_volume": ["micro", "standard", "extended"]},
     "KeyConcept": {"roles": ["explain"], "cognitive_actions": ["define", "compare"], "heavy_engine": False, "best_for_volume": ["micro", "standard"]},
@@ -36,6 +43,13 @@ HEAVY_COMPONENT_CODES = {
 }
 
 REGISTRY_ID_TO_COMPONENT = {
+    "boss-raid": "BossRaid",
+    "code-vault": "CodeVault",
+    "knowledge-auction": "KnowledgeAuction",
+    "word-relay": "WordRelay",
+    "puzzle-assembly": "PuzzleAssembly",
+    "error-hunt": "ErrorHunt",
+    "learning-path": "LearningPath",
     "retrieval-check": "RetrievalCheck",
     "short-explanation": "ShortExplanation",
     "key-concept": "KeyConcept",
@@ -58,6 +72,8 @@ REGISTRY_ID_TO_COMPONENT = {
     "cause-effect-map": "CauseEffectMap",
     "step-solver": "StepSolver",
     "function-explorer": "FunctionExplorer",
+    "rule-discovery": "RuleDiscovery",
+    "transformation-machine": "TransformationMachine",
 }
 
 

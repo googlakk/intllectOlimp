@@ -62,7 +62,7 @@ async def get_topic(topic_id: int, user: AuthPrincipal = Depends(require_roles("
 
 
 @router.post("/sections/{section_id}/topics", status_code=201)
-async def create_topic(section_id: int, payload: TopicCreate, user: AuthPrincipal = Depends(require_roles("admin", "teacher")), db: AsyncSession = Depends(get_db)):
+async def create_topic(section_id: int, payload: TopicCreate, user: AuthPrincipal = Depends(require_roles("admin")), db: AsyncSession = Depends(get_db)):
     try:
         return await service.create_topic(section_id, payload.model_dump(exclude_unset=True), user, db)
     except ApplicationError as exc:
@@ -70,7 +70,7 @@ async def create_topic(section_id: int, payload: TopicCreate, user: AuthPrincipa
 
 
 @router.patch("/topics/{topic_id}")
-async def update_topic(topic_id: int, payload: TopicUpdate, user: AuthPrincipal = Depends(require_roles("admin", "teacher")), db: AsyncSession = Depends(get_db)):
+async def update_topic(topic_id: int, payload: TopicUpdate, user: AuthPrincipal = Depends(require_roles("admin")), db: AsyncSession = Depends(get_db)):
     try:
         return await service.update_topic(topic_id, payload.model_dump(exclude_unset=True), user, db)
     except ApplicationError as exc:
@@ -78,7 +78,7 @@ async def update_topic(topic_id: int, payload: TopicUpdate, user: AuthPrincipal 
 
 
 @router.post("/topics/{topic_id}/archive")
-async def archive_topic(topic_id: int, user: AuthPrincipal = Depends(require_roles("admin", "teacher")), db: AsyncSession = Depends(get_db)):
+async def archive_topic(topic_id: int, user: AuthPrincipal = Depends(require_roles("admin")), db: AsyncSession = Depends(get_db)):
     try:
         return await service.set_topic_archived(topic_id, True, user, db)
     except ApplicationError as exc:
@@ -86,7 +86,7 @@ async def archive_topic(topic_id: int, user: AuthPrincipal = Depends(require_rol
 
 
 @router.post("/topics/{topic_id}/restore")
-async def restore_topic(topic_id: int, user: AuthPrincipal = Depends(require_roles("admin", "teacher")), db: AsyncSession = Depends(get_db)):
+async def restore_topic(topic_id: int, user: AuthPrincipal = Depends(require_roles("admin")), db: AsyncSession = Depends(get_db)):
     try:
         return await service.set_topic_archived(topic_id, False, user, db)
     except ApplicationError as exc:
@@ -107,7 +107,7 @@ class CourseCreate(SectionCreate):
 
 
 @router.post("/subjects", status_code=201)
-async def create_course(payload: CourseCreate, user: AuthPrincipal = Depends(require_roles("admin", "teacher")), db: AsyncSession = Depends(get_db)):
+async def create_course(payload: CourseCreate, user: AuthPrincipal = Depends(require_roles("admin")), db: AsyncSession = Depends(get_db)):
     from services.course_creation import create_course as create
     try:
         return await create(payload.name, payload.grade, user, db)
@@ -116,7 +116,7 @@ async def create_course(payload: CourseCreate, user: AuthPrincipal = Depends(req
 
 
 @router.patch("/subjects/{subject_id}")
-async def rename_course(subject_id: int, payload: SectionCreate, user: AuthPrincipal = Depends(require_roles("admin", "teacher")), db: AsyncSession = Depends(get_db)):
+async def rename_course(subject_id: int, payload: SectionCreate, user: AuthPrincipal = Depends(require_roles("admin")), db: AsyncSession = Depends(get_db)):
     from services.course_creation import rename_subject
     try:
         return await rename_subject(subject_id, payload.name, user, db)
@@ -125,7 +125,7 @@ async def rename_course(subject_id: int, payload: SectionCreate, user: AuthPrinc
 
 
 @router.post("/subjects/{subject_id}/sections", status_code=201)
-async def create_section(subject_id: int, payload: SectionCreate, user: AuthPrincipal = Depends(require_roles("admin", "teacher")), db: AsyncSession = Depends(get_db)):
+async def create_section(subject_id: int, payload: SectionCreate, user: AuthPrincipal = Depends(require_roles("admin")), db: AsyncSession = Depends(get_db)):
     from services.course_creation import create_section as create
     try:
         return await create(subject_id, payload.name, user, db)

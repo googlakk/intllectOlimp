@@ -1,0 +1,30 @@
+{
+  "rule": {
+    "base": {"title": "Числовое правило", "prompt": "Предскажи результат", "explanation": "Удвоить и прибавить три", "rule": {"kind": "affine", "multiplier": 2, "offset": 3}, "examples": [0, 1, 2], "challenge_inputs": [3, 4, 5]},
+    "cases": [
+      {"name": "affine", "patch": {}, "valid": true},
+      {"name": "absolute", "patch": {"rule": {"kind": "absolute", "multiplier": 2, "offset": -1}}, "valid": true},
+      {"name": "square", "patch": {"rule": {"kind": "square", "multiplier": 3, "offset": 1}}, "valid": true},
+      {"name": "repeated_examples", "patch": {"examples": [0, 0]}, "valid": false},
+      {"name": "overlapping_challenge", "patch": {"challenge_inputs": [2, 3]}, "valid": false},
+      {"name": "empty_challenge", "patch": {"challenge_inputs": []}, "valid": false},
+      {"name": "boolean_input", "patch": {"examples": [true]}, "valid": false},
+      {"name": "out_of_bounds", "patch": {"examples": [101]}, "valid": false},
+      {"name": "output_overflow", "patch": {"rule": {"kind": "square", "multiplier": 100, "offset": 1}, "examples": [100]}, "valid": false}
+    ]
+  },
+  "machine": {
+    "base": {"title": "Цепочка", "prompt": "Собери действия", "explanation": "Удвоить и прибавить три", "inputs": [1, 2, 3], "target_outputs": [5, 7, 9], "operations": [{"id": "double", "label": "×2", "kind": "multiply", "value": 2}, {"id": "plus", "label": "+3", "kind": "add", "value": 3}], "solution": ["double", "plus"], "max_steps": 3},
+    "cases": [
+      {"name": "valid_chain", "patch": {}, "valid": true},
+      {"name": "tolerance", "patch": {"target_outputs": [5, 7, 9.0000005]}, "valid": true},
+      {"name": "wrong_last_target", "patch": {"target_outputs": [5, 7, 9.000002]}, "valid": false},
+      {"name": "missing_target", "patch": {"target_outputs": [5, 7]}, "valid": false},
+      {"name": "empty_solution", "patch": {"solution": []}, "valid": false},
+      {"name": "unknown_operation", "patch": {"solution": ["unknown"]}, "valid": false},
+      {"name": "divide_zero", "patch": {"operations": [{"id": "double", "label": "÷0", "kind": "divide", "value": 0}]}, "valid": false},
+      {"name": "too_few_steps", "patch": {"max_steps": 1}, "valid": false},
+      {"name": "boolean_steps", "patch": {"max_steps": true}, "valid": false}
+    ]
+  }
+}

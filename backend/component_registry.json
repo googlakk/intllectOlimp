@@ -682,6 +682,794 @@
     "rendering_notes": "SVG-плоскость с осями через ноль и клеткой; график по формуле, пунктир цели, ползунки параметров, прогноз до ползунков."
   },
   {
+    "id": "rule-discovery",
+    "code": "C46",
+    "category": "interact",
+    "subjects": ["math"],
+    "purpose": "Открой числовое правило по примерам и проверь его на новых числах",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "prompt", "rule", "examples", "challenge_inputs", "explanation"],
+      "properties": {
+        "title": {"type": "string", "minLength": 1},
+        "prompt": {"type": "string", "minLength": 1},
+        "rule": {"type": "object", "required": ["kind", "multiplier", "offset"], "properties": {
+          "kind": {"type": "string", "enum": ["affine", "square", "absolute"]},
+          "multiplier": {"type": "number", "minimum": -100, "maximum": 100},
+          "offset": {"type": "number", "minimum": -100, "maximum": 100}
+        }},
+        "examples": {"type": "array", "minItems": 1, "maxItems": 6, "uniqueItems": true, "items": {"type": "number", "minimum": -100, "maximum": 100}},
+        "challenge_inputs": {"type": "array", "minItems": 1, "maxItems": 6, "uniqueItems": true, "items": {"type": "number", "minimum": -100, "maximum": 100}},
+        "explanation": {"type": "string", "minLength": 1},
+        "objective_ids": {"type": "array", "items": {"type": "string"}},
+        "source_ref": {"type": "object"}
+      }
+    },
+    "rendering_notes": "Числовая машина: видимые примеры, проба своего числа, прогноз новых результатов. Только a*x+b, a*x²+b или a*abs(x)+b."
+  },
+  {
+    "id": "transformation-machine",
+    "code": "C47",
+    "category": "interact",
+    "subjects": ["math"],
+    "purpose": "Собери цепочку арифметических действий, которая преобразует все входные числа в заданные результаты",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "prompt", "inputs", "target_outputs", "operations", "solution", "max_steps", "explanation"],
+      "properties": {
+        "title": {"type": "string", "minLength": 1},
+        "prompt": {"type": "string", "minLength": 1},
+        "inputs": {"type": "array", "minItems": 1, "maxItems": 6, "items": {"type": "number", "minimum": -100, "maximum": 100}},
+        "target_outputs": {"type": "array", "minItems": 1, "maxItems": 6, "items": {"type": "number", "minimum": -1000000, "maximum": 1000000}},
+        "operations": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "object", "required": ["id", "label", "kind", "value"], "properties": {
+          "id": {"type": "string", "minLength": 1}, "label": {"type": "string", "minLength": 1},
+          "kind": {"type": "string", "enum": ["add", "subtract", "multiply", "divide"]},
+          "value": {"type": "number", "minimum": -100, "maximum": 100}
+        }}},
+        "solution": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "string"}},
+        "max_steps": {"type": "integer", "minimum": 1, "maximum": 8},
+        "explanation": {"type": "string", "minLength": 1},
+        "objective_ids": {"type": "array", "items": {"type": "string"}},
+        "source_ref": {"type": "object"}
+      }
+    },
+    "rendering_notes": "Цепочка операций с показом промежуточных чисел, удалением и сбросом шагов. Одна цепочка работает для всех входов; альтернативные верные решения допустимы."
+  },
+  {
+    "id": "boss-raid",
+    "code": "C48",
+    "category": "interact",
+    "subjects": [
+      "math",
+      "science",
+      "geography",
+      "humanities",
+      "literature",
+      "language",
+      "computing",
+      "arts_practical"
+    ],
+    "purpose": "Одолей босса: команды вместе снимают щиты ответами по теме",
+    "is_assessment": false,
+    "content_schema": {
+      "type": "object",
+      "required": [
+        "title",
+        "instruction",
+        "duration_minutes",
+        "takeaway",
+        "rounds"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instruction": {
+          "type": "string",
+          "minLength": 1
+        },
+        "duration_minutes": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 7
+        },
+        "takeaway": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rounds": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "required": [
+              "question",
+              "answer",
+              "explanation"
+            ],
+            "properties": {
+              "question": {
+                "type": "string",
+                "minLength": 1
+              },
+              "answer": {
+                "type": "string",
+                "minLength": 1
+              },
+              "explanation": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "objective_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "source_ref": {
+          "type": "object"
+        }
+      }
+    },
+    "rendering_notes": "Общий экран: три–пять щитов, обсуждение командами, открытие эталона и отметка учителя. Без индивидуальной оценки."
+  },
+  {
+    "id": "code-vault",
+    "code": "C49",
+    "category": "interact",
+    "subjects": [
+      "math",
+      "science",
+      "geography",
+      "humanities",
+      "literature",
+      "language",
+      "computing",
+      "arts_practical"
+    ],
+    "purpose": "Секретный код: группы объединяют решения коротких загадок и открывают сейф",
+    "is_assessment": false,
+    "content_schema": {
+      "type": "object",
+      "required": [
+        "title",
+        "instruction",
+        "duration_minutes",
+        "takeaway",
+        "clues"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instruction": {
+          "type": "string",
+          "minLength": 1
+        },
+        "duration_minutes": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 7
+        },
+        "takeaway": {
+          "type": "string",
+          "minLength": 1
+        },
+        "clues": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "required": [
+              "label",
+              "question",
+              "options",
+              "correct_index",
+              "explanation",
+              "digit"
+            ],
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "question": {
+                "type": "string",
+                "minLength": 1
+              },
+              "options": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 4,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "uniqueItems": true
+              },
+              "correct_index": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "explanation": {
+                "type": "string",
+                "minLength": 1
+              },
+              "digit": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9
+              }
+            }
+          }
+        },
+        "objective_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "source_ref": {
+          "type": "object"
+        }
+      }
+    },
+    "rendering_notes": "Панель сейфа, задания на общий экран и последовательное открытие цифр кода. Учитель ведёт обсуждение."
+  },
+  {
+    "id": "knowledge-auction",
+    "code": "C50",
+    "category": "interact",
+    "subjects": [
+      "math",
+      "science",
+      "geography",
+      "humanities",
+      "literature",
+      "language",
+      "computing",
+      "arts_practical"
+    ],
+    "purpose": "Аукцион утверждений: команды расходуют игровые монеты и обосновывают выбор",
+    "is_assessment": false,
+    "content_schema": {
+      "type": "object",
+      "required": [
+        "title",
+        "instruction",
+        "duration_minutes",
+        "takeaway",
+        "statements"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instruction": {
+          "type": "string",
+          "minLength": 1
+        },
+        "duration_minutes": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 7
+        },
+        "takeaway": {
+          "type": "string",
+          "minLength": 1
+        },
+        "statements": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "required": [
+              "text",
+              "is_true",
+              "explanation"
+            ],
+            "properties": {
+              "text": {
+                "type": "string",
+                "minLength": 1
+              },
+              "is_true": {
+                "type": "boolean"
+              },
+              "explanation": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "objective_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "source_ref": {
+          "type": "object"
+        }
+      }
+    },
+    "rendering_notes": "Торги на общем экране с бюджетами команд, ставками и раскрытием истинности. Обязательны верные и ложные утверждения."
+  },
+  {
+    "id": "word-relay",
+    "code": "C51",
+    "category": "interact",
+    "subjects": [
+      "math",
+      "science",
+      "geography",
+      "humanities",
+      "literature",
+      "language",
+      "computing",
+      "arts_practical"
+    ],
+    "purpose": "Объясни без запретных слов: смена объясняющих и угадывание понятий текущей темы",
+    "is_assessment": false,
+    "content_schema": {
+      "type": "object",
+      "required": [
+        "title",
+        "instruction",
+        "duration_minutes",
+        "takeaway",
+        "cards"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instruction": {
+          "type": "string",
+          "minLength": 1
+        },
+        "duration_minutes": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 7
+        },
+        "takeaway": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cards": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "required": [
+              "term",
+              "forbidden",
+              "hint"
+            ],
+            "properties": {
+              "term": {
+                "type": "string",
+                "minLength": 1
+              },
+              "forbidden": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 5,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "uniqueItems": true
+              },
+              "hint": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "objective_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "source_ref": {
+          "type": "object"
+        }
+      }
+    },
+    "rendering_notes": "Карточка только для объясняющего, экран угадывающих скрывает слова; роли меняются. Учитель отмечает результат раунда."
+  },
+  {
+    "id": "puzzle-assembly",
+    "code": "C52",
+    "category": "interact",
+    "subjects": [
+      "math",
+      "science",
+      "geography",
+      "humanities",
+      "literature",
+      "language",
+      "computing",
+      "arts_practical"
+    ],
+    "purpose": "Собери целое: группы объединяют фрагменты в учебную схему",
+    "is_assessment": false,
+    "content_schema": {
+      "type": "object",
+      "required": [
+        "title",
+        "instruction",
+        "duration_minutes",
+        "takeaway",
+        "slots",
+        "pieces"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instruction": {
+          "type": "string",
+          "minLength": 1
+        },
+        "duration_minutes": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 7
+        },
+        "takeaway": {
+          "type": "string",
+          "minLength": 1
+        },
+        "slots": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "pieces": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "text",
+              "slot_id"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1
+              },
+              "slot_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "objective_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "source_ref": {
+          "type": "object"
+        }
+      }
+    },
+    "rendering_notes": "Разные фрагменты распределяются между группами, общий экран позволяет соединить их с местами схемы. Один фрагмент на место."
+  },
+  {
+    "id": "error-hunt",
+    "code": "C53",
+    "category": "interact",
+    "subjects": [
+      "math",
+      "science",
+      "geography",
+      "humanities",
+      "literature",
+      "language",
+      "computing",
+      "arts_practical"
+    ],
+    "purpose": "Почини решение: самостоятельный поиск и исправление ошибок",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": [
+        "title",
+        "instruction",
+        "duration_minutes",
+        "takeaway",
+        "lines"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instruction": {
+          "type": "string",
+          "minLength": 1
+        },
+        "duration_minutes": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 7
+        },
+        "takeaway": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lines": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "required": [
+              "text",
+              "is_error",
+              "fixes",
+              "correct_index",
+              "explanation"
+            ],
+            "properties": {
+              "text": {
+                "type": "string",
+                "minLength": 1
+              },
+              "is_error": {
+                "type": "boolean"
+              },
+              "fixes": {
+                "type": "array",
+                "minItems": 0,
+                "maxItems": 4,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "correct_index": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 3
+              },
+              "explanation": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "objective_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "source_ref": {
+          "type": "object"
+        }
+      }
+    },
+    "rendering_notes": "Ученик помечает ошибочные строки и выбирает исправление; проверка после завершения, разбор каждой строки. Есть верные строки."
+  },
+  {
+    "id": "learning-path",
+    "code": "C54",
+    "category": "interact",
+    "subjects": [
+      "math",
+      "science",
+      "geography",
+      "humanities",
+      "literature",
+      "language",
+      "computing",
+      "arts_practical"
+    ],
+    "purpose": "Мой маршрут: три самостоятельных задания с выбором сложности",
+    "is_assessment": true,
+    "content_schema": {
+      "type": "object",
+      "required": [
+        "title",
+        "instruction",
+        "duration_minutes",
+        "takeaway",
+        "checkpoints"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instruction": {
+          "type": "string",
+          "minLength": 1
+        },
+        "duration_minutes": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 7
+        },
+        "takeaway": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checkpoints": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "required": [
+              "label",
+              "support",
+              "challenge"
+            ],
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "support": {
+                "type": "object",
+                "required": [
+                  "question",
+                  "options",
+                  "correct_index",
+                  "explanation"
+                ],
+                "properties": {
+                  "question": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "options": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 4,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "uniqueItems": true
+                  },
+                  "correct_index": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3
+                  },
+                  "explanation": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "challenge": {
+                "type": "object",
+                "required": [
+                  "question",
+                  "options",
+                  "correct_index",
+                  "explanation"
+                ],
+                "properties": {
+                  "question": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "options": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 4,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "uniqueItems": true
+                  },
+                  "correct_index": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3
+                  },
+                  "explanation": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "objective_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "source_ref": {
+          "type": "object"
+        }
+      }
+    },
+    "rendering_notes": "Карта из трёх этапов, на каждом выбор задания с поддержкой или вызова. Обратная связь после ответа, итоговый учебный вывод."
+  },
+  {
     "id": "generated-media",
     "code": "C41",
     "category": "media",

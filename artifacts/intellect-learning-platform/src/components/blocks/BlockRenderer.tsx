@@ -15,6 +15,13 @@ function lazyBlock(importer: BlockImporter) {
 }
 
 export const blockLoaders: Record<string, BlockImporter> = {
+  BossRaid: () => import('@/features/miniGames/BossRaid'),
+  CodeVault: () => import('@/features/miniGames/CodeVault'),
+  KnowledgeAuction: () => import('@/features/miniGames/KnowledgeAuction'),
+  WordRelay: () => import('@/features/miniGames/WordRelay'),
+  PuzzleAssembly: () => import('@/features/miniGames/PuzzleAssembly'),
+  ErrorHunt: () => import('@/features/miniGames/ErrorHunt'),
+  LearningPath: () => import('@/features/miniGames/LearningPath'),
   ShortExplanation: () => import('./ShortExplanation'),
   KeyConcept: () => import('./KeyConcept'),
   WorkedExample: () => import('./WorkedExample'),
@@ -44,6 +51,8 @@ export const blockLoaders: Record<string, BlockImporter> = {
   CauseEffectMap: () => import('./CauseEffectMap'),
   StepSolver: () => import('./StepSolver'),
   FunctionExplorer: () => import('./FunctionExplorer'),
+  RuleDiscovery: () => import('./RuleDiscovery'),
+  TransformationMachine: () => import('./TransformationMachine'),
   GeneratedMedia: () => import('./GeneratedMedia'),
 };
 const preloadCache = new Map<string, Promise<BlockModule>>();

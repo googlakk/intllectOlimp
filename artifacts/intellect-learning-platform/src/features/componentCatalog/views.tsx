@@ -1,12 +1,10 @@
-import { useState } from 'react';
-import { Blocks, CheckCircle2, Code2, Eye, Search } from 'lucide-react';
-import type { ComponentRegistryEntry, ComponentSchema } from '@/lib/api/types';
+import { useEffect, useRef, useState } from 'react';
+import { Eye, Search } from 'lucide-react';
+import type { ComponentRegistryEntry } from '@/lib/api/types';
+import BlockRenderer from '@/components/blocks/BlockRenderer';
+import type { ComponentDemo } from './demos';
 import {
   CATALOG_FILTERS,
-  categoryLabel,
-  categoryStyle,
-  formatSchemaType,
-  subjectLabel,
   type ComponentCatalogFilter,
 } from './model';
 
@@ -54,110 +52,66 @@ export function ComponentCatalogToolbar({
   );
 }
 
-export function SchemaValue({ schema, depth = 0 }: { schema: ComponentSchema; depth?: number }) {
-  if (schema.properties) {
-    return (
-      <div className={depth ? 'ml-4 border-l border-border pl-3' : 'space-y-2'}>
-        {Object.entries(schema.properties).map(([name, property]) => (
-          <div key={name} className="text-xs">
-            <div className="flex flex-wrap items-center gap-2">
-              <code className="font-semibold text-foreground">{name}</code>
-              {schema.required?.includes(name) && (
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-primary">обязательно</span>
-              )}
-              <span className="text-muted-foreground">{formatSchemaType(property)}</span>
-            </div>
-            {property.properties && <SchemaValue schema={property} depth={depth + 1} />}
-            {property.items?.properties && <SchemaValue schema={property.items} depth={depth + 1} />}
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return <span className="text-muted-foreground">{formatSchemaType(schema)}</span>;
-}
-
 export function ComponentCard({
   component,
+  demo,
   onOpenDemo,
 }: {
   component: ComponentRegistryEntry;
+  demo?: ComponentDemo;
   onOpenDemo: (component: ComponentRegistryEntry) => void;
 }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const previewRef = useRef<HTMLElement>(null);
+  const [isPreviewVisible, setIsPreviewVisible] = useState(false);
+
+  useEffect(() => {
+    const element = previewRef.current;
+    if (!element) return undefined;
+    if (typeof IntersectionObserver === 'undefined') {
+      setIsPreviewVisible(true);
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsPreviewVisible(entry.isIntersecting);
+      },
+      { rootMargin: '320px 0px' },
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  if (!demo) return null;
+
+  const openDemo = () => onOpenDemo(component);
 
   return (
-    <article className="group flex flex-col rounded-2xl border border-border bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md">
-      <div className="flex items-start justify-between gap-4 border-b border-border/70 p-5">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <Blocks className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="mb-1 flex flex-wrap items-center gap-2">
-              <h2 className="truncate text-base font-bold text-foreground">{component.id}</h2>
-              <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground">
-                {component.code}
-              </span>
-            </div>
-            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${categoryStyle(component.category)}`}>
-              {categoryLabel(component.category)}
-            </span>
-          </div>
-        </div>
-        {component.is_assessment && (
-          <span className="flex shrink-0 items-center gap-1 rounded-full bg-rose-500/10 px-2 py-1 text-[11px] font-semibold text-rose-700">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Оценивание
-          </span>
+    <article
+      ref={previewRef}
+      className="group relative h-[360px] cursor-pointer overflow-hidden rounded-2xl border border-border bg-background shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg focus-within:ring-2 focus-within:ring-primary/40"
+      data-testid={`component-preview-${component.id}`}
+    >
+      <div inert aria-hidden="true" className="pointer-events-none absolute left-0 top-0 w-[142.86%] origin-top-left scale-[0.7] p-5">
+        {isPreviewVisible ? (
+          <BlockRenderer blocks={[demo.block]} />
+        ) : (
+          <div className="h-[480px] animate-pulse rounded-2xl bg-muted/40" />
         )}
       </div>
-
-      <div className="flex flex-1 flex-col gap-4 p-5">
-        <div>
-          <h3 className="mb-1 text-sm font-semibold text-foreground">{component.purpose}</h3>
-          <p className="text-sm leading-relaxed text-muted-foreground">{component.rendering_notes}</p>
-        </div>
-
-        <div className="flex flex-wrap gap-1.5">
-          {component.subjects.map((subject) => (
-            <span key={subject} className="rounded-md border border-border bg-muted/50 px-2 py-1 text-[11px] font-medium text-muted-foreground">
-              {subjectLabel(subject)}
-            </span>
-          ))}
-        </div>
-
-        <button
-          type="button"
-          onClick={() => onOpenDemo(component)}
-          data-testid={`button-demo-${component.id}`}
-          className="mt-auto flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-        >
-          <Eye className="h-4 w-4" />
-          Посмотреть демонстрацию
-        </button>
-
-        <div className="rounded-xl border border-border/80 bg-muted/20">
-          <button
-            type="button"
-            onClick={() => setIsExpanded((expanded) => !expanded)}
-            data-testid={`button-schema-${component.id}`}
-            className="flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left text-xs font-semibold text-foreground transition-colors hover:bg-muted/50"
-            aria-expanded={isExpanded}
-          >
-            <span className="flex items-center gap-2">
-              <Code2 className="h-4 w-4 text-primary" />
-              Схема содержимого
-            </span>
-            <span className="text-muted-foreground">{isExpanded ? 'Скрыть' : 'Показать'}</span>
-          </button>
-          {isExpanded && (
-            <div className="border-t border-border/80 px-3.5 py-3">
-              <SchemaValue schema={component.content_schema} />
-            </div>
-          )}
-        </div>
-      </div>
+      <button
+        type="button"
+        onClick={openDemo}
+        data-testid={`button-demo-${component.id}`}
+        aria-label={`Открыть демонстрацию: ${component.purpose}`}
+        className="absolute inset-0 flex items-end justify-end bg-transparent p-3 outline-none"
+      >
+        <span className="flex translate-y-2 items-center gap-1.5 rounded-full bg-foreground/90 px-3 py-2 text-xs font-semibold text-background opacity-0 shadow-lg transition-all group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100">
+          <Eye className="h-3.5 w-3.5" />
+          Открыть
+        </span>
+      </button>
     </article>
   );
 }

@@ -9,6 +9,8 @@ import operator
 import re
 from typing import Any
 
+from services.mini_games import MINI_GAME_COMPONENTS, INDIVIDUAL_MINI_GAMES, mini_game_problem
+
 
 EXPLANATION_COMPONENTS = {
     "ShortExplanation",
@@ -23,6 +25,7 @@ EXPLANATION_COMPONENTS = {
     "HotspotInvestigation",
 }
 PRACTICE_COMPONENTS = {
+    *MINI_GAME_COMPONENTS,
     "GuidedPractice",
     "IndependentProblem",
     "TextEvidencePicker",
@@ -40,9 +43,11 @@ PRACTICE_COMPONENTS = {
     "CauseEffectMap",
     "StepSolver",
     "FunctionExplorer",
+    "RuleDiscovery", "TransformationMachine",
 }
 ASSESSMENT_COMPONENTS = {"RetrievalCheck", "MasteryCheck"}
 INDEPENDENT_ASSESSMENT_COMPONENTS = {
+    *INDIVIDUAL_MINI_GAMES,
     "IndependentProblem",
     "RetrievalCheck",
     "TextEvidencePicker",
@@ -62,6 +67,7 @@ INDEPENDENT_ASSESSMENT_COMPONENTS = {
     "StepSolver",
     "FunctionExplorer",
     "MasteryCheck",
+    "RuleDiscovery", "TransformationMachine",
 }
 HEAVY_ENGINE_COMPONENTS = {
     "ProcessBuilder",
@@ -83,6 +89,7 @@ STAGE_COMPONENTS = {
     "assessment": INDEPENDENT_ASSESSMENT_COMPONENTS,
 }
 ALLOWED_COMPONENTS = {
+    *MINI_GAME_COMPONENTS,
     "ShortExplanation", "KeyConcept", "WorkedExample", "GuidedPractice",
     "IndependentProblem", "RetrievalCheck", "MindMap", "Timeline",
     "TextEvidencePicker", "ArgumentBuilder", "InteractiveGraph",
@@ -95,6 +102,7 @@ ALLOWED_COMPONENTS = {
     "CauseEffectMap",
     "StepSolver",
     "FunctionExplorer",
+    "RuleDiscovery", "TransformationMachine",
 }
 # Выведены из употребления: генератор их не выбирает, в конструкторе и каталоге
 # их нет. В ALLOWED_COMPONENTS остаются, чтобы уже созданные уроки открывались
@@ -731,13 +739,29 @@ def _cause_role(value: Any) -> str | None:
 
 
 # Растёт, когда проверки становятся точнее: неопубликуемый урок со старым отчётом пересчитывается при открытии.
-QUALITY_CHECKS_VERSION = 4
+QUALITY_CHECKS_VERSION = 5
 
 def component_content_warnings(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Проверка данных интерактивов, которые модель могла собрать неаккуратно.
 
     Это ошибки, а не рекомендации: повреждённый блок не должен дойти до учеников."""
     warnings: list[dict[str, Any]] = []
+    for index, block in enumerate(blocks):
+        if not isinstance(block, dict) or block.get("component") not in MINI_GAME_COMPONENTS:
+            continue
+        component, content = block["component"], block.get("content")
+        problem = mini_game_problem(component, content)
+        if not problem:
+            ref = content.get("source_ref")
+            if (not isinstance(ref, dict) or ref.get("kind") not in ("textbook", "analog", "section")
+                    or (ref.get("kind") == "section" and not (ref.get("section_id") or ref.get("page")))
+                    or (ref.get("kind") in ("textbook", "analog") and not ref.get("item_id"))):
+                problem = "укажите источник мини-игры в подтверждённом материале учебника"
+            elif len(objective_ids_from_content(content)) != 1:
+                problem = "свяжите мини-игру с одной целью КТП"
+        if problem:
+            warnings.append({"code": "mini_game_invalid", "block": index,
+                             "message": f"{component}: {problem} — исправьте или перегенерируйте блок"})
     for index, block in enumerate(blocks):
         if not isinstance(block, dict) or block.get("component") != "ChronologyLine":
             continue
@@ -769,6 +793,16 @@ def component_content_warnings(blocks: list[dict[str, Any]]) -> list[dict[str, A
                 "message": "Причины и следствия: нужны событие, 4+ фактора с ролями, причина и последствие, не больше одного повода — исправьте или перегенерируйте блок",
             })
     from services.math_expression import function_explorer_problem, step_solver_problem
+    from services.interactive_models import MODEL_COMPONENTS, interactive_model_problem
+
+    for index, block in enumerate(blocks):
+        if not isinstance(block, dict) or block.get("component") not in MODEL_COMPONENTS:
+            continue
+        component = block["component"]
+        problem = interactive_model_problem(component, block.get("content"))
+        if problem:
+            warnings.append({"code": "rule_discovery_invalid" if component == "RuleDiscovery" else "transformation_machine_invalid",
+                             "block": index, "message": f"{component}: {problem} — исправьте или перегенерируйте блок"})
 
     for index, block in enumerate(blocks):
         if not isinstance(block, dict) or block.get("component") != "StepSolver":

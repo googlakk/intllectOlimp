@@ -847,6 +847,25 @@ class LessonGenerateServiceTests(unittest.IsolatedAsyncioTestCase):
         lesson = await generate_lesson_draft(topic_id=topic.id, teacher_id=teacher.id, db=db, lesson_generator=fake_generator)
         self.assertEqual(lesson.lesson_metadata["intro"], {"title": "Большая идея.", "hook": "Сколько яблок в корзине?"})
 
+    async def test_numeric_models_require_recognized_text_not_only_textbook_link(self):
+        from unittest.mock import AsyncMock
+        for text, item_text, expected in (("", "", False), ("   ", "", False),
+                                          ("Линейная функция", "", True), ("", "Вычисли y=2x+1", True)):
+            with self.subTest(text=text, item_text=item_text):
+                teacher, topic, _section, _subject, db = self._context()
+                topic.learning_objectives = "Исследовать линейную функцию"
+                material = {"textbook_id": 1, "title": "Алгебра", "sections": [
+                    {"id": 10, "title": "Функции", "text": text, "page_from": 1, "page_to": 2,
+                     "items": [{"id": 99, "text": item_text}]}]}
+
+                async def fake_generator(**kwargs):
+                    candidates = {name for step in kwargs["component_plan"] for name in step["allowed_components"]}
+                    self.assertEqual("RuleDiscovery" in candidates, expected)
+                    return complete_single_objective_blocks(topic.learning_objectives)
+
+                with patch("services.textbook_context.load_textbook_context", AsyncMock(return_value=material)):
+                    await generate_lesson_draft(topic_id=topic.id, teacher_id=teacher.id, db=db, lesson_generator=fake_generator)
+
     async def test_generate_without_intro_keeps_metadata_clean(self):
         teacher, topic, _section, _subject, db = self._context()
 

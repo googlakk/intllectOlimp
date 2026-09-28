@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from errors import ApplicationError
 from services.auth import AuthPrincipal
+from services.teacher_assignments import teacher_subject_ids
 from textbooks.cleanup import clean_page_text
 from textbooks.extract import PageText, extract_pages, render_pages_png
 from textbooks.items import ITEMS_MAX_TOKENS, ITEMS_PROMPT, ITEMS_TOOL, parse_items
@@ -462,6 +463,13 @@ def _require_access(book: Textbook | None, user: AuthPrincipal) -> Textbook:
     return book
 
 
+async def _require_book_access(book: Textbook | None, user: AuthPrincipal, db: AsyncSession) -> Textbook:
+    book = _require_access(book, user)
+    if user.role != "admin" and book.subject_id not in await teacher_subject_ids(user, db):
+        raise TextbookServiceError(404, "Учебник не относится к назначенным предметам")
+    return book
+
+
 async def _guarded(db: AsyncSession, action: Awaitable[Any]) -> Any:
     try:
         return await action
@@ -490,6 +498,14 @@ def serialize_textbook(book: Textbook) -> dict[str, Any]:
 
 async def create_textbook(payload: dict[str, Any], db: AsyncSession, *, user: AuthPrincipal,
                           storage: FileStorage | None = None, settings: TextbookSettings | None = None) -> dict[str, Any]:
+    if user.role != "admin":
+        subject_id = payload.get("subject_id")
+        from services.educator_access import require_subject_management
+        if subject_id is None:
+            raise TextbookServiceError(403, "Выберите назначенный вам предмет")
+        subject = await require_subject_management(user, subject_id, db)
+        if subject.grade != int(payload["grade"]):
+            raise TextbookServiceError(422, "Учебник должен соответствовать классу предмета")
     settings = settings or textbook_settings()
     if int(payload.get("file_size") or 0) > MAX_FILE_BYTES:
         raise TextbookServiceError(413, "Файл больше 150 МБ")
@@ -523,7 +539,7 @@ async def process_textbook(textbook_id: int, db: AsyncSession, *, user: AuthPrin
                            starter: Callable[[int], bool] = start_ingest,
                            claim: Callable[[int], Awaitable[bool]] | None = None) -> dict[str, Any]:
     """Книга занимается прямо в запросе: интерфейс сразу видит «идёт обработка» и начинает опрос."""
-    _require_access(await _guarded(db, db.get(Textbook, textbook_id)), user)
+    await _require_book_access(await _guarded(db, db.get(Textbook, textbook_id)), user, db)
     if claim is None:
         store = SqlTextbookStore(db)
         claim = lambda book_id: store.claim(book_id, datetime.now(timezone.utc) - STALE_AFTER)  # noqa: E731
@@ -539,7 +555,7 @@ async def delete_textbook(textbook_id: int, db: AsyncSession, *, user: AuthPrinc
     """Удалить учебник целиком: файл в хранилище, страницы, параграфы, элементы и привязки тем.
     Во время обработки удалять нельзя — сначала дождаться окончания (или остановки)."""
     settings = settings or textbook_settings()
-    book = _require_access(await _guarded(db, db.get(Textbook, textbook_id)), user)
+    book = await _require_book_access(await _guarded(db, db.get(Textbook, textbook_id)), user, db)
     if book.status in RUNNING_STATUSES and not _stalled(book):
         raise TextbookServiceError(409, "Идёт обработка — удалить учебник можно после её окончания")
     if storage is None:
@@ -554,14 +570,15 @@ async def delete_textbook(textbook_id: int, db: AsyncSession, *, user: AuthPrinc
 
 
 async def list_textbooks(db: AsyncSession, *, user: AuthPrincipal) -> list[dict[str, Any]]:
-    books = await _guarded(db, db.scalars(
-        select(Textbook).where(Textbook.organization_id == user.organization_id).order_by(Textbook.grade, Textbook.title)
-    ))
+    statement = select(Textbook).where(Textbook.organization_id == user.organization_id)
+    if user.role != "admin":
+        statement = statement.where(Textbook.subject_id.in_(await teacher_subject_ids(user, db)))
+    books = await _guarded(db, db.scalars(statement.order_by(Textbook.grade, Textbook.title)))
     return [serialize_textbook(book) for book in books.all()]
 
 
 async def get_textbook(textbook_id: int, db: AsyncSession, *, user: AuthPrincipal) -> dict[str, Any]:
-    book = _require_access(await _guarded(db, db.get(Textbook, textbook_id)), user)
+    book = await _require_book_access(await _guarded(db, db.get(Textbook, textbook_id)), user, db)
     sections = (await _guarded(db, db.scalars(
         select(TextbookSection).where(TextbookSection.textbook_id == textbook_id).order_by(TextbookSection.position)
     ))).all()
@@ -587,7 +604,7 @@ async def get_textbook(textbook_id: int, db: AsyncSession, *, user: AuthPrincipa
 
 async def get_section(textbook_id: int, section_id: int, db: AsyncSession, *, user: AuthPrincipal) -> dict[str, Any]:
     """Параграф для просмотра учителем: текст со страницами и выделенные элементы."""
-    book = _require_access(await _guarded(db, db.get(Textbook, textbook_id)), user)
+    book = await _require_book_access(await _guarded(db, db.get(Textbook, textbook_id)), user, db)
     section = await _guarded(db, db.get(TextbookSection, section_id))
     if section is None or section.textbook_id != book.id:
         raise TextbookServiceError(404, "Параграф не найден")
@@ -619,7 +636,7 @@ def _serialize_page(page: TextbookPage, offset: int | None) -> dict[str, Any]:
 
 async def update_page(textbook_id: int, page_index: int, text: str, db: AsyncSession, *, user: AuthPrincipal) -> dict[str, Any]:
     """Учитель исправил распознанный текст: страница помечается «исправлено» и не перезаписывается обработкой."""
-    book = _require_access(await _guarded(db, db.get(Textbook, textbook_id)), user)
+    book = await _require_book_access(await _guarded(db, db.get(Textbook, textbook_id)), user, db)
     page = await _guarded(db, db.scalar(
         select(TextbookPage).where(TextbookPage.textbook_id == book.id, TextbookPage.page_index == page_index)
     ))
@@ -640,7 +657,7 @@ async def set_textbook_subject(textbook_id: int, subject_id: int, db: AsyncSessi
     """Указать предмет КТП, к темам которого привязывается учебник."""
     from services.educator_access import require_subject_management
 
-    book = _require_access(await _guarded(db, db.get(Textbook, textbook_id)), user)
+    book = await _require_book_access(await _guarded(db, db.get(Textbook, textbook_id)), user, db)
     subject = await require_subject_management(user, subject_id, db)
     if subject.grade != book.grade:
         raise TextbookServiceError(422, "Предмет другого класса")

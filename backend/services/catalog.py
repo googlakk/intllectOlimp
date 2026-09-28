@@ -64,14 +64,14 @@ def serialize_subject(row: Subject) -> dict[str, Any]:
 async def list_subjects(
     db: AsyncSession,
     student_id: int | None = None,
-    max_grade: int | None = None,
+    subject_ids: list[int] | None = None,
 ) -> list[dict[str, Any]]:
     statement = select(Subject)
+    if subject_ids is not None:
+        statement = statement.where(Subject.id.in_(subject_ids))
     if student_id is not None:
         student = await get_student_for_access(student_id, db)
         statement = statement.where(Subject.grade == student.grade)
-    elif max_grade is not None:
-        statement = statement.where(Subject.grade <= max_grade)
     rows = (await db.scalars(statement.order_by(Subject.grade, Subject.name))).all()
     return [serialize_subject(row) for row in rows]
 

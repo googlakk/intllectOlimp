@@ -1,6 +1,7 @@
 import type { Block } from './api/types';
 
 const ASSESSMENT_COMPONENTS = new Set([
+  'ErrorHunt', 'LearningPath',
   'GuidedPractice',
   'IndependentProblem',
   'RetrievalCheck',
@@ -20,10 +21,13 @@ const ASSESSMENT_COMPONENTS = new Set([
   'CauseEffectMap',
   'StepSolver',
   'FunctionExplorer',
+  'RuleDiscovery',
+  'TransformationMachine',
   'MasteryCheck',
 ]);
 
 const OBJECTIVE_ASSESSMENT_COMPONENTS = new Set([
+  'ErrorHunt', 'LearningPath',
   'IndependentProblem',
   'RetrievalCheck',
   'TextEvidencePicker',
@@ -42,6 +46,8 @@ const OBJECTIVE_ASSESSMENT_COMPONENTS = new Set([
   'CauseEffectMap',
   'StepSolver',
   'FunctionExplorer',
+  'RuleDiscovery',
+  'TransformationMachine',
   'MasteryCheck',
 ]);
 

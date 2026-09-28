@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models import Section, Topic
 from services.auth import AuthPrincipal
 from services.educator_access import require_subject_management, require_topic_management
-from services.textbooks import TextbookServiceError, _guarded, _require_access
+from services.textbooks import TextbookServiceError, _guarded, _require_book_access
 from textbooks.matching import SectionInfo, suggest_sections
 from textbooks.models import Textbook, TextbookPage, TextbookSection, TopicTextbookLink
 
@@ -27,7 +27,7 @@ SECTION_TEXT_PAGES = 2
 
 
 async def _book_with_subject(textbook_id: int, db: AsyncSession, user: AuthPrincipal) -> Textbook:
-    book = _require_access(await _guarded(db, db.get(Textbook, textbook_id)), user)
+    book = await _require_book_access(await _guarded(db, db.get(Textbook, textbook_id)), user, db)
     if book.subject_id is None:
         raise TextbookServiceError(422, "Укажите для учебника предмет из КТП — тогда темы можно привязать к параграфам.")
     await require_subject_management(user, book.subject_id, db)
