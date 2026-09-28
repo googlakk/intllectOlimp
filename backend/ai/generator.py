@@ -335,6 +335,9 @@ start — выражение или уравнение из задачи уче�
 у уравнения — корни: "x = 5" или "x = 0 или x = 3". Для выражения answer_mode "form" — ответ в требуемом
 виде («вынесите множитель» → "5√3"). mistakes — 1–3 типичные ошибки этой задачи: wrong — неверная строка
 («√39» при √12 + √27), message — что нарушено. Используй в математике как главное задание на отработку.
+Только для «упростите/сократите/вычислите» (kind "expression") и «решите уравнение» (kind "equation"): каждая строка
+ученика должна быть равна заданию. НЕ используй StepSolver для допустимых значений (ОДЗ), нулей дроби,
+«при каких значениях…», неравенств и ответов вида «y ≠ 5» — блок такое не проверит; для них бери IndependentProblem.
 
 28. FunctionExplorer:
 {"title": string, "instruction": string, "formula": string, "params": [{"name": string, "label": string, "min": number, "max": number, "step": number, "default": number}], "x_range": [number, number], "y_range": [number, number], "target"?: {"params": {<name>: number}}, "points"?: [{"x": number, "y": number, "label": string}], "prediction"?: {"question": string, "options": string[], "correct_answer": string, "explanation": string}, "explanation": string}

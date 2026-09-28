@@ -1,6 +1,17 @@
 {
   "cases": [
     {
+      "kind": "expression",
+      "start": "2x + 3x",
+      "final_answer": [
+        "5x"
+      ],
+      "line": "= 5x",
+      "status": "ok",
+      "done": true,
+      "note": "строка цепочки со знаком равенства в начале"
+    },
+    {
       "kind": "equation",
       "start": "3(x - 2) = x + 4",
       "final_answer": [

@@ -280,6 +280,25 @@ class StepSolverTests(unittest.TestCase):
         missing_root = [block(start="x^2 = 9", final_answer=["x = 3"])]
         self.assertEqual([w["code"] for w in component_content_warnings(missing_root)], ["step_solver_invalid"])
 
+    def test_step_solver_rejects_tasks_it_cannot_check(self):
+        from objectives import component_content_warnings
+
+        def block(**content):
+            return {"component": "StepSolver", "content": content}
+
+        unsupported = [
+            block(kind="expression", start="y/(y^2 - 5y)", final_answer=["1/(y - 5)"],
+                  title="Найди допустимые значения и нули дроби",
+                  instruction="Укажите, при каких допустимых значениях y дробь равна нулю."),
+            block(kind="expression", start="(x + 2)/(x - 3)", final_answer=["x ≠ 3"], instruction="Запишите ответ."),
+        ]
+        self.assertEqual([w["block"] for w in component_content_warnings(unsupported)], [0, 1])
+        supported = [
+            block(kind="expression", start="y/(y^2 - 5y)", final_answer=["1/(y - 5)"], title="Сократите дробь"),
+            block(kind="equation", start="x^2 - 4 = 0", final_answer=["x = 2 или x = -2"], title="Найдите нули функции"),
+        ]
+        self.assertEqual(component_content_warnings(supported), [])
+
     def test_shared_step_cases_match_the_browser(self):
         import json
         from pathlib import Path

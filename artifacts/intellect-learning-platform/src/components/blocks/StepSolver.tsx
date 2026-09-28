@@ -116,6 +116,11 @@ export default function StepSolver({ title, instruction, kind, start, steps, fin
 
       {!done && (
         <div className="mt-4 space-y-3">
+          <p className="text-sm text-muted-foreground">
+            {spec.kind === 'equation'
+              ? 'Каждая строка — уравнение, равносильное предыдущему: например, 3x − 6 = x + 4. В конце запишите корни: x = 5 или x = 0 или x = 3.'
+              : 'Каждая строка — выражение, равное заданию, после одного преобразования: например, задание (a + 1)/(a(a + 1)), строка 1/a. Знак «=» в начале строки можно ставить.'}
+          </p>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
             <MathAnswerInput
               value={value}

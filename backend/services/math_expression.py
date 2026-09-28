@@ -495,7 +495,9 @@ def check_solver_step(line: str, *, kind: str, start: str, final_answer: list[st
         if not same_equation(start_equation, equation):
             return "wrong", False
         return "ok", bool(special) and not _ordered(equation)
-    if parse_expression(text) is None:
+    # В тетради цепочку пишут «= 5x»: ведущий знак равенства не мешает.
+    text = text[1:].strip() if text.startswith("=") else text
+    if not text or parse_expression(text) is None:
         return "unreadable", False
     if not same_math(text, start):
         return "wrong", False
@@ -514,6 +516,10 @@ def _roots_complete(start: str, answer: str) -> bool:
     return _same_root_set(actual, sorted({round(root, 9) for root in roots}))
 
 
+_UNCHECKABLE_ASK = re.compile(r"допустим|область определения|одз|при каких|неравенств|≠|\\ne\b|\\neq")
+_UNCHECKABLE_ANSWER = re.compile(r"≠|<|>|≤|≥|\\ne\b|\\neq|\\le|\\ge")
+
+
 def step_solver_problem(content: dict[str, Any]) -> str | None:
     """Что не так в данных блока StepSolver (None — всё верно)."""
     start = extract_task(str(content.get("start") or ""))
@@ -522,6 +528,12 @@ def step_solver_problem(content: dict[str, Any]) -> str | None:
     if not start or not final_answer:
         return "нет задания или ответа"
     kind = content.get("kind") if content.get("kind") in ("expression", "equation") else ("equation" if "=" in start else "expression")
+    # Движок сверяет строки только на равенство заданию: условия «y ≠ 5» и неравенства он не примет.
+    ask = f"{content.get('title') or ''} {content.get('instruction') or ''}".lower().replace("ё", "е")
+    if (_UNCHECKABLE_ASK.search(ask) or (kind == "expression" and re.search(r"нул", ask))
+            or any(_UNCHECKABLE_ANSWER.search(item) for item in final_answer)):
+        return ("задание про допустимые значения, нули или неравенства — такой ответ блок проверить не может, "
+                "замените на задачу с ответом (IndependentProblem)")
     mode = "equivalent" if content.get("answer_mode") == "equivalent" else "form"
     if (parse_equation(start) if kind == "equation" else parse_expression(start)) is None:
         return f"задание «{start[:60]}» не читается как выражение или уравнение"

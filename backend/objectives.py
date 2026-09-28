@@ -731,7 +731,7 @@ def _cause_role(value: Any) -> str | None:
 
 
 # Растёт, когда проверки становятся точнее: неопубликуемый урок со старым отчётом пересчитывается при открытии.
-QUALITY_CHECKS_VERSION = 3
+QUALITY_CHECKS_VERSION = 4
 
 def component_content_warnings(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Проверка данных интерактивов, которые модель могла собрать неаккуратно.

@@ -149,7 +149,7 @@ export type SolverSpec = {
 /** Проверить очередную строку решения ученика. */
 export function checkStep(line: string, rawSpec: SolverSpec): StepVerdict {
   const spec = { ...rawSpec, start: extractTask(rawSpec.start) };
-  const text = line.trim();
+  let text = line.trim();
   if (!text) return { status: 'unreadable' };
   if (spec.kind === 'equation') {
     const start = parseEquation(spec.start);
@@ -176,7 +176,9 @@ export function checkStep(line: string, rawSpec: SolverSpec): StepVerdict {
     // Переменная исчезла: 0 = 0 (любое число) или 0 = 5 (корней нет) — это и есть ответ.
     return { status: 'ok', done: Boolean(special) && equation.names.length === 0 };
   }
-  if (!parseExpression(text)) return { status: 'unreadable' };
+  // В тетради цепочку пишут «= 5x»: ведущий знак равенства не мешает.
+  if (text.startsWith('=')) text = text.slice(1).trim();
+  if (!text || !parseExpression(text)) return { status: 'unreadable' };
   if (!sameMath(text, spec.start)) return mistakeOrWrong(text, spec);
   const mode = spec.answerMode ?? 'form';
   const done = spec.finalAnswer.some((answer) => (mode === 'form' ? sameForm(text, answer) : sameMath(text, answer)));
