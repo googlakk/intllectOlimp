@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dialog';
 import { parseKtpFile, uploadKtp, type KtpDraft, type KtpTopicDraft } from '@/lib/api';
 import { emptySection, emptyTopic, normalizeKtpDraft, summarizeKtpDraft, validateKtpDraft } from './ktpDraft';
+import { isInstructionLanguage, LANGUAGE_OPTIONS } from '@/lib/languages';
 
 const TEMPLATE_URL = '/templates/ktp-template-2026.xlsx';
 const SUBJECTS = [
@@ -193,8 +194,8 @@ function KtpImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
                     </select>
                   </label>
                   <label className="text-sm font-semibold text-foreground">Язык
-                    <select value={draft.instruction_language} onChange={(event) => setDraft({ ...draft, instruction_language: event.target.value as 'ru' | 'ky' })} className={`${fieldClass()} mt-1.5`}>
-                      <option value="ru">Русский</option><option value="ky">Кыргызский</option>
+                    <select value={draft.instruction_language} onChange={(event) => { if (isInstructionLanguage(event.target.value)) setDraft({ ...draft, instruction_language: event.target.value }); }} className={`${fieldClass()} mt-1.5`}>
+                      {LANGUAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                   </label>
                   <label className="text-sm font-semibold text-foreground">Часов в неделю

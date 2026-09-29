@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { readPersistentRequestCache, request, requestCached } from './client';
 import type { Section, SectionOutline, Subject, Topic } from './types';
+import type { InstructionLanguage } from '../languages';
 
 const studentParam = (studentId?: number) => studentId ? `?student_id=${studentId}` : '';
 const SUBJECTS_CACHE_MS = 2 * 60 * 1000;
@@ -63,7 +64,7 @@ export function useArchiveTopic() {
 
 export function useCreateCourse() {
   const client = useQueryClient();
-  return useMutation({ mutationFn: (data: { name: string; grade: number }) => request<Subject>('/subjects', { method: 'POST', body: JSON.stringify(data) }),
+  return useMutation({ mutationFn: (data: { name: string; grade: number; instruction_language: InstructionLanguage }) => request<Subject>('/subjects', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => client.invalidateQueries({ queryKey: ['subjects'] }) });
 }
 export function useCreateSection() {
@@ -73,6 +74,6 @@ export function useCreateSection() {
 }
 export function useRenameSubject() {
   const client = useQueryClient();
-  return useMutation({ mutationFn: (data: { subjectId: number; name: string }) => request<Subject>(`/subjects/${data.subjectId}`, { method: 'PATCH', body: JSON.stringify({ name: data.name }) }),
+  return useMutation({ mutationFn: (data: { subjectId: number; name: string; instructionLanguage?: InstructionLanguage }) => request<Subject>(`/subjects/${data.subjectId}`, { method: 'PATCH', body: JSON.stringify({ name: data.name, instruction_language: data.instructionLanguage }) }),
     onSuccess: async () => { await Promise.all(catalogInvalidationKeys.map(queryKey => client.invalidateQueries({ queryKey }))); } });
 }

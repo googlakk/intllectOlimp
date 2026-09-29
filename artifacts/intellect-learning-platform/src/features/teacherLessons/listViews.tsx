@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { CreateSection } from './CreateCourse';
 import TopicForm from './TopicForm';
 import { useArchiveTopic, useRenameSubject, useTeacherOutline } from '@/lib/api';
+import { isInstructionLanguage, LANGUAGE_OPTIONS, type InstructionLanguage } from '@/lib/languages';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Link } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
@@ -27,6 +28,7 @@ type SubjectPickerProps = {
 export function SubjectPicker({ isLoading, selectedSubject, subjects, onSelect, canManage = false }: SubjectPickerProps) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState('');
+  const [language, setLanguage] = useState<InstructionLanguage>('ru');
   const rename = useRenameSubject();
   const current = subjects?.find((subject) => subject.id === selectedSubject);
 
@@ -37,15 +39,16 @@ export function SubjectPicker({ isLoading, selectedSubject, subjects, onSelect, 
     if (!current) return;
     rename.reset();
     setName(current.name);
+    setLanguage(current.instruction_language ?? 'ru');
     setEditing(true);
   };
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
     if (!current || !name.trim()) return;
-    if (name.trim() === current.name) return setEditing(false);
+    if (name.trim() === current.name && language === (current.instruction_language ?? 'ru')) return setEditing(false);
     try {
-      await rename.mutateAsync({ subjectId: current.id, name: name.trim() });
+      await rename.mutateAsync({ subjectId: current.id, name: name.trim(), instructionLanguage: language });
       setEditing(false);
     } catch { /* ошибка показана ниже, введённое название сохраняется */ }
   };
@@ -64,6 +67,14 @@ export function SubjectPicker({ isLoading, selectedSubject, subjects, onSelect, 
           aria-label="Новое название предмета"
           className="h-11 min-w-0 flex-1 rounded-lg border border-primary bg-card px-3 text-base font-bold sm:max-w-md"
         />
+        <select
+          value={language}
+          onChange={(event) => { if (isInstructionLanguage(event.target.value)) setLanguage(event.target.value); }}
+          aria-label="Язык обучения"
+          className="h-11 rounded-lg border border-border bg-card px-3"
+        >
+          {LANGUAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
         <button type="submit" disabled={rename.isPending || !name.trim()} className="inline-flex h-11 items-center gap-1 rounded-lg bg-primary px-4 font-semibold text-primary-foreground disabled:opacity-50">
           {rename.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Сохранить
         </button>

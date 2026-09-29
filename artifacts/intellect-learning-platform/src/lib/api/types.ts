@@ -1,3 +1,5 @@
+import type { InstructionLanguage } from '../languages';
+
 export type User = {
   id: number;
   profile_id: number;
@@ -7,7 +9,7 @@ export type User = {
   grade: number | null;
   must_change_password: boolean;
 };
-export type Subject = { id: number; name: string; grade: number; hours_per_week: number; hours_per_year: number; source_info: string | null; instruction_language?: 'ru' | 'ky'; progress?: number };
+export type Subject = { id: number; name: string; grade: number; hours_per_week: number; hours_per_year: number; source_info: string | null; instruction_language?: InstructionLanguage; progress?: number };
 export type Section = { id: number; subject_id: number; name: string; sort_order: number; total_hours: number };
 export type LessonType = 'study' | 'review' | 'assessment' | 'reflection' | 'project';
 export type Topic = { subject_id?: number; covered_topic_ids?: number[]; source_assessment_topic_id?: number | null; archived_at?: string | null; review_required?: boolean; id: number; section_id: number; ktp_number: string | null; name: string; hours: number; lesson_type: string; learning_objectives: string | null; skills: string[]; resources: string | null; lesson_id?: number | null; lesson_status?: 'draft' | 'published' | null };
@@ -28,7 +30,7 @@ export type KtpDraft = {
   grade: number;
   hours_per_week: number;
   hours_per_year: number;
-  instruction_language: 'ru' | 'ky';
+  instruction_language: InstructionLanguage;
   sections: KtpSectionDraft[];
   warnings?: string[];
   source?: { filename: string; kind: string; table_count: number; row_count: number };

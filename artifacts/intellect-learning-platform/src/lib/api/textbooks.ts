@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { request } from './client';
+import type { InstructionLanguage } from '../languages';
 
 export type TextbookStatus =
   | 'uploaded' | 'extracting' | 'needs_ai' | 'recognizing' | 'structuring' | 'ready' | 'needs_review' | 'failed';
@@ -12,7 +13,7 @@ export type Textbook = {
   year: number | null;
   grade: number;
   subject_id: number | null;
-  language: 'ru' | 'ky';
+  language: InstructionLanguage;
   status: TextbookStatus;
   stalled: boolean;
   progress: { stage?: string; pages?: number; scans_left?: number; sections?: number; items_left?: number; calibration?: number };
@@ -46,7 +47,7 @@ export type TextbookSectionView = {
 };
 
 export type TextbookCreateInput = {
-  title: string; grade: number; subject_id?: number | null; language: 'ru' | 'ky';
+  title: string; grade: number; subject_id?: number | null; language: InstructionLanguage;
   authors?: string | null; year?: number | null; file_name: string; file_size: number;
 };
 

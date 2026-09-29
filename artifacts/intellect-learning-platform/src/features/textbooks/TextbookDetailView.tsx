@@ -5,6 +5,7 @@ import { deleteTextbook, processTextbook, setTextbookSubject, updateTextbookPage
 import { TopicLinksPanel } from './TopicLinksPanel';
 import { parseMathText } from '@/components/blocks/ShortExplanation';
 import { ITEM_KIND_LABELS, textbookStatusView } from './textbookStatus';
+import { languageLabel } from '@/lib/languages';
 
 const TONES = {
   muted: 'bg-muted text-muted-foreground', progress: 'bg-primary/10 text-primary', ok: 'bg-emerald-100 text-emerald-800',
@@ -60,7 +61,7 @@ export function TextbookDetailView({ id, onBack }: { id: number; onBack: () => v
       <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-border bg-card p-5">
         <div className="space-y-2">
           <h2 className="text-xl font-bold">{textbook.title}</h2>
-          <p className="text-sm text-muted-foreground">{textbook.grade} класс · {textbook.language === 'ky' ? 'кыргызский' : 'русский'}{textbook.page_count ? ` · ${textbook.page_count} стр.` : ''}</p>
+          <p className="text-sm text-muted-foreground">{textbook.grade} класс · {languageLabel(textbook.language).toLowerCase()}{textbook.page_count ? ` · ${textbook.page_count} стр.` : ''}</p>
           <StatusBadge book={textbook} />
           {textbook.error && <p className="text-sm text-destructive">{textbook.error}</p>}
           {textbook.progress.calibration !== undefined && textbook.progress.calibration < 0.3 && (

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Upload } from 'lucide-react';
 import { MAX_TEXTBOOK_BYTES, createTextbook, deleteTextbook, processTextbook, uploadTextbookFile, useSubjects } from '@/lib/api';
+import { isInstructionLanguage, languageLabel, LANGUAGE_OPTIONS, type InstructionLanguage } from '@/lib/languages';
 
 const GRADES = [5, 6, 7, 8, 9, 10, 11];
 
@@ -12,11 +13,12 @@ export function TextbookUpload({ onDone }: { onDone: (id: number) => void }) {
   const [title, setTitle] = useState('');
   const [grade, setGrade] = useState(8);
   const [subjectId, setSubjectId] = useState<number | ''>('');
-  const [language, setLanguage] = useState<'ru' | 'ky'>('ru');
+  const [language, setLanguage] = useState<InstructionLanguage>('ru');
   const [file, setFile] = useState<File | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState('');
   const gradeSubjects = (subjects ?? []).filter((subject) => subject.grade === grade);
+  const chosenSubject = gradeSubjects.find((subject) => subject.id === subjectId);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -63,15 +65,21 @@ export function TextbookUpload({ onDone }: { onDone: (id: number) => void }) {
           </select>
         </label>
         <label className="text-sm font-semibold">Язык учебника
-          <select className={field} value={language} onChange={(event) => setLanguage(event.target.value as 'ru' | 'ky')}>
-            <option value="ru">Русский</option>
-            <option value="ky">Кыргызский</option>
+          <select className={field} value={language} disabled={Boolean(chosenSubject)}
+            onChange={(event) => { if (isInstructionLanguage(event.target.value)) setLanguage(event.target.value); }}>
+            {LANGUAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
+          {chosenSubject && <span className="mt-1 block text-xs font-normal text-muted-foreground">Как у предмета: уроки строятся по учебнику на языке обучения.</span>}
         </label>
         <label className="text-sm font-semibold sm:col-span-2">Предмет из КТП
-          <select className={field} value={subjectId} onChange={(event) => setSubjectId(event.target.value ? Number(event.target.value) : '')}>
+          <select className={field} value={subjectId} onChange={(event) => {
+            const id = event.target.value ? Number(event.target.value) : '';
+            setSubjectId(id);
+            const subject = gradeSubjects.find((item) => item.id === id);
+            if (subject) setLanguage(subject.instruction_language ?? 'ru');
+          }}>
             <option value="">— не выбран —</option>
-            {gradeSubjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+            {gradeSubjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name} · {languageLabel(subject.instruction_language).toLowerCase()}</option>)}
           </select>
         </label>
         <label className="text-sm font-semibold sm:col-span-2">Файл PDF (до 150 МБ)
