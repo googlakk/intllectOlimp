@@ -22,6 +22,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from errors import ApplicationError
+from languages import LANGUAGE_NAME, normalize_language
 from services.auth import AuthPrincipal
 from services.teacher_assignments import teacher_subject_ids
 from textbooks.cleanup import clean_page_text
@@ -496,8 +497,25 @@ def serialize_textbook(book: Textbook) -> dict[str, Any]:
     }
 
 
+def require_same_language(book_language: str, subject: Any) -> None:
+    """Уроки предмета строятся по его учебникам — языки должны совпадать."""
+    subject_language = subject.instruction_language or "ru"
+    if book_language != subject_language:
+        raise TextbookServiceError(422, (
+            f"Учебник на языке «{LANGUAGE_NAME.get(book_language, book_language)}», а предмет «{subject.name}» "
+            f"ведётся на языке «{LANGUAGE_NAME.get(subject_language, subject_language)}». "
+            "Выберите учебник на языке предмета."
+        ))
+
+
 async def create_textbook(payload: dict[str, Any], db: AsyncSession, *, user: AuthPrincipal,
                           storage: FileStorage | None = None, settings: TextbookSettings | None = None) -> dict[str, Any]:
+    language = normalize_language(payload.get("language"))
+    if payload.get("subject_id") is not None:
+        from models import Subject
+        chosen = await _guarded(db, db.get(Subject, payload["subject_id"]))
+        if chosen is not None:
+            require_same_language(language, chosen)
     if user.role != "admin":
         subject_id = payload.get("subject_id")
         from services.educator_access import require_subject_management
@@ -525,7 +543,7 @@ async def create_textbook(payload: dict[str, Any], db: AsyncSession, *, user: Au
         raise TextbookServiceError(503, "Хранилище учебников недоступно") from exc
     book = Textbook(
         organization_id=user.organization_id, subject_id=payload.get("subject_id"), grade=int(payload["grade"]),
-        language="ky" if payload.get("language") == "ky" else "ru", title=str(payload["title"]).strip()[:300],
+        language=language, title=str(payload["title"]).strip()[:300],
         authors=(str(payload.get("authors") or "").strip()[:300] or None), year=payload.get("year"),
         storage_path=path, file_size=payload.get("file_size"), status="uploaded", progress={},
         created_by_profile_id=user.profile_id,
@@ -661,6 +679,7 @@ async def set_textbook_subject(textbook_id: int, subject_id: int, db: AsyncSessi
     subject = await require_subject_management(user, subject_id, db)
     if subject.grade != book.grade:
         raise TextbookServiceError(422, "Предмет другого класса")
+    require_same_language(book.language, subject)
     if book.subject_id != subject_id:
         # Связи тем прежнего предмета с этой книгой снимаются — иначе генерация продолжила бы ими пользоваться.
         from models import Section, Topic

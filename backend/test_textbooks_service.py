@@ -254,7 +254,7 @@ class AssignmentDb:
         return result
 
     async def get(self, model, key):
-        return SimpleNamespace(id=11, grade=8)
+        return SimpleNamespace(id=11, grade=8, name="Физика", instruction_language="ru")
 
 
 class Db(AssignmentDb):
@@ -279,6 +279,22 @@ class CreateTests(unittest.TestCase):
         self.assertTrue(db.added[0].storage_path.startswith("5/"))
         self.assertTrue(db.added[0].storage_path.endswith("/Fizika_8_klass.pdf"))
         self.assertIn("token=", result["upload_url"])
+
+    def test_rejects_book_in_other_language_than_subject(self):
+        with self.assertRaises(TextbookServiceError) as error:
+            run(create_textbook({"title": "Physics", "subject_id": 11, "grade": 8, "language": "en",
+                                 "file_name": "physics.pdf", "file_size": 10}, Db(), user=USER, storage=Storage(), settings=ON))
+        self.assertEqual(error.exception.status_code, 422)
+        self.assertIn("английский", error.exception.detail)
+
+    def test_english_book_for_english_subject(self):
+        class EnglishDb(Db):
+            async def get(self, model, key):
+                return SimpleNamespace(id=11, grade=8, name="Physics", instruction_language="en")
+        db = EnglishDb()
+        run(create_textbook({"title": "Physics", "subject_id": 11, "grade": 8, "language": "en",
+                             "file_name": "physics.pdf", "file_size": 10}, db, user=USER, storage=Storage(), settings=ON))
+        self.assertEqual(db.added[0].language, "en")
 
     def test_rejects_non_pdf_and_huge_files(self):
         for payload, code in (({"file_name": "a.docx", "file_size": 10}, 422), ({"file_name": "a.pdf", "file_size": 300 * 1024 * 1024}, 413)):

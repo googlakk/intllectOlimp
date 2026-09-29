@@ -67,6 +67,11 @@ async def _load(db: AsyncSession, topic: Any) -> dict[str, Any] | None:
     book = await db.get(Textbook, first.textbook_id)
     if book is None:
         return None
+    language = await _subject_language(db, topic)
+    if book.language != language:
+        # Связь осталась от старых данных: урок на одном языке по книге на другом не строим.
+        logger.warning("Textbook %s language %s differs from subject language %s", book.id, book.language, language)
+        return None
     chosen = [sections[section_id] for section_id in section_ids
               if section_id in sections and sections[section_id].textbook_id == book.id][:limit]
     primary = chosen[0]
@@ -100,6 +105,14 @@ async def _load(db: AsyncSession, topic: Any) -> dict[str, Any] | None:
             for section in chosen
         ],
     }
+
+
+async def _subject_language(db: AsyncSession, topic: Any) -> str:
+    from models import Section, Subject
+
+    language = await db.scalar(select(Subject.instruction_language).join(Section, Section.subject_id == Subject.id)
+                               .where(Section.id == topic.section_id))
+    return language or "ru"
 
 
 async def _confirmed_links(db: AsyncSession, topic_ids: list[int]) -> list[TopicTextbookLink]:
@@ -148,9 +161,10 @@ async def load_component_textbook_context(
                 if not sections:
                     return None
             output = []
+            language = await _subject_language(db, topic)
             for section in sections:
                 book = await db.get(Textbook, section.textbook_id)
-                if book is None:
+                if book is None or book.language != language:
                     continue
                 offset = book.page_offset or 0
                 text = ""
@@ -195,9 +209,10 @@ async def subject_has_textbook(db: AsyncSession, topic: Any) -> bool:
     try:
         async with db.begin_nested():
             subject_id = await db.scalar(select(Section.subject_id).where(Section.id == topic.section_id))
+            language = await _subject_language(db, topic)
             found = await db.scalar(
                 select(TextbookSection.id).join(Textbook, Textbook.id == TextbookSection.textbook_id)
-                .where(Textbook.subject_id == subject_id).limit(1)
+                .where(Textbook.subject_id == subject_id, Textbook.language == language).limit(1)
             )
             return found is not None
     except SQLAlchemyError:

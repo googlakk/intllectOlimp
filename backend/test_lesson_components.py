@@ -314,17 +314,23 @@ def test_addressed_loader_only_returns_linked_full_item(monkeypatch):
     section = SimpleNamespace(id=11, textbook_id=4, number="§2", title="Сумма", pdf_from=5, pdf_to=7)
     item = SimpleNamespace(id=101, section_id=11, textbook_id=4, kind="exercise", label="№7", page=6,
                            text="Длинное условие " * 100 + "ФИНИШ", answer="5", difficulty=1)
-    book = SimpleNamespace(id=4, title="Математика", student_display="refs_only", page_offset=0)
+    book = SimpleNamespace(id=4, title="Математика", student_display="refs_only", page_offset=0, language="ru")
     class DB:
         def begin_nested(self): return Savepoint()
+        async def scalar(self, statement): return "ru"
         async def scalars(self, statement):
             model = statement.column_descriptions[0]["entity"]
             rows = [section] if model is TextbookSection else [item] if model is TextbookItem else []
             return SimpleNamespace(all=lambda: rows)
         async def get(self, model, row_id): return book if model is Textbook else None
     monkeypatch.setattr(textbook_context, "_confirmed_links", AsyncMock(return_value=[SimpleNamespace(section_id=11)]))
-    topic = SimpleNamespace(id=1, lesson_type="study", covered_topic_ids=[])
+    topic = SimpleNamespace(id=1, section_id=3, lesson_type="study", covered_topic_ids=[])
     data = asyncio.run(textbook_context.load_component_textbook_context(DB(), topic, source_item_id=101))
     assert data["sections"][0]["items"][0]["text"] == item.text
     assert asyncio.run(textbook_context.load_component_textbook_context(DB(), topic, source_item_id=999)) is None
     assert asyncio.run(textbook_context.load_component_textbook_context(DB(), topic, source_section_id=99, source_item_id=101)) is None
+
+    class KyrgyzSubjectDB(DB):
+        async def scalar(self, statement): return "ky"
+    # Русская книга у кыргызского предмета (старая связь) источником не становится.
+    assert asyncio.run(textbook_context.load_component_textbook_context(KyrgyzSubjectDB(), topic, source_item_id=101)) is None

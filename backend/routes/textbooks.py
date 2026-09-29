@@ -15,7 +15,7 @@ class TextbookCreateInput(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     grade: int = Field(ge=1, le=11)
     subject_id: int | None = Field(default=None, ge=1)
-    language: str = Field(default="ru", pattern="^(ru|ky)$")
+    language: str = Field(default="ru", pattern="^(ru|ky|en)$")
     authors: str | None = Field(default=None, max_length=300)
     year: int | None = Field(default=None, ge=1950, le=2100)
     file_name: str = Field(min_length=1, max_length=255)
