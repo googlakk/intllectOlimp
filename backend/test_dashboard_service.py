@@ -75,6 +75,51 @@ class LearningReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(denied.exception.status_code, 404)
         db.execute.assert_not_awaited()
 
+    async def _report(self, user, subject_rows):
+        from unittest.mock import AsyncMock, MagicMock
+        from services.dashboard import get_student_learning_report
+        assignments, skills, lessons = MagicMock(), MagicMock(), MagicMock()
+        assignments.all.return_value = subject_rows
+        skills.all.return_value = []
+        progress = SimpleNamespace(status="completed", mastery_status="mastered", score=90.0, completed_at=None)
+        topic = SimpleNamespace(id=31, name="Дроби", archived_at=None)
+        subject = SimpleNamespace(id=12, name="Математика", grade=7)
+        lessons.all.return_value = [(progress, topic, subject)]
+        results = ([assignments] if user.role != "admin" else []) + [skills, lessons]
+        db = SimpleNamespace(scalar=AsyncMock(return_value=SimpleNamespace(name="Аня")), execute=AsyncMock(side_effect=results))
+        report = await get_student_learning_report(2, db, user=user)
+        queries = [str(call.args[0].compile(compile_kwargs={"literal_binds": True})) for call in db.execute.await_args_list]
+        return report, queries
+
+    async def test_teacher_report_lists_only_assigned_subjects(self):
+        report, queries = await self._report(SimpleNamespace(role="teacher", teacher_id=5, organization_id=1), [(12,)])
+        skills_query, lessons_query = queries[-2], queries[-1]
+        self.assertIn("sections.subject_id IN (12)", skills_query)
+        self.assertIn("subjects.id IN (12)", lessons_query)
+        self.assertEqual(report["lessons"][0]["subject_name"], "Математика")
+        self.assertEqual(report["lessons"][0]["subject_grade"], 7)
+
+    async def test_admin_report_is_not_limited_by_subject(self):
+        report, queries = await self._report(SimpleNamespace(role="admin"), [])
+        self.assertEqual(len(queries), 2)
+        self.assertNotIn("subjects.id IN", queries[1])
+        self.assertNotIn("topic_skills", queries[0])
+        self.assertEqual(report["lessons"][0]["subject_id"], 12)
+
+    async def test_teacher_student_list_counts_only_own_subjects(self):
+        from unittest.mock import AsyncMock, MagicMock
+        from services.dashboard import get_dashboard_students
+        assignments, rows = MagicMock(), MagicMock()
+        assignments.all.return_value = [(12,)]
+        rows.all.return_value = []
+        db = SimpleNamespace(execute=AsyncMock(side_effect=[assignments, rows]))
+        await get_dashboard_students(db, user=SimpleNamespace(role="teacher", teacher_id=5, organization_id=1))
+        query = str(db.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True}))
+        self.assertIn("sections.subject_id IN (12)", query)
+        # Условие в соединении, а не в WHERE: ученик без уроков по предмету остаётся в списке.
+        progress_join = query[query.index("LEFT OUTER JOIN progress"):query.index("LEFT OUTER JOIN topics")]
+        self.assertIn("sections.subject_id IN (12)", progress_join)
+
     def test_multiple_students_cannot_exceed_one_hundred_percent(self):
         self.assertEqual(build_dashboard_overview(students=2, subjects=1, topics=3, published_lessons=3, completed_lessons=6)['average_progress'], 100)
         self.assertEqual(build_dashboard_overview(students=2, subjects=1, topics=3, published_lessons=3, completed_lessons=2)['average_progress'], 33.3)

@@ -2,9 +2,9 @@ import { CheckCircle2, CircleDashed, X } from 'lucide-react';
 import { useStudentLearningReport } from '@/lib/api';
 import type { StudentLearningReport as StudentLearningReportData } from '@/lib/api/dashboard';
 import { StudentTutorReport } from './StudentTutorReport';
+import { groupLessonsBySubject, type ReportLesson as Lesson, type SubjectLessons } from './subjectLessons';
 
 type Skill = StudentLearningReportData['skills'][number];
-type Lesson = StudentLearningReportData['lessons'][number];
 
 /** Навык — плитка с полосой освоения, а не строка текста: видно сразу, без чтения статуса словами. */
 function SkillTile({ skill }: { skill: Skill }) {
@@ -44,6 +44,14 @@ const LESSON_MASTERY_LABEL: Record<string, { text: string; className: string }> 
 const DEFAULT_LESSON_MASTERY = { text: 'Цели ещё не проверены', className: 'bg-muted text-muted-foreground' };
 
 /** Занятие — строка со значком хода урока и отдельной плашкой освоения: это разные вопросы. */
+function lessonDetails(lesson: Lesson): string {
+  if (lesson.status !== 'completed') return 'В процессе';
+  const parts = ['Пройдено'];
+  if (lesson.completed_at) parts.push(new Date(lesson.completed_at).toLocaleDateString('ru-RU'));
+  if (lesson.score !== null) parts.push(`${Math.round(lesson.score)}%`);
+  return parts.join(' · ');
+}
+
 function LessonRow({ lesson }: { lesson: Lesson }) {
   const mastery = LESSON_MASTERY_LABEL[lesson.mastery_status] ?? DEFAULT_LESSON_MASTERY;
   return (
@@ -53,12 +61,26 @@ function LessonRow({ lesson }: { lesson: Lesson }) {
         : <CircleDashed className="h-5 w-5 shrink-0 text-muted-foreground" aria-label="в процессе" />}
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{lesson.name}{lesson.archived ? ' (архив)' : ''}</p>
-        <p className="text-xs text-muted-foreground">{lesson.status === 'completed' ? 'Пройдено' : 'В процессе'}</p>
+        <p className="text-xs text-muted-foreground">{lessonDetails(lesson)}</p>
       </div>
       <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${mastery.className}`}>
         {mastery.text}
       </span>
     </li>
+  );
+}
+
+function SubjectLessonsGroup({ group }: { group: SubjectLessons }) {
+  return (
+    <details className="rounded-lg border p-3" open>
+      <summary className="cursor-pointer font-semibold">
+        {group.title}
+        <span className="ml-2 text-sm font-normal text-muted-foreground">
+          пройдено {group.completed} из {group.lessons.length}{group.needsHelp > 0 ? ` · нужна помощь: ${group.needsHelp}` : ''}
+        </span>
+      </summary>
+      <ul className="mt-3 space-y-2">{group.lessons.map((lesson) => <LessonRow key={lesson.topic_id} lesson={lesson} />)}</ul>
+    </details>
   );
 }
 
@@ -97,10 +119,10 @@ export function StudentLearningReport({ studentId, onClose }: { studentId: numbe
             </>}
         </div>
         <div>
-          <h3 className="mb-2 font-semibold">Занятия и темы, которым нужна помощь</h3>
+          <h3 className="mb-2 font-semibold">Уроки по предметам</h3>
           {data.lessons.length === 0
-            ? <p className="text-muted-foreground">Ученик пока не начал ни одной темы.</p>
-            : <ul className="space-y-2">{data.lessons.map((lesson) => <LessonRow key={lesson.topic_id} lesson={lesson} />)}</ul>}
+            ? <p className="text-muted-foreground">По доступным вам предметам ученик пока не начал ни одного урока.</p>
+            : <div className="space-y-3">{groupLessonsBySubject(data.lessons).map((group) => <SubjectLessonsGroup key={group.subjectId} group={group} />)}</div>}
         </div>
         <StudentTutorReport studentId={studentId} />
       </>}

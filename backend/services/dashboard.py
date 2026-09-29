@@ -4,9 +4,20 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from errors import ApplicationError
-from models import Skill, StudentSkillMastery, Classroom, ClassroomStudent, ClassroomTeacher, GeneratedLesson, Progress, Section, Student, Subject, Topic
+from models import Skill, StudentSkillMastery, Classroom, ClassroomStudent, ClassroomTeacher, GeneratedLesson, Progress, Section, Student, Subject, Topic, TopicSkill
 from services.auth import AuthPrincipal
 from services.teacher_assignments import teacher_subject_ids
+
+
+async def visible_subject_ids(db: AsyncSession, user: AuthPrincipal) -> list[int] | None:
+    """Предметы, результаты по которым видит пользователь: админ — все (None), учитель — назначенные."""
+    return None if user.role == "admin" else await teacher_subject_ids(user, db)
+
+
+def topics_of_subjects(subject_ids: list[int]):
+    # correlate(None): подзапрос самостоятельный и не цепляется к темам внешнего запроса.
+    return (select(Topic.id).join(Section, Section.id == Topic.section_id)
+            .where(Section.subject_id.in_(subject_ids)).correlate(None))
 
 
 def build_dashboard_overview(
@@ -97,6 +108,11 @@ async def get_dashboard_overview(db: AsyncSession, *, user: AuthPrincipal) -> di
 
 
 async def get_dashboard_students(db: AsyncSession, *, user: AuthPrincipal) -> list[dict[str, Any]]:
+    subject_ids = await visible_subject_ids(db, user)
+    # Учитель считает только уроки своих предметов; ученик без них всё равно остаётся в списке.
+    progress_join = Progress.student_id == Student.id
+    if subject_ids is not None:
+        progress_join = and_(progress_join, Progress.topic_id.in_(topics_of_subjects(subject_ids)))
     statement = select(
         Student.id,
         Student.name,
@@ -105,7 +121,7 @@ async def get_dashboard_students(db: AsyncSession, *, user: AuthPrincipal) -> li
         .filter(and_(Progress.status == "completed", Topic.archived_at.is_(None)))
         .label("completed_topics"),
         func.coalesce(func.avg(Progress.score).filter(Topic.archived_at.is_(None)), 0).label("average_score"),
-    ).outerjoin(Progress, Progress.student_id == Student.id).outerjoin(Topic, Topic.id == Progress.topic_id)
+    ).select_from(Student).outerjoin(Progress, progress_join).outerjoin(Topic, Topic.id == Progress.topic_id)
     if user.role != "admin":
         statement = statement.where(Student.id.in_(_visible_students_subquery(user)))
     rows = (await db.execute(statement.group_by(Student.id).order_by(Student.name))).all()
@@ -127,14 +143,27 @@ async def get_student_learning_report(student_id: int, db: AsyncSession, *, user
     student = await db.scalar(statement)
     if student is None:
         raise ApplicationError(404, "Ученик недоступен." if user.role != "admin" else "Ученик не найден.")
-    skills = (await db.execute(select(StudentSkillMastery, Skill).join(Skill, Skill.id == StudentSkillMastery.skill_id)
-        .where(StudentSkillMastery.student_id == student_id, StudentSkillMastery.evidence_count > 0)
-        .order_by(Skill.name))).all()
-    lessons = (await db.execute(select(Progress, Topic).join(Topic, Topic.id == Progress.topic_id)
-        .where(Progress.student_id == student_id).order_by(Topic.sort_order, Topic.id))).all()
+    subject_ids = await visible_subject_ids(db, user)
+    skills_query = (select(StudentSkillMastery, Skill).join(Skill, Skill.id == StudentSkillMastery.skill_id)
+        .where(StudentSkillMastery.student_id == student_id, StudentSkillMastery.evidence_count > 0))
+    lessons_query = (select(Progress, Topic, Subject)
+        .join(Topic, Topic.id == Progress.topic_id)
+        .join(Section, Section.id == Topic.section_id)
+        .join(Subject, Subject.id == Section.subject_id)
+        .where(Progress.student_id == student_id))
+    if subject_ids is not None:
+        # Навык виден учителю, если его проверяет хотя бы одна тема его предметов.
+        skills_query = skills_query.where(Skill.id.in_(
+            select(TopicSkill.skill_id).where(TopicSkill.topic_id.in_(topics_of_subjects(subject_ids)))))
+        lessons_query = lessons_query.where(Subject.id.in_(subject_ids))
+    skills = (await db.execute(skills_query.order_by(Skill.name))).all()
+    lessons = (await db.execute(lessons_query.order_by(
+        Subject.name, Subject.grade, Section.sort_order, Topic.sort_order, Topic.id))).all()
     return {"student_id": student_id, "name": student.name,
             "skills": [{"id": skill.id, "name": skill.name, "status": mastery.status,
                         "mastery_score": mastery.mastery_score, "evidence_count": mastery.evidence_count} for mastery, skill in skills],
             "lessons": [{"topic_id": topic.id, "name": topic.name, "status": progress.status,
                          "mastery_status": progress.mastery_status, "score": progress.score,
-                         "archived": topic.archived_at is not None} for progress, topic in lessons]}
+                         "completed_at": progress.completed_at.isoformat() if progress.completed_at else None,
+                         "subject_id": subject.id, "subject_name": subject.name, "subject_grade": subject.grade,
+                         "archived": topic.archived_at is not None} for progress, topic, subject in lessons]}

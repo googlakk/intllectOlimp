@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Topic
 from services.auth import AuthPrincipal
-from services.dashboard import ensure_student_visible
+from services.dashboard import ensure_student_visible, topics_of_subjects, visible_subject_ids
 from tutor.models import TutorTurn
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,9 @@ ALERTS_LIMIT = 20
 
 
 class TutorReportStore(Protocol):
-    async def student_turns(self, student_id: int, topic_id: int | None, limit: int) -> list[TutorTurn]: ...
+    async def student_turns(
+        self, student_id: int, topic_id: int | None, limit: int, subject_ids: list[int] | None = None,
+    ) -> list[TutorTurn]: ...
     async def topic_names(self, topic_ids: Iterable[int]) -> dict[int, str]: ...
 
 
@@ -38,10 +40,14 @@ class SqlTutorReportStore:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def student_turns(self, student_id: int, topic_id: int | None, limit: int) -> list[TutorTurn]:
+    async def student_turns(
+        self, student_id: int, topic_id: int | None, limit: int, subject_ids: list[int] | None = None,
+    ) -> list[TutorTurn]:
         query = select(TutorTurn).where(TutorTurn.student_id == student_id)
         if topic_id is not None:
             query = query.where(TutorTurn.topic_id == topic_id)
+        if subject_ids is not None:
+            query = query.where(TutorTurn.topic_id.in_(topics_of_subjects(subject_ids)))
         # Последние реплики, по порядку времени.
         return list(reversed((await self.db.scalars(query.order_by(TutorTurn.id.desc()).limit(limit))).all()))
 
@@ -127,8 +133,9 @@ async def get_student_tutor_summary(
     student_id: int, db: AsyncSession, *, user: AuthPrincipal, store: TutorReportStore | None = None,
 ) -> dict[str, Any]:
     await ensure_student_visible(db, user, student_id)
+    subject_ids = await visible_subject_ids(db, user)
     store = store or SqlTutorReportStore(db)
-    turns = await _read(db, store.student_turns(student_id, None, SUMMARY_TURNS))
+    turns = await _read(db, store.student_turns(student_id, None, SUMMARY_TURNS, subject_ids))
     if turns is None:
         return {"available": False, "topics": [], "misconceptions": [], "alerts": []}
     # Без отката: он сбросил бы уже загруженные реплики. Нет названий — покажем номера тем.
@@ -144,8 +151,9 @@ async def get_student_tutor_dialogue(
     student_id: int, topic_id: int, db: AsyncSession, *, user: AuthPrincipal, store: TutorReportStore | None = None,
 ) -> dict[str, Any]:
     await ensure_student_visible(db, user, student_id)
+    subject_ids = await visible_subject_ids(db, user)
     store = store or SqlTutorReportStore(db)
-    turns = await _read(db, store.student_turns(student_id, topic_id, DIALOGUE_TURNS))
+    turns = await _read(db, store.student_turns(student_id, topic_id, DIALOGUE_TURNS, subject_ids))
     if turns is None:
         return {"available": False, "topic_id": topic_id, "turns": []}
     return {"available": True, "topic_id": topic_id, "turns": serialize_dialogue(turns)}

@@ -9,7 +9,10 @@ export const useDashboardOverview = () =>
 export const useDashboardStudents = () =>
   useQuery({ queryKey: ['dashboard-students'], queryFn: () => request<StudentSummary[]>('/dashboard/students') });
 
-export type StudentLearningReport = { student_id: number; name: string; skills: Array<{ id: number; name: string; status: string; mastery_score: number; evidence_count: number }>; lessons: Array<{ topic_id: number; name: string; status: string; mastery_status: string; score: number | null; archived: boolean }> };
+export type StudentLearningReport = { student_id: number; name: string; skills: Array<{ id: number; name: string; status: string; mastery_score: number; evidence_count: number }>; lessons: Array<{
+  topic_id: number; name: string; status: string; mastery_status: string; score: number | null; completed_at: string | null;
+  subject_id: number; subject_name: string; subject_grade: number; archived: boolean;
+}> };
 export const useStudentLearningReport = (studentId: number | null) => useQuery({
   queryKey: ['student-learning-report', studentId],
   queryFn: () => request<StudentLearningReport>(`/dashboard/students/${studentId}/learning`),

@@ -22,14 +22,18 @@ def turn(id, topic_id=3, **fields):
     return TutorTurn(id=id, topic_id=topic_id, **{**defaults, **fields})
 
 
+TOPIC_SUBJECT = {3: 10, 4: 20}
+
+
 class Store:
     def __init__(self, turns, fail=False):
         self.turns, self.fail = turns, fail
 
-    async def student_turns(self, student_id, topic_id, limit):
+    async def student_turns(self, student_id, topic_id, limit, subject_ids=None):
         if self.fail:
             raise ProgrammingError("select", {}, Exception("relation tutor_turns does not exist"))
-        return [t for t in self.turns if t.student_id == student_id and topic_id in (None, t.topic_id)][-limit:]
+        return [t for t in self.turns if t.student_id == student_id and topic_id in (None, t.topic_id)
+                and (subject_ids is None or TOPIC_SUBJECT[t.topic_id] in subject_ids)][-limit:]
 
     async def topic_names(self, topic_ids):
         return {3: "Скорость", 4: "Плотность"}
@@ -76,6 +80,17 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
                 await get_student_tutor_summary(7, db, user=SimpleNamespace(role="teacher"), store=store)
         self.assertEqual(denied.exception.status_code, 404)
         store.student_turns.assert_not_awaited()
+
+    async def test_subject_teacher_sees_only_own_subject_dialogues(self):
+        db = SimpleNamespace(rollback=AsyncMock())
+        teacher = SimpleNamespace(role="teacher")
+        with patch("services.dashboard._visible_student_ids", AsyncMock(return_value=[7])), \
+                patch("services.tutor_report.visible_subject_ids", AsyncMock(return_value=[10])):
+            summary = await get_student_tutor_summary(7, db, user=teacher, store=Store(TURNS))
+            foreign = await get_student_tutor_dialogue(7, 4, db, user=teacher, store=Store(TURNS))
+        self.assertEqual([row["topic_id"] for row in summary["topics"]], [3])
+        self.assertEqual(summary["alerts"], [])
+        self.assertEqual(foreign["turns"], [])
 
     async def test_topic_names_failure_keeps_the_summary(self):
         store = Store(TURNS)
