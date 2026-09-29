@@ -194,10 +194,12 @@ class CharacterTests(unittest.TestCase):
         self.assertEqual(grade_profile(8).band, "7–9 класс")
         self.assertIn("точные термины", grade_profile(11).language)
         self.assertIn("кыргызском", lesson_character(8, "физика", "формула → подстановка", "ky"))
+        self.assertIn("английском", lesson_character(8, "physics", "formula → substitution", "en"))
 
     def test_templates_fall_back_to_russian(self):
         self.assertTrue(template("correct", "ky"))
-        self.assertEqual(template("correct", "en"), template("correct", "ru"))
+        self.assertTrue(template("correct", "en").startswith("Correct"))
+        self.assertEqual(template("correct", "de"), template("correct", "ru"))
 
 
 if __name__ == "__main__":

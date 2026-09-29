@@ -52,3 +52,37 @@ def test_subject_rename_trims_and_keeps_grade(monkeypatch):
     assert result["name"] == "Алгебра"
     assert result["grade"] == 8
     db.commit.assert_awaited_once()
+
+
+def test_course_created_in_english(monkeypatch):
+    rows = []
+    async def flush():
+        rows[0].id = 9
+    db = SimpleNamespace(add=rows.append, flush=flush, commit=AsyncMock(), refresh=AsyncMock())
+    monkeypatch.setattr(course_creation, "require_grade_management", AsyncMock())
+    result = asyncio.run(course_creation.create_course("Physics", 8, object(), db, "en"))
+    assert result["instruction_language"] == "en"
+
+
+def _subject():
+    return SimpleNamespace(id=5, name="Физика", grade=8, hours_per_week=2, hours_per_year=68,
+                           source_info=None, instruction_language="ru")
+
+
+def test_subject_language_changes_when_textbooks_match(monkeypatch):
+    subject = _subject()
+    db = SimpleNamespace(scalar=AsyncMock(return_value=None), commit=AsyncMock(), refresh=AsyncMock())
+    monkeypatch.setattr(course_creation, "require_subject_management", AsyncMock(return_value=subject))
+    result = asyncio.run(course_creation.rename_subject(5, "Physics", object(), db, "en"))
+    assert result["instruction_language"] == "en"
+
+
+def test_subject_language_blocked_by_textbook_in_other_language(monkeypatch):
+    subject = _subject()
+    db = SimpleNamespace(scalar=AsyncMock(return_value="ru"), commit=AsyncMock(), refresh=AsyncMock())
+    monkeypatch.setattr(course_creation, "require_subject_management", AsyncMock(return_value=subject))
+    with pytest.raises(ApplicationError) as denied:
+        asyncio.run(course_creation.rename_subject(5, "Physics", object(), db, "en"))
+    assert denied.value.status_code == 409
+    assert subject.instruction_language == "ru"
+    db.commit.assert_not_awaited()

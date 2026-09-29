@@ -680,7 +680,10 @@ def _lesson_shape_warnings_and_errors(
     return errors, warnings
 
 
-_EMPTY_EXPLANATION_WORDS = {"ответ", "верно", "правильно", "правильный", "это", "да", "итак", "получаем"}
+_EMPTY_EXPLANATION_WORDS = {
+    "ответ", "верно", "правильно", "правильный", "это", "да", "итак", "получаем",
+    "жооп", "туура", "answer", "correct", "right", "is", "the", "so", "yes",
+}
 
 
 def _explanation_without_path(explanation: Any, correct: Any) -> bool:

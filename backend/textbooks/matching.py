@@ -30,8 +30,10 @@ _STOP = frozenset(
     )
 )
 # Только отдельные слова: «класс 7», «тип. 3», «с 1991 года» — не ссылки.
-_SECTION_REF = re.compile(r"(?:§|(?<![а-яёa-z])параграф|(?<![а-яёa-z])п\.)\s*(\d+(?:\.\d+)?)(?![\d.])", re.IGNORECASE)
-_PAGE_REF = re.compile(r"(?<![а-яёa-z])(?:стр\.?|с\.)\s*(\d{1,3})(?!\d)(?:\s*[-–—]\s*(\d{1,3})(?!\d))?", re.IGNORECASE)
+_SECTION_REF = re.compile(
+    r"(?:§|(?<![а-яёa-z])(?:параграф|paragraph|section)|(?<![а-яёa-z])п\.)\s*(\d+(?:\.\d+)?)(?![\d.])", re.IGNORECASE)
+_PAGE_REF = re.compile(
+    r"(?<![а-яёa-z])(?:стр\.?|с\.|бет|pp?\.|pages?)\s*(\d{1,3})(?!\d)(?:\s*[-–—]\s*(\d{1,3})(?!\d))?", re.IGNORECASE)
 
 
 @dataclass(frozen=True)

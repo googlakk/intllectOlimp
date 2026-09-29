@@ -16,7 +16,7 @@ from .extract import PageText
 
 TOC_EDGE_PAGES = 12
 # Маркер — отдельной короткой строкой, а не слово в тексте («содержание кислорода»).
-TOC_MARKER_LINE = re.compile(r"^\W*(содержание|оглавление|мазмуну)\W*$", re.IGNORECASE)
+TOC_MARKER_LINE = re.compile(r"^\W*(содержание|оглавление|мазмуну|contents|table of contents)\W*$", re.IGNORECASE)
 TOC_MARKER_MAX_LINE = 40
 MIN_CALIBRATION_SHARE = 0.3
 OFFSET_RANGE = range(-10, 41)

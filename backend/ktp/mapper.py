@@ -16,6 +16,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from languages import normalize_language
+
 from .assemble import ColumnMap, assemble
 from .columns import detect_columns, to_column_maps
 from .extract import Extraction
@@ -117,9 +119,7 @@ def build_draft(
         "grade": _grade(payload, extraction.header_text),
         "hours_per_week": _hours_per_week(payload, extraction.header_text),
         "hours_per_year": total,
-        "instruction_language": (
-            payload.get("instruction_language") if payload.get("instruction_language") in ("ru", "ky") else "ru"
-        ),
+        "instruction_language": normalize_language(payload.get("instruction_language")),
         "column_mapping": _column_mapping(maps),
         "sections": built["sections"],
         "warnings": warnings,

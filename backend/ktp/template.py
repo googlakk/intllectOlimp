@@ -161,7 +161,10 @@ def map_standard_template(extraction: Extraction) -> dict[str, Any]:
         "grade": _positive_int(meta.get("grade", "")),
         "hours_per_week": _positive_float(meta.get("hours_per_week", ""), 1.0),
         "hours_per_year": total_hours,
-        "instruction_language": "ky" if language in {"ky", "кыргызский", "кыргызча"} else "ru",
+        "instruction_language": (
+            "ky" if language in {"ky", "кыргызский", "кыргызча"}
+            else "en" if language in {"en", "английский", "english", "англисче"} else "ru"
+        ),
         "column_mapping": {f"колонка {index}": field for field, index in columns.items()},
         "sections": sections,
         "warnings": warnings,

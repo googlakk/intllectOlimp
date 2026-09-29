@@ -158,7 +158,7 @@ async def create_custom_photo_profile(
         provider="heygen",
         provider_avatar_id=look.id,
         provider_voice_id=voice_id or look.default_voice_id or None,
-        supported_languages=["ru", "ky"],
+        supported_languages=["ru", "ky", "en"],
         consent_metadata={
             "source": "teacher_photo_upload",
             "api_version": "v3",

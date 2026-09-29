@@ -10,6 +10,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from languages import LANGUAGE_PROMPT_LABEL, normalize_language
 from typing import Any
 
 ACTIONS = ("none", "show_hint", "open_theory", "call_teacher")
@@ -89,7 +91,7 @@ def grade_profile(grade: int | None) -> GradeProfile:
 def lesson_character(grade: int | None, subject_label: str, show_path: str, language: str) -> str:
     """Подстройка характера под класс и предмет — часть кэшируемого контекста урока."""
     profile = grade_profile(grade)
-    language_name = "кыргызском" if language == "ky" else "русском"
+    language_name = LANGUAGE_PROMPT_LABEL[normalize_language(language)]
     return (
         f"Ученик: {profile.band}. Длина реплики: {profile.sentences}. Язык: {profile.language}. "
         f"Размер подсказки: {profile.hint_size}.\n"
@@ -122,6 +124,18 @@ TEMPLATES: dict[str, dict[str, str]] = {
         "call_teacher_ack": "Мугалимге сага жардам керек экенин белгилеп койдум.",
         "burst_limit": "Бир аз өз алдынча ойлонуп көрөлү, бир мүнөттөн кийин улантабыз.",
         "no_more_hints": "Кеңештер бүттү. Эмне чыкканын айтып берчи — бирге карайбыз.",
+    },
+    "en": {
+        "correct": "Correct! Well done for taking the solution all the way to the end.",
+        "offer_help": "This step seems tricky. Shall we find the mistake together?",
+        "idle_offer": "If you're stuck, ask me and we'll go through it step by step.",
+        "assessment_locked": "This is the final task — you do it on your own here, it's fairer. If you forgot something, go back to the explanation.",
+        "off_topic": "Let's get back to the task — I'm here to help with this lesson.",
+        "distress": "It matters to me that you're okay. Please tell your teacher or an adult you trust about this.",
+        "fallback": "I can't answer right now. Try rereading the task and taking the first step — or go back to the explanation.",
+        "call_teacher_ack": "I've let your teacher know that you need help.",
+        "burst_limit": "Let's think on our own for a moment and continue in a minute.",
+        "no_more_hints": "There are no more hints. Tell me what you've got so far and we'll look at it together.",
     },
 }
 

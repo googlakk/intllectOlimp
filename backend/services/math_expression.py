@@ -516,7 +516,9 @@ def _roots_complete(start: str, answer: str) -> bool:
     return _same_root_set(actual, sorted({round(root, 9) for root in roots}))
 
 
-_UNCHECKABLE_ASK = re.compile(r"допустим|область определения|одз|при каких|неравенств|≠|\\ne\b|\\neq")
+_UNCHECKABLE_ASK = re.compile(
+    r"допустим|область определения|одз|при каких|неравенств|domain|for (?:which|what) values|permissible|inequalit"
+    r"|≠|\\ne\b|\\neq")
 _UNCHECKABLE_ANSWER = re.compile(r"≠|<|>|≤|≥|\\ne\b|\\neq|\\le|\\ge")
 
 
@@ -530,7 +532,7 @@ def step_solver_problem(content: dict[str, Any]) -> str | None:
     kind = content.get("kind") if content.get("kind") in ("expression", "equation") else ("equation" if "=" in start else "expression")
     # Движок сверяет строки только на равенство заданию: условия «y ≠ 5» и неравенства он не примет.
     ask = f"{content.get('title') or ''} {content.get('instruction') or ''}".lower().replace("ё", "е")
-    if (_UNCHECKABLE_ASK.search(ask) or (kind == "expression" and re.search(r"нул", ask))
+    if (_UNCHECKABLE_ASK.search(ask) or (kind == "expression" and re.search(r"нул|zero", ask))
             or any(_UNCHECKABLE_ANSWER.search(item) for item in final_answer)):
         return ("задание про допустимые значения, нули или неравенства — такой ответ блок проверить не может, "
                 "замените на задачу с ответом (IndependentProblem)")

@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 from ai.planner import build_topic_contract, split_component_plan
+from languages import LANGUAGE_PROMPT_LABEL, normalize_language
 from objectives import GENERATION_COMPONENTS, decompose_objectives
 from services.mini_games import GROUP_MINI_GAMES, INDIVIDUAL_MINI_GAMES
 
@@ -78,42 +79,42 @@ def clean_intro(value: Any) -> dict[str, str] | None:
 SUBJECT_FAMILY_PROFILES = {
     "mathematical": {
         "label": "математические науки",
-        "keywords": ("математ", "алгебр", "геометр", "арифмет", "статист"),
+        "keywords": ("математ", "алгебр", "геометр", "арифмет", "статист", "math", "algebra", "geometr", "arithmet", "statistic"),
         "archetypes": ("concept_and_procedure", "problem_solving", "investigation"),
         "route": "объяснение → разобранный пример → практика с поддержкой → самостоятельная задача → проверка",
         "show_path": "раскрой запись (степень — это умножение, дробь — деление на части), подставляй числа, одно действие на шаг, в конце проверка",
     },
     "natural_science": {
         "label": "естественные науки",
-        "keywords": ("физик", "хими", "биолог", "географ", "естествозн", "природовед", "астроном"),
+        "keywords": ("физик", "хими", "биолог", "географ", "естествозн", "природовед", "астроном", "physics", "chemistr", "biolog", "geograph", "natural science", "astronom", "science"),
         "archetypes": ("phenomenon_inquiry", "experiment_and_evidence", "system_model"),
         "route": "явление или вопрос → прогноз → наблюдение, модель или эксперимент → интерпретация данных → вывод → проверка",
         "show_path": "что значит каждая буква формулы и её единицы → подставь числа с единицами → вычисли → проверь, разумен ли ответ",
     },
     "language": {
         "label": "языки и речевое развитие",
-        "keywords": ("русский язык", "кыргыз тили", "киргизский язык", "английск", "немецк", "француз", "иностранный язык", "граммат", "родной язык", "кыргызча"),
+        "keywords": ("русский язык", "кыргыз тили", "киргизский язык", "английск", "немецк", "француз", "иностранный язык", "граммат", "родной язык", "кыргызча", "орус тили", "англис тили", "english", "grammar", "language"),
         "archetypes": ("language_practice", "text_comprehension", "communication"),
         "route": "языковой образец → распознавание → управляемая практика → понимание или создание текста/речи → обратная связь → применение",
         "show_path": "возьми слово или предложение → выдели нужную часть → примени правило → результат → «вот почему»",
     },
     "humanities_social_science": {
         "label": "гуманитарные и общественные науки",
-        "keywords": ("литератур", "истори", "тарых", "адабият", "обществозн", "человек и обществ", "адам жана коом", "право", "эконом", "граждан"),
+        "keywords": ("литератур", "истори", "тарых", "адабият", "обществозн", "человек и обществ", "адам жана коом", "право", "эконом", "граждан", "history", "literature", "social studies", "civics", "econom"),
         "archetypes": ("source_analysis", "historical_context", "argumentation"),
         "route": "контекст → первичный текст или источник → анализ свидетельств → аргументация или интерпретация → сопоставление → рефлексия",
         "show_path": "факт → следствие → вывод: цепочка «потому что… поэтому…», без готовых оценок",
     },
     "computing_technology": {
         "label": "информатика и технологии",
-        "keywords": ("информат", "программ", "робот", "цифров", "компьютер"),
+        "keywords": ("информат", "программ", "робот", "цифров", "компьютер", "computer", "informatic", "programming", "robot", "coding"),
         "archetypes": ("algorithm_design", "debugging", "digital_project"),
         "route": "демонстрация → выполнение процедуры → самостоятельное создание результата → проверка по критериям → улучшение",
         "show_path": "выполни программу по шагам и покажи значения переменных после каждой строки",
     },
     "arts_practical_physical": {
         "label": "искусство, практика и физическое воспитание",
-        "keywords": ("музык", "изобразитель", "рисован", "искусств", "труд", "технолог", "физическ культур", "спорт", "черчени", "дене тарбия"),
+        "keywords": ("музык", "изобразитель", "рисован", "искусств", "труд", "технолог", "физическ культур", "спорт", "черчени", "дене тарбия", "music", "fine art", "drawing", "technology", "physical education", "sport"),
         "archetypes": ("demonstration_and_practice", "creative_project", "performance_and_reflection"),
         "route": "показ и критерии → безопасная практика → выполнение или создание → самооценка по критериям → рефлексия",
         "show_path": "разложи действие на видимые шаги и скажи, на что смотреть на каждом",
@@ -806,7 +807,7 @@ async def generate_lesson(
     from ai.subject_profiles import subject_profile, subject_prompt
 
     subject_profile_data = subject_profile(subject_name)
-    language_label = "кыргызском" if content_language == "ky" else "русском"
+    language_label = LANGUAGE_PROMPT_LABEL[normalize_language(content_language)]
     teaching_requirement = (
         'Это контрольная без таймера. Используй только RetrievalCheck, IndependentProblem и MasteryCheck. '
         'Не добавляй объяснения, подсказки, обратную связь до сдачи или Reflection. '
@@ -824,7 +825,9 @@ async def generate_lesson(
 Предметный маршрут: {route}
 Как показывать ход мысли: {subject_profile_data["show_path"] if subject_profile_data else SUBJECT_FAMILY_PROFILES[str(profile["family"])]["show_path"]}
 {subject_prompt(subject_profile_data) if subject_profile_data else ""}
-Язык всего учебного содержания: на {language_label} языке.
+Язык всего учебного содержания: на {language_label} языке. Всё, что видит ученик (заголовки, объяснения, задания,
+варианты, подсказки, сообщения об ошибках, пояснения), — на этом языке, даже если примеры в правилах выше по-русски;
+термины и обозначения — как в учебнике. Ключи JSON и названия компонентов не переводи.
 Проверка учителем: {"обязательна — предмет не распознан" if profile["teacher_review_required"] else "не требуется"}
 Предмет: {subject_name}
 Тема: {topic_name}

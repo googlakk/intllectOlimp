@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth_dependencies import require_roles
 from database import get_db
 from errors import ApplicationError
+from languages import Language
 from routes.http_errors import raise_http_error
 from services.auth import AuthPrincipal
 from services import topics as service
@@ -104,22 +105,27 @@ class SectionCreate(BaseModel):
 
 class CourseCreate(SectionCreate):
     grade: int = Field(ge=1, le=12)
+    instruction_language: Language = "ru"
+
+
+class CourseUpdate(SectionCreate):
+    instruction_language: Language | None = None
 
 
 @router.post("/subjects", status_code=201)
 async def create_course(payload: CourseCreate, user: AuthPrincipal = Depends(require_roles("admin")), db: AsyncSession = Depends(get_db)):
     from services.course_creation import create_course as create
     try:
-        return await create(payload.name, payload.grade, user, db)
+        return await create(payload.name, payload.grade, user, db, payload.instruction_language)
     except ApplicationError as exc:
         raise_http_error(exc)
 
 
 @router.patch("/subjects/{subject_id}")
-async def rename_course(subject_id: int, payload: SectionCreate, user: AuthPrincipal = Depends(require_roles("admin")), db: AsyncSession = Depends(get_db)):
+async def rename_course(subject_id: int, payload: CourseUpdate, user: AuthPrincipal = Depends(require_roles("admin")), db: AsyncSession = Depends(get_db)):
     from services.course_creation import rename_subject
     try:
-        return await rename_subject(subject_id, payload.name, user, db)
+        return await rename_subject(subject_id, payload.name, user, db, payload.instruction_language)
     except ApplicationError as exc:
         raise_http_error(exc)
 

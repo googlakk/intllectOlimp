@@ -15,11 +15,11 @@ Volume = str
 LessonShape = str
 
 
-MATH_WORDS = ("математ", "алгебр", "геометр", "арифмет", "статист")
-SCIENCE_WORDS = ("физик", "хими", "биолог", "географ", "естествозн", "астроном")
-HUMANITIES_WORDS = ("литератур", "истори", "тарых", "адабият", "обществозн", "право")
-LANGUAGE_WORDS = ("русский язык", "кыргыз тили", "киргизский язык", "английск", "граммат")
-COMPUTING_WORDS = ("информат", "программ", "робот", "компьютер", "алгоритм")
+MATH_WORDS = ("математ", "алгебр", "геометр", "арифмет", "статист", "math", "algebra", "geometr", "arithmet", "statistic")
+SCIENCE_WORDS = ("физик", "хими", "биолог", "географ", "естествозн", "астроном", "physics", "chemistr", "biolog", "geograph", "science")
+HUMANITIES_WORDS = ("литератур", "истори", "тарых", "адабият", "обществозн", "право", "history", "literature", "social studies", "civics")
+LANGUAGE_WORDS = ("русский язык", "кыргыз тили", "киргизский язык", "английск", "граммат", "орус тили", "англис тили", "english", "grammar", "language")
+COMPUTING_WORDS = ("информат", "программ", "робот", "компьютер", "алгоритм", "computer", "informatic", "programming", "robot", "coding")
 
 HEAVY_COMPONENTS = {
     "ProcessBuilder", "ArgumentMap", "BranchingScenario", "PredictionLab",

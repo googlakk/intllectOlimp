@@ -159,9 +159,22 @@ def math_plan(objectives="Выносить множитель из-под зна
 
 class MathProfileTests(unittest.TestCase):
     def test_math_subjects_are_recognised_but_not_geometry(self):
-        for name in ("Алгебра", "Математика", "Алгебра и начала анализа"):
+        for name in ("Алгебра", "Математика", "Алгебра и начала анализа", "Algebra", "Mathematics"):
             self.assertEqual(subject_profile(name)["id"], "math")
         self.assertIsNone(subject_profile("Геометрия"))
+        self.assertIsNone(subject_profile("Geometry"))
+
+    def test_english_subject_names_get_families(self):
+        from ai.generator import classify_subject
+        from ai.planner import subject_family
+        self.assertEqual(subject_profile("World History")["id"], "history")
+        self.assertIsNone(subject_profile("Prehistory"))
+        expected = {"Physics": "science", "Computer Science": "computing", "English Language": "language",
+                    "Algebra": "math", "Physical Education": "general"}
+        for name, family in expected.items():
+            self.assertEqual(subject_family(name), family, name)
+        self.assertEqual(classify_subject("Physical Education")["family"], "arts_practical_physical")
+        self.assertEqual(classify_subject("Computer Science")["family"], "computing_technology")
 
     def test_math_plan_has_worked_example_step_practice_and_error_analysis(self):
         plan = math_plan()

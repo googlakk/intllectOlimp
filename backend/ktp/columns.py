@@ -72,7 +72,7 @@ COLUMNS_TOOL = {
             "grade": {"type": "integer"},
             "hours_per_week": {"type": "number"},
             "hours_per_year": {"type": "integer", "description": "0, если в документе не указано."},
-            "instruction_language": {"type": "string", "enum": ["ru", "ky"]},
+            "instruction_language": {"type": "string", "enum": ["ru", "ky", "en"]},
             "tables": {"type": "array", "items": TABLE_SCHEMA},
             "notes": {
                 "type": "array",

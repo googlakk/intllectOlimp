@@ -21,6 +21,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from errors import ApplicationError
+from languages import normalize_language
 from services.assessment import check_answer
 from services.math_expression import solver_line_outcome
 from tutor.context import (
@@ -243,7 +244,7 @@ async def take_tutor_turn(
         raise TutorServiceError(status_code=404, detail="Задание не найдено")
     block = blocks[payload.block_index]
     metadata = lesson.get("lesson_metadata") or {}
-    language = "ky" if metadata.get("content_language") == "ky" else "ru"
+    language = normalize_language(metadata.get("content_language"))
     grade = grade or metadata.get("subject_grade")
     locked = assessment_mode(block)
 

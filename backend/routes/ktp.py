@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from languages import Language
 from topic_semantics import LessonType
 from ktp.parsing import KtpParseError, parse_ktp_draft
 from ktp.persistence import KtpPersistenceError, save_ktp_draft
@@ -38,7 +39,7 @@ class KtpUploadInput(BaseModel):
     grade: int = Field(ge=1, le=12)
     hours_per_week: float = Field(ge=0)
     hours_per_year: int = Field(ge=0)
-    instruction_language: Literal["ru", "ky"] = "ru"
+    instruction_language: Language = "ru"
     sections: list[SectionInput] = Field(default_factory=list)
 
 
