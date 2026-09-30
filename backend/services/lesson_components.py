@@ -194,15 +194,10 @@ def _objective(topic: Topic, objective_id: str) -> dict[str, Any]:
 
 async def _material(db: AsyncSession, topic: Topic, section_id: int | None, item_id: int | None) -> dict[str, Any]:
     if section_id is None and item_id is None:
-        raise LessonServiceError(status_code=422, detail="Выберите параграф или упражнение учебника.")
+        return {}
     material = await load_component_textbook_context(db, topic, source_section_id=section_id, source_item_id=item_id)
     if not material:
         raise LessonServiceError(status_code=422, detail=NO_SOURCE)
-    sections = material.get("sections") or []
-    if not sections or not any(str(section.get("text") or "").strip() or
-                               any(str(item.get("text") or "").strip() for item in section.get("items", []))
-                               for section in sections):
-        raise LessonServiceError(status_code=422, detail="В выбранном источнике нет распознанного текста. Выберите другой источник.")
     return material
 
 
@@ -235,12 +230,17 @@ def _bind(block: dict[str, Any], ref: dict[str, Any], objective_id: str) -> dict
     clean(block)
     content = block["content"]
     content.pop("anchor", None)
-    content.update(source_ref=deepcopy(ref), objective_ids=[objective_id],
+    content.update(objective_ids=[objective_id],
                    evidence_stage=default_evidence_stage(block["component"]) or "practice")
+    content["material_origin"] = "textbook_with_ai" if ref else "ktp_with_ai"
+    if ref:
+        content["source_ref"] = deepcopy(ref)
     if block["component"] == "MasteryCheck":
         for question in content.get("questions", []):
             if isinstance(question, dict):
-                question.update(source_ref=deepcopy(ref), objective_ids=[objective_id], dimension=objective_id)
+                question.update(objective_ids=[objective_id], dimension=objective_id)
+                if ref:
+                    question["source_ref"] = deepcopy(ref)
     return block
 
 
@@ -257,7 +257,7 @@ async def component_context(lesson_id: int, db: AsyncSession) -> dict[str, Any]:
     return {"revision": lesson_revision(lesson, topic), "objectives": objectives, "sources": sources,
             "supported_components": [name for name in sorted(GENERATION_COMPONENTS)
                                      if name != "GeneratedMedia" and _schema(name)],
-            "reason": NO_SOURCE if not sources else ("Укажите цели обучения в КТП." if not objectives else None)}
+            "reason": "Укажите цели обучения в КТП." if not objectives else None}
 
 
 async def prepare_component(lesson_id: int, *, component: str, objective_id: str,
@@ -271,7 +271,7 @@ async def prepare_component(lesson_id: int, *, component: str, objective_id: str
     _position(after_index, len(lesson.blocks or []))
     objective = _objective(topic, objective_id)
     material = await _material(db, topic, source_section_id, source_item_id)
-    ref, label = _source_ref(material, source_item_id)
+    ref, label = _source_ref(material, source_item_id) if material else ({}, "По теме и целям КТП · материал ИИ")
     section = await db.get(Section, topic.section_id)
     subject = await db.get(Subject, section.subject_id) if section is not None else None
     if subject is None:
@@ -292,9 +292,10 @@ async def prepare_component(lesson_id: int, *, component: str, objective_id: str
         raise LessonServiceError(status_code=422, detail="Модель вернула неполный блок. Урок не изменён.")
     block = _bind(block, ref, objective_id)
     _validate_block(block, schema)
-    warnings = [warning["message"] for warning in textbook_warnings([block], material)]
+    warnings = [warning["message"] for warning in textbook_warnings([block], material)] if material else []
+    warnings.append("ИИ может дополнять материал своими объяснениями и заданиями. Проверьте факты и ответы перед вставкой; дополнения не являются цитатами из учебника.")
     token = _sign({"lesson_id": lesson_id, "revision": base_revision, "objective_id": objective_id,
-                   "source_section_id": ref["section_id"], "source_item_id": source_item_id,
+                   "source_section_id": ref.get("section_id"), "source_item_id": source_item_id,
                    "material": _digest(material), "block": _digest(block), "after_index": after_index,
                    "expires": int(time.time()) + TOKEN_TTL})
     return {"block": block, "base_revision": base_revision, "context_fingerprint": token,

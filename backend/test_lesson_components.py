@@ -163,7 +163,7 @@ def test_missing_context_does_not_call_paid_generator(setup):
         asyncio.run(prepare(db))
     generator.assert_not_awaited()
     result = asyncio.run(service.component_context(2, db))
-    assert result["sources"] == [] and result["reason"]
+    assert result["sources"] == [] and result["reason"] is None
 
 
 def test_model_forged_source_removed_and_objective_assigned_by_server(setup):
@@ -334,3 +334,34 @@ def test_addressed_loader_only_returns_linked_full_item(monkeypatch):
         async def scalar(self, statement): return "ky"
     # Русская книга у кыргызского предмета (старая связь) источником не становится.
     assert asyncio.run(textbook_context.load_component_textbook_context(KyrgyzSubjectDB(), topic, source_item_id=101)) is None
+
+
+def test_prepare_and_insert_without_book_uses_ktp_and_no_forged_reference(setup):
+    db, loader, generator = setup
+    generator.return_value["content"]["source_ref"] = {"item_id": 999}
+    async def run():
+        result = await service.prepare_component(
+            2, component="ShortExplanation", objective_id=decompose_objectives(db.topic.learning_objectives)[0]["id"],
+            base_revision=service.lesson_revision(db.lesson, db.topic), after_index=0,
+            source_section_id=None, source_item_id=None, model=None, db=db,
+        )
+        assert "source_ref" not in result["block"]["content"]
+        assert result["block"]["content"]["material_origin"] == "ktp_with_ai"
+        assert generator.await_args.kwargs["material"] == {}
+        assert result["warnings"]
+        lesson = await insert(db, result)
+        assert lesson.blocks[1]["content"]["material_origin"] == "ktp_with_ai"
+        loader.assert_not_awaited()
+    asyncio.run(run())
+
+
+def test_prepare_empty_confirmed_material_can_be_supplemented(setup):
+    db, loader, generator = setup
+    loader.return_value["sections"][0].update(text="", items=[])
+    result = asyncio.run(service.prepare_component(
+        2, component="ShortExplanation", objective_id=decompose_objectives(db.topic.learning_objectives)[0]["id"],
+        base_revision=service.lesson_revision(db.lesson, db.topic), after_index=0,
+        source_section_id=11, source_item_id=None, model=None, db=db,
+    ))
+    generator.assert_awaited_once()
+    assert result["block"]["content"]["material_origin"] == "textbook_with_ai"

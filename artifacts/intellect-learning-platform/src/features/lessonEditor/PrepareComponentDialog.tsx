@@ -42,19 +42,19 @@ export default function PrepareComponentDialog({ lessonId, afterIndex, component
   });
   const entry = available.find((item) => item.id === selectedComponent) ?? available[0];
   const objective = context.data?.objectives.find((item) => item.id === selectedObjective) ?? context.data?.objectives[0];
-  const source = context.data?.sources.find((item) => String(item.section_id) === selectedSection) ?? context.data?.sources[0];
+  const source = selectedSection === 'ktp' ? undefined : context.data?.sources.find((item) => String(item.section_id) === selectedSection) ?? context.data?.sources[0];
   const sourceItem = source?.items.find((item) => String(item.id) === selectedItem);
-  const canPrepare = Boolean(entry && objective && source && paidConsent && !context.isFetching && !context.isError && !context.data?.reason);
+  const canPrepare = Boolean(entry && objective && paidConsent && !context.isFetching && !context.isError && !context.data?.reason);
 
   const prepare = async () => {
-    if (!canPrepare || !entry || !objective || !source || !context.data || inFlight.current) return;
+    if (!canPrepare || !entry || !objective || !context.data || inFlight.current) return;
     inFlight.current = true;
     setBusy('prepare'); setError(''); setPrepared(null);
     try {
       const result = await prepareLessonComponent(lessonId, {
         component: componentDemos[entry.id].block.component,
         objective_id: objective.id, after_index: afterIndex, base_revision: context.data.revision,
-        source_section_id: source.section_id, source_item_id: sourceItem?.id ?? null,
+        source_section_id: source?.section_id ?? null, source_item_id: sourceItem?.id ?? null,
       });
       requestId.current = crypto.randomUUID();
       setPrepared(result);
@@ -85,7 +85,7 @@ export default function PrepareComponentDialog({ lessonId, afterIndex, component
       <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-4xl overflow-y-auto p-4 sm:p-6" aria-busy={Boolean(busy)}>
         <DialogHeader className="pr-7 text-left">
           <DialogTitle>Добавить блок по теме урока</DialogTitle>
-          <DialogDescription>Выберите цель и материал учебника. Готовый блок сначала появится для просмотра.</DialogDescription>
+          <DialogDescription>Выберите цель КТП. Учебник необязателен: ИИ дополнит недостающий материал объяснениями и заданиями. Сначала проверьте готовый блок.</DialogDescription>
         </DialogHeader>
         {context.isPending && <p role="status" className="flex items-center gap-2 py-8 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Загружаем цели и параграфы…</p>}
         {context.isError && <div role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">{context.error.message}<button type="button" onClick={() => void context.refetch()} className="ml-2 underline">Повторить</button></div>}
@@ -93,7 +93,7 @@ export default function PrepareComponentDialog({ lessonId, afterIndex, component
           <div className="space-y-4">
             {(context.data.reason || !source || !objective) && (
               <div role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
-                {context.data.reason || (!source ? 'Привяжите тему к распознанному параграфу учебника.' : 'Добавьте учебную цель в КТП этой темы.')}
+                {context.data.reason || (!source ? 'Блок будет подготовлен по теме, целям КТП и содержанию урока с помощью ИИ.' : 'Добавьте учебную цель в КТП этой темы.')}
               </div>
             )}
             <fieldset disabled={Boolean(busy)} className="grid min-w-0 gap-4 sm:grid-cols-2">
@@ -104,13 +104,13 @@ export default function PrepareComponentDialog({ lessonId, afterIndex, component
                 </select>
               </label>
               <label className="min-w-0 space-y-1 text-sm font-semibold">Параграф
-                <select aria-label="Параграф" className={fieldClass} value={source ? String(source.section_id) : ''} onChange={(event) => { setSelectedSection(event.target.value); setSelectedItem(''); }}>
-                  {!source && <option value="">Нет подтверждённого параграфа</option>}
+                <select aria-label="Параграф" className={fieldClass} value={source ? String(source.section_id) : 'ktp'} onChange={(event) => { setSelectedSection(event.target.value); setSelectedItem(''); }}>
+                  <option value="ktp">По теме КТП — без учебника</option>
                   {context.data.sources.map((item) => <option key={item.section_id} value={item.section_id}>{item.title}{item.page_from != null ? ` · стр. ${item.page_from}` : ''}</option>)}
                 </select>
               </label>
               <label className="min-w-0 space-y-1 text-sm font-semibold">Материал
-                <select aria-label="Материал учебника" className={fieldClass} value={selectedItem} onChange={(event) => setSelectedItem(event.target.value)}>
+                <select aria-label="Материал учебника" disabled={!source} className={fieldClass} value={selectedItem} onChange={(event) => setSelectedItem(event.target.value)}>
                   <option value="">По содержанию параграфа</option>
                   {source?.items.map((item) => <option key={item.id} value={item.id}>{item.label || `Материал №${item.id}`}{item.page != null ? ` · стр. ${item.page}` : ''}</option>)}
                 </select>
@@ -128,7 +128,7 @@ export default function PrepareComponentDialog({ lessonId, afterIndex, component
             </fieldset>
             <button type="button" disabled={!canPrepare || Boolean(busy)} onClick={() => void prepare()} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground disabled:opacity-50">
               {busy === 'prepare' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              {busy === 'prepare' ? 'Подготавливаем по учебнику…' : 'Подготовить по учебнику'}
+              {busy === 'prepare' ? 'Подготавливаем блок…' : 'Подготовить блок'}
             </button>
           </div>
         )}
