@@ -87,6 +87,16 @@ COLUMNS_TOOL = {
 }
 
 SYSTEM_PROMPT = """
+Документ может быть на русском, кыргызском или английском (включая Cambridge Scheme of Work).
+Английские заголовки: Topic/Lesson title — тема; Learning objectives/Outcomes — цели;
+Skills/Competencies — навыки; Resources/Textbook references — ресурсы; Hours/Periods — часы.
+Цели могут начинаться с Understand, Identify, Explain, Compare, Calculate, Describe или содержать
+код учебной цели. Это полноценные цели, русские слова-маркеры ниже — лишь примеры.
+Название предмета сохраняй на языке документа. instruction_language определяй по явному Language
+of instruction, а при отсутствии — по содержанию. English = en, Russian = ru, Kyrgyz = ky.
+Cambridge Stage не приравнивай автоматически к классу школы: если Grade/Class не указан,
+верни grade=0 и попроси уточнить класс в notes. Minutes не считай часами; отметь необходимость сверки.
+
 Ты определяешь СТРУКТУРУ календарно-тематического плана: какая колонка
 таблицы что означает. Содержимое плана разбирать не надо — его извлечёт код.
 

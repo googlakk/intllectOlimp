@@ -11,28 +11,30 @@ from .extract import Extraction
 
 
 HEADER_ALIASES = {
-    "section": {"раздел", "модуль"},
-    "number": {"№ урока", "номер урока", "№"},
-    "name": {"тема урока", "тема"},
-    "hours": {"часы", "количество часов"},
-    "lesson_type": {"тип урока"},
-    "objectives": {"цели обучения", "ожидаемые результаты"},
-    "skills": {"навыки", "компетенции"},
-    "resources": {"ресурсы", "учебные ресурсы"},
-    "note": {"примечание", "примечания"},
+    "section": {"раздел", "модуль", "section", "unit", "module", "strand", "unit title"},
+    "number": {"№ урока", "номер урока", "№", "lesson number", "lesson no", "lesson no.", "no", "no.", "#"},
+    "name": {"тема урока", "тема", "topic", "lesson topic", "lesson title", "topic title"},
+    "hours": {"часы", "количество часов", "hours", "number of hours", "teaching hours", "periods", "number of lessons"},
+    "lesson_type": {"тип урока", "lesson type", "type of lesson"},
+    "objectives": {"цели обучения", "ожидаемые результаты", "learning objectives", "learning objective", "learning outcomes", "objectives", "expected outcomes"},
+    "objective_codes": {"коды целей", "код цели", "objective code", "objective codes", "learning objective code", "learning objective codes", "curriculum code", "curriculum codes"},
+    "skills": {"навыки", "компетенции", "skills", "key skills", "competencies", "competences"},
+    "resources": {"ресурсы", "учебные ресурсы", "resources", "learning resources", "teaching resources", "textbook", "textbook references"},
+    "note": {"примечание", "примечания", "notes", "note", "comments", "remarks"},
 }
 
 METADATA_ALIASES = {
-    "subject_name": {"предмет"},
-    "grade": {"класс"},
-    "instruction_language": {"язык обучения"},
-    "hours_per_week": {"часов в неделю"},
-    "hours_per_year": {"часов в год"},
+    "subject_name": {"предмет", "subject", "subject name"},
+    "grade": {"класс", "grade", "class", "year group"},
+    "stage": {"stage", "cambridge stage"},
+    "instruction_language": {"язык обучения", "language", "instruction language", "language of instruction", "teaching language"},
+    "hours_per_week": {"часов в неделю", "hours per week", "weekly hours", "lessons per week"},
+    "hours_per_year": {"часов в год", "hours per year", "annual hours", "total hours"},
 }
 
 
 def _norm(value: Any) -> str:
-    return " ".join(str(value or "").strip().casefold().replace("ё", "е").split())
+    return " ".join(str(value or "").strip().casefold().replace("ё", "е").split()).rstrip(":")
 
 
 def _column_map(row: list[str]) -> dict[str, int]:
@@ -82,6 +84,20 @@ def _positive_float(value: str, fallback: float = 0) -> float:
 
 
 def _lesson_type(value: str, name: str) -> str:
+    explicit = {
+        "study": "study", "new learning": "study", "new material": "study",
+        "review": "review", "revision": "review", "consolidation": "review",
+        "assessment": "assessment", "test": "assessment", "quiz": "assessment", "exam": "assessment",
+        "reflection": "reflection", "error analysis": "reflection", "test review": "reflection",
+        "project": "project", "project work": "project",
+    }
+    if _norm(value) in explicit:
+        return explicit[_norm(value)]
+    title = _norm(name)
+    # Whole activity labels only: "blood test" or "projectile motion" are study topics.
+    for label in sorted(explicit, key=len, reverse=True):
+        if title == label or title.startswith(label + ":") or title.startswith(label + " —"):
+            return explicit[label]
     return infer_lesson_type(f"{value} {name}")
 
 
@@ -136,6 +152,9 @@ def map_standard_template(extraction: Extraction) -> dict[str, Any]:
         if ambiguous_lesson_name(topic_name):
             warnings.append(f"Строка {row_number}: проверьте тип занятия «{topic_name}».")
         objective = cell(row, "objectives")
+        objective_codes = cell(row, "objective_codes")
+        if objective_codes:
+            objective = f"{objective_codes}: {objective}" if objective else objective_codes
         section["topics"].append({
             "ktp_number": cell(row, "number"),
             "name": topic_name,
@@ -156,15 +175,24 @@ def map_standard_template(extraction: Extraction) -> dict[str, Any]:
         warnings.append(f"В шапке указано {declared_hours} час., по темам получилось {total_hours} час.")
 
     language = _norm(meta.get("instruction_language"))
+    english_headers = _norm(table[header_index][columns["objectives"]]) in {
+        "learning objectives", "learning objective", "learning outcomes", "objectives", "expected outcomes",
+    }
+    languages = {"ru": "ru", "русский": "ru", "russian": "ru", "ky": "ky", "кыргызский": "ky",
+                 "кыргызча": "ky", "kyrgyz": "ky", "en": "en", "английский": "en", "english": "en", "англисче": "en"}
+    instruction_language = languages.get(language, "en" if english_headers else "ru")
+    if language not in languages:
+        warnings.append("Язык обучения не указан или не распознан; выбран по заголовкам таблицы. Проверьте поле «Язык».")
+    if meta.get("stage"):
+        warnings.append(f"Cambridge Stage: {meta['stage']}. Проверьте класс школы: Stage не переводится в класс автоматически.")
+    if not _positive_int(meta.get("grade", "")):
+        warnings.append("Укажите класс школы в поле «Класс» перед сохранением КТП.")
     return {
         "subject_name": meta.get("subject_name") or "Предмет",
         "grade": _positive_int(meta.get("grade", "")),
         "hours_per_week": _positive_float(meta.get("hours_per_week", ""), 1.0),
         "hours_per_year": total_hours,
-        "instruction_language": (
-            "ky" if language in {"ky", "кыргызский", "кыргызча"}
-            else "en" if language in {"en", "английский", "english", "англисче"} else "ru"
-        ),
+        "instruction_language": instruction_language,
         "column_mapping": {f"колонка {index}": field for field, index in columns.items()},
         "sections": sections,
         "warnings": warnings,

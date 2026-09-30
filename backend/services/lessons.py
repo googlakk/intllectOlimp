@@ -846,7 +846,11 @@ async def generate_lesson_draft(
     db: AsyncSession,
     lesson_generator: LessonGenerator | None = None,
     model_choice: str | None = None,
+    content_language: str | None = None,
 ) -> GeneratedLesson:
+    from languages import LANGUAGES, normalize_language
+    if content_language is not None and content_language not in LANGUAGES:
+        raise LessonServiceError(status_code=422, detail="Выберите русский, кыргызский или английский язык урока.")
     from llm import TASK_LESSON, resolve_route
     from llm.catalog import ModelChoiceError, resolve_lesson_choice
 
@@ -868,6 +872,7 @@ async def generate_lesson_draft(
     if row is None:
         raise LessonServiceError(status_code=404, detail="Тема не найдена")
     topic, _section, subject = row
+    lesson_language = content_language or normalize_language(subject.instruction_language)
     if getattr(topic, "archived_at", None):
         raise LessonServiceError(status_code=409, detail="Сначала восстановите тему из архива")
     resources = topic.resources
@@ -894,7 +899,7 @@ async def generate_lesson_draft(
         grade=subject.grade,
         hours=topic.hours,
         lesson_type=topic.lesson_type,
-        content_language=subject.instruction_language,
+        content_language=lesson_language,
         textbook_grounded=bool(textbook) and any(
             str(section.get("text") or "").strip()
             or any(str(item.get("text") or "").strip() for item in section.get("items") or [])
@@ -911,7 +916,7 @@ async def generate_lesson_draft(
             grade=subject.grade,
             hours=topic.hours,
             lesson_type=topic.lesson_type,
-            content_language=subject.instruction_language,
+            content_language=lesson_language,
             topic_contract=plan["topic_contract"],
             component_plan=plan["component_plan"],
             # Старые генераторы (и тестовые подмены) аргумент не знают.
@@ -957,7 +962,7 @@ async def generate_lesson_draft(
         "textbook": lesson_textbook_metadata(textbook),
         "subject_name": subject.name,
         "subject_grade": subject.grade,
-        "content_language": subject.instruction_language,
+        "content_language": lesson_language,
         "subject_family": profile["family"],
         "subject_family_label": profile["family_label"],
         "lesson_archetype": archetype,

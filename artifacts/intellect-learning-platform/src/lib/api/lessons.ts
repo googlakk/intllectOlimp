@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { readPersistentRequestCache, request, requestCached, requestNullable } from './client';
 import type { Block, GeneratedLesson, StudentLessonManifest } from './types';
+import type { InstructionLanguage } from '@/lib/languages';
 
 const LESSON_READ_CACHE_MS = 5 * 60 * 1000;
 
@@ -32,10 +33,10 @@ const lessonManifestPath = (topicId: number) => `/lessons/${topicId}/manifest`;
 export const getStudentLessonManifest = (topicId: number) =>
   requestCached<StudentLessonManifest>(lessonManifestPath(topicId), LESSON_READ_CACHE_MS);
 
-export const generateLesson = (topicId: number, teacherId: number, model?: string) =>
+export const generateLesson = (topicId: number, teacherId: number, model?: string, contentLanguage?: InstructionLanguage) =>
   request<GeneratedLesson>('/lessons/generate', {
     method: 'POST',
-    body: JSON.stringify({ topic_id: topicId, teacher_id: teacherId, ...(model ? { model } : {}) }),
+    body: JSON.stringify({ topic_id: topicId, teacher_id: teacherId, ...(model ? { model } : {}), ...(contentLanguage ? { content_language: contentLanguage } : {}) }),
   });
 
 export const updateLessonBlocks = (lessonId: number, blocks: Block[]) =>
@@ -92,8 +93,8 @@ export const useStudentLessonManifest = (
 
 export const useGenerateLesson = () =>
   useMutation({
-    mutationFn: (data: { topic_id: number; teacher_id: number; model?: string }) =>
-      generateLesson(data.topic_id, data.teacher_id, data.model),
+    mutationFn: (data: { topic_id: number; teacher_id: number; model?: string; content_language?: InstructionLanguage }) =>
+      generateLesson(data.topic_id, data.teacher_id, data.model, data.content_language),
   });
 
 export const useUpdateLessonBlocks = () =>

@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthContext';
+import type { InstructionLanguage } from '@/lib/languages';
 import {
   useGenerateLesson,
   usePublishLesson,
@@ -30,11 +31,11 @@ export function useLessonEditorWorkflow(topicId: number, lesson: GeneratedLesson
     });
   };
 
-  const generateLesson = (model?: string, onGenerated?: (lesson: GeneratedLesson) => void) => {
+  const generateLesson = (model?: string, onGenerated?: (lesson: GeneratedLesson) => void, contentLanguage?: InstructionLanguage) => {
     if (!user) return;
     if (lesson?.blocks.length && !window.confirm('Заменить материалы черновика? Ваши правки в черновике будут заменены после успешной генерации. Опубликованный урок останется доступен ученикам.')) return;
     generateLessonMutation.mutate(
-      { topic_id: topicId, teacher_id: user.id, model },
+      { topic_id: topicId, teacher_id: user.id, model, content_language: contentLanguage },
       {
         onSuccess: (generated) => {
           invalidateLessonQueries();

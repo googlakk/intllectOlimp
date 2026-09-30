@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from languages import Language
 from routes.http_errors import raise_http_error
 from services.lessons import (
     LessonServiceError,
@@ -32,6 +33,7 @@ class GenerateInput(BaseModel):
     teacher_id: int
     # id варианта из /api/ai/models; пусто — модель по умолчанию.
     model: str | None = Field(default=None, max_length=200)
+    content_language: Language | None = None
 
 
 class BlocksInput(BaseModel):
@@ -86,6 +88,7 @@ async def generate(
             teacher_id=teacher_id,
             db=db,
             model_choice=payload.model,
+            content_language=payload.content_language,
         )
     except LessonServiceError as exc:
         raise_http_error(exc)

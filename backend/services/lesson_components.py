@@ -278,7 +278,7 @@ async def prepare_component(lesson_id: int, *, component: str, objective_id: str
         raise LessonServiceError(status_code=404, detail="Предмет темы не найден.")
     topic_data = {"name": topic.name, "learning_objectives": topic.learning_objectives,
                   "subject": subject.name, "grade": subject.grade,
-                  "language": subject.instruction_language or "ru", "hours": topic.hours,
+                  "language": (lesson.lesson_metadata or {}).get("content_language") or subject.instruction_language or "ru", "hours": topic.hours,
                   "lesson_type": topic.lesson_type,
                   "existing_lesson": _insertion_context(lesson.blocks or [], after_index, component)}
     # Все данные скопированы; чтение завершено, соединение не ждёт LLM.

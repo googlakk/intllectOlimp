@@ -3,7 +3,8 @@ import { Link } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/auth/AuthContext';
 import BlockRenderer from '@/components/blocks/BlockRenderer';
-import { useAiModels, useCreateLessonDraft, useGetLesson, useTopic, useTeacherOutline } from '@/lib/api';
+import { useAiModels, useCreateLessonDraft, useGetLesson, useTopic, useTeacherOutline, useSubjects } from '@/lib/api';
+import { isInstructionLanguage, LANGUAGE_OPTIONS, languageLabel, type InstructionLanguage } from '@/lib/languages';
 import { getLessonQualityState } from '@/features/lessons/quality';
 import { useLessonEditorWorkflow, lessonEditorInvalidationKeys } from './workflow';
 import TopicForm from '@/features/teacherLessons/TopicForm';
@@ -22,6 +23,11 @@ export default function EditorWorkspace({ topicId }: { topicId: number }) {
   const topic = topicQuery.data;
   const lesson = lessonQuery.data;
   const subjectId = topic?.subject_id || Number(sessionStorage.getItem('teacher-subject')) || 0;
+  const subjects = useSubjects();
+  const programLanguage = subjects.data?.find(item => item.id === subjectId)?.instruction_language;
+  const savedLanguage = lesson?.lesson_metadata?.content_language;
+  const [languageChoice, setLanguageChoice] = useState<{ topicId: number; value: InstructionLanguage | '' } | null>(null);
+  const generationLanguage = languageChoice?.topicId === topicId ? languageChoice.value : isInstructionLanguage(savedLanguage) ? savedLanguage : '';
   const outline = useTeacherOutline(subjectId);
   const section = outline.data?.find(item => item.id === topic?.section_id);
   const workflow = useLessonEditorWorkflow(topicId, lesson);
@@ -52,10 +58,17 @@ export default function EditorWorkspace({ topicId }: { topicId: number }) {
       {step === 1 && <>{section && topic ? <TopicForm key={topic.id} section={section} topic={topic} onClose={() => setStep(2)} /> : <div className="rounded-lg border p-5"><h2 className="font-bold">{topic?.name}</h2><p className="mt-2">{topic?.learning_objectives}</p><Link href="/dashboard/lessons" className="underline">Открыть предмет в программе для изменения темы</Link></div>}</>}
       {step === 2 && <section className="rounded-xl border bg-card p-4 md:p-6">
         <h2 className="text-xl font-bold">Подготовьте материалы</h2><p className="mt-2 text-sm text-muted-foreground">ИИ подготовит черновик. Проверьте объяснение, примеры и задания или добавьте их вручную.</p>
+        <label className="mt-5 block max-w-md text-sm font-semibold">Язык урока
+          <select value={generationLanguage} disabled={busy} onChange={event => { const value = event.target.value; if (value === '' || isInstructionLanguage(value)) setLanguageChoice({ topicId, value }); }} className="mt-2 h-12 w-full rounded-lg border bg-background px-3 text-base disabled:opacity-50">
+            <option value="">Язык программы{programLanguage ? ` — ${languageLabel(programLanguage)}` : ''}</option>
+            {LANGUAGE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.value === 'en' ? 'English — Английский' : option.label}</option>)}
+          </select>
+          <span className="mt-2 block text-xs font-normal text-muted-foreground">Для новой генерации этого урока: объяснения, задания, подсказки и ответы. Смена языка сама по себе не переводит готовый черновик.</span>
+        </label>
         <div className="mt-5 max-w-md"><ModelPicker label="Модель для плана урока" group={aiModels.data?.lesson} choice={lessonModel} disabled={busy} loadError={aiModels.isError} /></div>
         {usedModel && <p className="mt-2 text-xs text-muted-foreground">Текущий черновик подготовлен моделью: {usedModel}</p>}
         <LessonIllustrationsPanel lesson={lesson} state={illustrations} imageGroup={aiModels.data?.image} imageChoice={imageModel} disabled={busy && !illustrations.running} />
-        <div className="my-5 flex flex-wrap gap-3"><button type="button" onClick={() => workflow.generateLesson(lessonModel.requestModel, (generated) => { if (illustrations.enabled) void illustrations.start(generated); })} disabled={busy || unsaved} className="rounded-lg bg-primary px-5 py-3 font-bold text-primary-foreground disabled:opacity-50">{workflow.generateLessonMutation.isPending ? 'Готовим черновик…' : blocks.length ? 'Заменить черновик с помощью ИИ' : 'Подготовить черновик'}</button>
+        <div className="my-5 flex flex-wrap gap-3"><button type="button" onClick={() => workflow.generateLesson(lessonModel.requestModel, (generated) => { if (illustrations.enabled) void illustrations.start(generated); }, generationLanguage || undefined)} disabled={busy || unsaved} className="rounded-lg bg-primary px-5 py-3 font-bold text-primary-foreground disabled:opacity-50">{workflow.generateLessonMutation.isPending ? 'Готовим черновик…' : blocks.length ? 'Заменить черновик с помощью ИИ' : 'Подготовить черновик'}</button>
         {!lesson && <button type="button" disabled={createDraft.isPending || busy} onClick={async () => {
           if (!user) return;
           try { await createDraft.mutateAsync({ topic_id: topicId, teacher_id: user.id }); await Promise.all(lessonEditorInvalidationKeys(topicId).map(queryKey => client.invalidateQueries({ queryKey }))); } catch { /* Error is displayed above. */ }
