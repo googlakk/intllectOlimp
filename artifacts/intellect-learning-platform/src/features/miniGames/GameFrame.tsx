@@ -11,7 +11,7 @@ export function GameFrame({ game, theme, name, group = true, children, onReset }
   return <section className={`mini-game mg-${theme}`} aria-labelledby={id}>
     <header className="mg-header">
       <div className="mg-eyebrow"><Sparkles size={14} /> МИНИ-ИГРА <span className="mg-rule" /> {name}</div>
-      <div className="mg-heading"><h3 id={id}>{game.title}</h3><button className="mg-icon" aria-label="Правила мини-игры" aria-expanded={help} onClick={() => setHelp(!help)}><HelpCircle size={20} /></button></div>
+      <div className="mg-heading"><h3 id={id}><RichText text={game.title} inline /></h3><button className="mg-icon" aria-label="Правила мини-игры" aria-expanded={help} onClick={() => setHelp(!help)}><HelpCircle size={20} /></button></div>
       <div className="mg-meta"><span>{group ? <Users size={14} /> : <UserRound size={14} />}{group ? 'Вместе в классе' : 'Каждый сам'}</span><span><Clock3 size={14} />{game.duration_minutes} минут</span></div>
       <RichText text={game.instruction} className="mg-muted mt-3" />
       {help && <div className="mg-help"><RichText text={game.instruction} /><p>{group ? 'Один экран для класса. Учитель ведёт игру, ученики обсуждают ответы. Результаты команд остаются только на этом экране.' : 'Решай самостоятельно. Можно попробовать ещё раз после объяснения.'}</p></div>}

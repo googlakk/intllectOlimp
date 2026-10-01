@@ -39,6 +39,15 @@ describe('LaTeX commands that start with \\n', () => {
     expect(normalizeLessonMarkup('$\\neg p$, $\\nabla f$, $a \\notin B$, $\\nu$')).toBe('$\\neg p$, $\\nabla f$, $a \\notin B$, $\\nu$');
   });
 
+  it('wraps bare relation signs, operators and subscripts from the model', () => {
+    expect(normalizeLessonMarkup('при a \\neq 0, a \\neq -1')).toBe('при a ≠ 0, a ≠ -1');
+    expect(normalizeLessonMarkup('\\times 2')).toBe('× 2');
+    expect(normalizeLessonMarkup('x \\leq 3 и x \\in A')).toBe('x ≤ 3 и x ∈ A');
+    expect(normalizeLessonMarkup('корни x_1 и x_{2}')).toBe('корни $x_1$ и $x_{2}$');
+    expect(normalizeLessonMarkup('Сократите \\dfrac{a}{b}')).toBe('Сократите $\\dfrac{a}{b}$');
+    expect(normalizeLessonMarkup('файл lesson_plan и $x \\neq 0$')).toBe('файл lesson_plan и $x \\neq 0$');
+  });
+
   it('still turns a literal \\n into a new line', async () => {
     const { normalizeLessonMarkup } = await import('./lessonContent');
     expect(normalizeLessonMarkup('Шаг 1.\\nВычислим')).toBe('Шаг 1.\nВычислим');

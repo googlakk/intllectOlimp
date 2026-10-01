@@ -379,6 +379,37 @@ export function mathToLatex(node: MathNode): string {
 }
 
 /** Строка решения для предпросмотра: выражение или уравнение «левая = правая». */
+const UNICODE_TO_LATEX: [RegExp, string][] = [
+  [/−/g, '-'], [/·/g, '\\cdot '], [/×/g, '\\times '], [/÷/g, '\\div '],
+  [/≠/g, '\\neq '], [/≤/g, '\\leq '], [/≥/g, '\\geq '], [/√/g, '\\sqrt '], [/∞/g, '\\infty '],
+];
+
+/**
+ * Строка решения для показа формулой. Сначала разбор «как в тетради» (то же, что проверяет ответ);
+ * не разобралось, но букв текста нет — отдаём как LaTeX («x_1 = 2, x_2 = 3», «y \neq 5»).
+ * null — это текст: его покажет обычная разметка.
+ */
+export function displayMathLine(source: unknown): string | null {
+  let text = String(source ?? '').trim();
+  const delimited = text.match(/^\$+([^$]+)\$+$/) ?? text.match(/^\\\((.+)\\\)$/);
+  if (delimited) text = delimited[1].trim();
+  if (!text) return null;
+  if (text.startsWith('=')) {
+    const rest = displayMathLine(text.slice(1));
+    return rest ? `= ${rest}` : null;
+  }
+  const parts = text.split(/\s+или\s+|\s+or\s+/i);
+  if (parts.length > 1) {
+    const rendered = parts.map((part) => displayMathLine(part));
+    return rendered.every(Boolean) ? rendered.join('\\quad\\text{или}\\quad ') : null;
+  }
+  // Слова (русские или английские, кроме команд вроде \frac и sqrt) — это текст, а не произведение букв.
+  if (/[А-Яа-яЁё]/.test(text) || /[A-Za-z]{4,}/.test(text.replace(/\\[A-Za-z]+|sqrt/g, ''))) return null;
+  const parsed = mathLineToLatex(text);
+  if (parsed) return parsed;
+  return UNICODE_TO_LATEX.reduce((value, [pattern, latex]) => value.replace(pattern, latex), text);
+}
+
 export function mathLineToLatex(source: unknown): string | null {
   // Ответ-корни «x = 0 или x = 3» — каждая часть формулой, «или» словом.
   const parts = String(source ?? '').split(/\s+или\s+|\s*;\s*/i);

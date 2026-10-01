@@ -1,6 +1,11 @@
 const LITERAL_NEWLINE = /\\n(?!(?:eq|e|eg|abla|ot|otin|u|leq|geq|mid|parallel|exists|subseteq|supseteq|sim|cong|ewline)(?![a-zA-Z]))/g;
 const PROTECTED_CONTENT = /(```[\s\S]*?```|`[^`]*`|\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g;
 
+const BARE_SYMBOLS: Record<string, string> = {
+  neq: '≠', ne: '≠', leq: '≤', le: '≤', geq: '≥', ge: '≥', cdot: '·', times: '×', div: '÷', pm: '±', mp: '∓',
+  infty: '∞', approx: '≈', in: '∈', notin: '∉', cup: '∪', cap: '∩', pi: 'π',
+};
+
 function normalizePlainSegment(value: string): string {
   return value
     .replace(/\\\[([\s\S]*?)\\\]/g, (_match, math: string) => `$$${math}$$`)
@@ -8,7 +13,13 @@ function normalizePlainSegment(value: string): string {
     .replace(/(^|[\s:;,])sqrt\s*\(([^()\n]+)\)/gi, (_match, prefix: string, radicand: string) => `${prefix}$\\sqrt{${radicand.trim()}}$`)
     .replace(/(^|[\s:;,])√\s*\(?\s*([+-]?[\d.,]+)\s*\)?/g, (_match, prefix: string, radicand: string) => `${prefix}$\\sqrt{${radicand}}$`)
     .replace(/(^|[\s:;,])(\\sqrt\s*\{[^{}]+\})/g, (_match, prefix: string, math: string) => `${prefix}$${math}$`)
-    .replace(/(^|[\s:;,])(\\frac\s*\{[^{}]+\}\s*\{[^{}]+\})/g, (_match, prefix: string, math: string) => `${prefix}$${math}$`)
+    .replace(/(^|[\s:;,])(\\[dt]?frac\s*\{[^{}]+\}\s*\{[^{}]+\})/g, (_match, prefix: string, math: string) => `${prefix}$${math}$`)
+    // Знаки отношений и действий без $: «a \neq 0», «\times 2» — иначе ученик видит команду.
+    // Обычный символ надёжнее одиночной формулы ($\neq$ отдельно рисуется как «/=»).
+    .replace(/(^|[^$\\\w])\\(neq|ne|leq|le|geq|ge|cdot|times|div|pm|mp|infty|approx|in|notin|cup|cap|pi)(?![A-Za-z])/g,
+      (_match, prefix: string, command: string) => `${prefix}${BARE_SYMBOLS[command]}`)
+    // Индексы: «x_1», «x_{12}» — но не слова с подчёркиванием.
+    .replace(/(^|[\s(,;:])([A-Za-z]_(?:\d+|\{[^{}\s]+\}))(?![\w{])/g, (_match, prefix: string, math: string) => `${prefix}$${math}$`)
     .replace(/(^|[\s:;,])([A-Za-zА-Яа-яЁё\d)]+\s*\^[{]?[+-]?\d+[}]?)/g, (_match, prefix: string, math: string) => `${prefix}$${math}$`);
 }
 

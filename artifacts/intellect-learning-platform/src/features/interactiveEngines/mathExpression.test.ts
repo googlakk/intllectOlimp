@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mathLineToLatex, mathToLatex, parseMath, sameMath } from './mathExpression';
+import { displayMathLine, mathLineToLatex, mathToLatex, parseMath, sameMath } from './mathExpression';
 
 const latex = (text: string) => mathToLatex(parseMath(text)!);
 
@@ -42,5 +42,28 @@ describe('mathToLatex', () => {
     expect(latex('0,5x')).toBe('0,5x');
     expect(mathLineToLatex('3x - 6 = x + 4')).toBe('3x - 6 = x + 4');
     expect(mathLineToLatex('x = 0 или x = 3')).toBe('x = 0\\quad\\text{или}\\quad x = 3');
+  });
+});
+
+describe('displayMathLine', () => {
+  it('shows a chain line that starts with an equals sign as a formula', () => {
+    expect(displayMathLine('= 5x')).toBe('= 5x');
+    expect(displayMathLine('= \\frac{1}{y-5}')).toBe('= \\frac{1}{y - 5}');
+  });
+
+  it('strips $…$ and \\(…\\) around the whole line', () => {
+    expect(displayMathLine('$3(x-2) = x+4$')).toBe('3\\left(x - 2\\right) = x + 4');
+    expect(displayMathLine('\\(x+1\\)')).toBe('x + 1');
+  });
+
+  it('passes notation the parser does not know straight to KaTeX', () => {
+    expect(displayMathLine('x_1 = 2, x_2 = 3')).toBe('x_1 = 2, x_2 = 3');
+    expect(displayMathLine('y ≠ 5')).toBe('y \\neq  5');
+    expect(displayMathLine('x_1 = 2 или x_2 = 3')).toBe('x_1 = 2\\quad\\text{или}\\quad x_2 = 3');
+  });
+
+  it('leaves real text to the text renderer', () => {
+    expect(displayMathLine('Упростите: $\\frac{a}{b}$')).toBeNull();
+    expect(displayMathLine('divide both sides')).toBeNull();
   });
 });

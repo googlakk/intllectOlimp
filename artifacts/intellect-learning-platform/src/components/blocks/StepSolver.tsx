@@ -4,7 +4,7 @@ import { CheckCircle2, Eye, Lightbulb, XCircle } from 'lucide-react';
 import { BlockShell, PrimaryAction } from './shared';
 import { RichText } from './RichText';
 import MathAnswerInput from './MathAnswerInput';
-import { mathLineToLatex } from '@/features/interactiveEngines/mathExpression';
+import { displayMathLine } from '@/features/interactiveEngines/mathExpression';
 import { checkStep, normalizeSolver, type StepVerdict } from '@/features/interactiveEngines/stepSolver';
 import type { BlockAttempt } from '@/features/tutor/tutorBridge';
 
@@ -28,10 +28,12 @@ const REVEAL_AFTER = 2;
 /** Строка решения «как в тетради»; не разобралась — как текст урока. */
 function MathLine({ text }: { text: string }) {
   const html = useMemo(() => {
-    const latex = mathLineToLatex(text);
+    const latex = displayMathLine(text);
     if (!latex) return null;
     try {
-      return katex.renderToString(latex, { throwOnError: false });
+      const rendered = katex.renderToString(latex, { throwOnError: false });
+      // Нераспознанная команда — KaTeX рисует её красным; лучше показать текст.
+      return rendered.includes('katex-error') ? null : rendered;
     } catch {
       return null;
     }
