@@ -691,6 +691,78 @@
       },
       "expected": "correct",
       "note": "тысячи с пробелом и смешанное число"
+    },
+    {
+      "answer": "еще",
+      "spec": {
+        "correct": "ещё",
+        "mode": "choice"
+      },
+      "expected": "correct",
+      "note": "ё в слове можно не писать"
+    },
+    {
+      "answer": "е",
+      "spec": {
+        "correct": "ё",
+        "mode": "choice"
+      },
+      "expected": "incorrect",
+      "note": "одна буква: ё и е различаются"
+    },
+    {
+      "answer": "Кот, собака.",
+      "spec": {
+        "correct": "кот, собака",
+        "mode": "choice"
+      },
+      "expected": "correct",
+      "note": "точка в конце предложения"
+    },
+    {
+      "answer": "кот собака",
+      "spec": {
+        "correct": "кот, собака",
+        "mode": "choice"
+      },
+      "expected": "incorrect",
+      "note": "пропущенная запятая — ошибка"
+    },
+    {
+      "answer": "кот , собака",
+      "spec": {
+        "correct": "кот, собака",
+        "mode": "choice"
+      },
+      "expected": "correct",
+      "note": "пробел перед запятой"
+    },
+    {
+      "answer": "\"Да\"",
+      "spec": {
+        "correct": "«Да»",
+        "mode": "choice"
+      },
+      "expected": "correct",
+      "note": "вид кавычек"
+    },
+    {
+      "answer": "по русски",
+      "spec": {
+        "correct": "по-русски",
+        "mode": "choice"
+      },
+      "expected": "incorrect",
+      "note": "дефис — часть написания"
+    },
+    {
+      "answer": "улыбается",
+      "spec": {
+        "correct": "улыбаеться",
+        "mode": "choice"
+      },
+      "expected": "incorrect",
+      "note": "-тся и -ться различаются"
     }
   ]
 }

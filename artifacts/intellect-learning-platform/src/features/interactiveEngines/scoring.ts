@@ -147,8 +147,19 @@ function allowedError(expected: Quantity, tolerance: AnswerSpec['tolerance']): n
 }
 
 function sameText(left: unknown, right: unknown): boolean {
-  const clean = (value: unknown) => asText(value).trim().toLocaleLowerCase().replace(/\s+/g, ' ');
-  return clean(left) !== '' && clean(left) === clean(right);
+  return cleanAnswerText(left) !== '' && cleanAnswerText(left) === cleanAnswerText(right);
+}
+
+/**
+ * Текст ответа для сверки. Как у сервера (services/assessment.py): регистр и лишние пробелы не важны,
+ * пробел перед знаком препинания и точка в конце — тоже, кавычки «» = "". «ё» = «е» в словах,
+ * но не в ответе из одной буквы («вставьте ё или о»).
+ */
+export function cleanAnswerText(value: unknown): string {
+  let text = asText(value).trim().toLocaleLowerCase().replace(/\s+/g, ' ')
+    .replace(/\s+([,.;:!?])/g, '$1').replace(/[«»„“”"]/g, '"').replace(/\.$/, '');
+  if (text.length > 1) text = text.replace(/ё/g, 'е');
+  return text;
 }
 
 export function checkAnswer(answer: string, spec: AnswerSpec): AnswerCheck {

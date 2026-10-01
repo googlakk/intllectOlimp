@@ -93,10 +93,18 @@ def allowed_error(value: Decimal, decimals: int, tolerance: Any = None) -> Decim
     return _allowed_error(value, decimals, tolerance)
 
 
+def clean_answer_text(value: Any) -> str:
+    """Как cleanAnswerText в scoring.ts: регистр, пробелы, пробел перед знаком, точка в конце и вид кавычек
+    не важны; «ё» = «е» в словах, но не в ответе из одной буквы («вставьте ё или о»)."""
+    text = " ".join(_as_text(value).strip().casefold().split())
+    text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+    text = re.sub(r"[«»„“”\"]", '"', text)
+    text = re.sub(r"\.$", "", text)
+    return text.replace("ё", "е") if len(text) > 1 else text
+
+
 def _same_text(left: Any, right: Any) -> bool:
-    def clean(value: Any) -> str:
-        return " ".join(_as_text(value).strip().casefold().split())
-    return bool(clean(left)) and clean(left) == clean(right)
+    return bool(clean_answer_text(left)) and clean_answer_text(left) == clean_answer_text(right)
 
 
 def check_answer(

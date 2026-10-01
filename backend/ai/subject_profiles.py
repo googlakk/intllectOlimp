@@ -183,7 +183,114 @@ MATH: dict[str, Any] = {
     ),
 }
 
-SUBJECT_PROFILES: tuple[dict[str, Any], ...] = (HISTORY, MATH)
+# Русский язык — орфографическое и пунктуационное действие: заметить орфограмму по опознавательному
+# признаку, определить её вид, применить правило по алгоритму и объяснить выбор (Разумовская 1996;
+# Львов 2004 — «орфографическая зоркость»); разбор ошибок и сортировка по признаку — как в математике.
+RUSSIAN: dict[str, Any] = {
+    "id": "russian",
+    "label": "Русский язык",
+    # «Русский язык», «Орус тили», «Russian language» — но не «Русская литература».
+    "keywords": (re.compile(r"(?<![а-яё])русск\w*\s+язык"), re.compile(r"(?<![а-яё])орус\s+тил"),
+                 re.compile(r"(?<![a-z])russian\s+language")),
+    "core": (
+        "грамотно писать и осознанно выбирать написание: замечать орфограмму или пунктограмму, применять правило "
+        "и объяснять выбор; понимать строй языка — части речи, состав слова, члены предложения"
+    ),
+    "route": (
+        "наблюдение над словами или предложениями из учебника → вывод правила и опознавательного признака "
+        "→ алгоритм применения по шагам → разобранный пример с объяснением выбора → распределить слова по правилу "
+        "→ найти ошибку → самостоятельно вставить букву или знак и объяснить → применить в связном тексте"
+    ),
+    "show_path": (
+        "найди место, где можно ошибиться (орфограмму или пунктограмму) → определи её вид по признаку → вспомни правило "
+        "и его условие («если …, то …») → выполни шаги (поставь ударение, подбери проверочное слово, определи часть речи "
+        "или грамматическую основу) → напиши → объясни: «пишу …, потому что …»"
+    ),
+    "rules": (
+        "Термины, правила, исключения и языковые примеры — как в учебнике; формулировку правила бери из учебника, если она есть в материале.",
+        "Правило давай через условие выбора («если …, то пишем …») и опознавательный признак орфограммы.",
+        "Покажи правило как алгоритм из 2–4 шагов; каждый шаг — действие ученика (поставь ударение, подбери проверочное слово, задай вопрос).",
+        "Слова и предложения — употребительные, уровня класса; для пунктуации — естественные предложения, литературные цитаты только из учебника.",
+        "Исключения называй отдельно; не подмешивай их в задания на сортировку, если исключения не цель урока.",
+        "В задании «вставь букву или знак» ученик объясняет выбор: причина — в вариантах ответа или в объяснении задания.",
+        "Пропуск в вопросе отмечай «_» («пол_жить»); correct_answer — целое слово или предложение в той же записи, "
+        "с теми же дефисами, пробелами и знаками препинания; если правильных написаний несколько — перечисли все.",
+        "Ответ словом или предложением — только в GuidedPractice с input_type \"text\". IndependentProblem и вопросы MasteryCheck — "
+        "только с вариантами ответа (multiple_choice); type \"numeric\" и \"expression\" для слов не используй.",
+        "Части речи, состав слова и члены предложения — через SortAndClassify или поиск в тексте (TextEvidencePicker); "
+        "в разобранном примере покажи разбор с пометами словами («корень — ход, суффикс — -ок-»).",
+        "Хотя бы одно задание «найди ошибку» (MisconceptionDebugger) на типичную ошибку темы.",
+        "Не используй LaTeX и математическую запись.",
+    ),
+    "misconceptions": (
+        "безударную гласную проверяют словом, где она тоже безударна",
+        "-тся и -ться выбирают на слух, не задавая вопрос «что делает? / что делать?»",
+        "НЕ с глаголами пишут слитно",
+        "ставят Ь после шипящих у существительных мужского рода (ключь, врачь)",
+        "запятую ставят перед каждым «и»",
+        "приставки ПРЕ- и ПРИ- выбирают по звучанию, а не по значению",
+        "Н и НН выбирают на слух, а не по части речи и суффиксу",
+        "подлежащим считают любое существительное в именительном падеже",
+        "часть речи определяют только по вопросу, без значения и признаков",
+        "словарные (непроверяемые) гласные пытаются проверить ударением",
+    ),
+    "plan": {
+        "explain": ["Presentation", "ShortExplanation"],
+        "model": ["WorkedExample"],
+        # Фирменный шаг: распределить слова по правилу — распознавание орфограммы до письма.
+        "first_practice": ["SortAndClassify"],
+        "signature_practice": ["MisconceptionDebugger"],
+        "practice": ["GuidedPractice", "TextEvidencePicker"],
+        "apply": ["GuidedPractice"],
+    },
+    "actions": {
+        "model": "Разобрать слова или предложения по алгоритму: найти орфограмму или признак, применить правило, объяснить выбор",
+        "practice": "Распределить слова по правилу и найти ошибку в применении правила",
+        "apply": "Самостоятельно вставить букву или знак в новые слова или текст и объяснить выбор",
+    },
+    # Грамматика (части речи, члены предложения) — найти в тексте; правописание — написать самому.
+    "single_objective_apply": (
+        (re.compile(r"член\w* предложени|подлежащ|сказуем|грамматическ\w* основ|част\w* речи|разбор", re.IGNORECASE),
+         ["TextEvidencePicker"]),
+        (None, ["GuidedPractice"]),
+    ),
+    "topic_apply": (
+        (re.compile(r"член\w* предложени|подлежащ|сказуем|грамматическ\w* основ|част\w* речи|разбор", re.IGNORECASE),
+         ["TextEvidencePicker"]),
+    ),
+    "check_lesson_types": ("study", None, ""),
+    "textbook_sourced": frozenset({"WorkedExample", "GuidedPractice", "IndependentProblem"}),
+    # Слово нельзя проверить как число или выражение: «х» читается как икс, буквы — как множители.
+    "text_answers_only": True,
+    "checks": (
+        {
+            "code": "russian_without_worked_example",
+            "components": {"WorkedExample"},
+            "message": "В уроке русского языка нет разбора слов или предложений по правилу",
+        },
+        {
+            "code": "russian_without_recognition",
+            "components": {"SortAndClassify", "TextEvidencePicker"},
+            "message": "В уроке русского языка нет задания на распознавание: распределить слова по правилу или найти в тексте",
+        },
+        {
+            "code": "russian_without_error_analysis",
+            "components": None,
+            "satisfied_by": {"MisconceptionDebugger"},
+            "min_objectives": 2,
+            "text": re.compile(r"найди(те)? ошибк|где ошибк|исправь(те)? ошибк", re.IGNORECASE),
+            "message": "В уроке русского языка нет задания на разбор типичной ошибки",
+        },
+        {
+            "code": "russian_without_reasoning",
+            "components": None,
+            "text": re.compile(r"объясни|почему|потому что|обоснуй|докажи", re.IGNORECASE),
+            "message": "В уроке русского языка ученик нигде не объясняет выбор написания",
+        },
+    ),
+}
+
+SUBJECT_PROFILES: tuple[dict[str, Any], ...] = (HISTORY, MATH, RUSSIAN)
 
 
 def numeric_model_candidates(objective_text: str) -> list[str]:
@@ -259,7 +366,24 @@ def subject_warnings(blocks: list[dict[str, Any]], subject_name: str | None, les
         )
         if not found:
             warnings.append({"code": check["code"], "message": check["message"]})
+    if profile.get("text_answers_only"):
+        wrong = [index for index, block in enumerate(blocks) if isinstance(block, dict) and _number_or_formula_answer(block)]
+        if wrong:
+            warnings.append({"code": "word_answer_as_formula", "blocks": wrong,
+                             "message": "Ответ словом проверяется как число или формула — дайте варианты ответа или поле для текста"})
     return warnings
+
+
+def _number_or_formula_answer(block: dict[str, Any]) -> bool:
+    content = block.get("content") if isinstance(block.get("content"), dict) else {}
+    if block.get("component") == "IndependentProblem":
+        return content.get("type") in ("numeric", "expression")
+    if block.get("component") == "GuidedPractice":
+        return content.get("input_type") in ("numeric", "expression")
+    if block.get("component") == "MasteryCheck":
+        return any(isinstance(question, dict) and question.get("type") in ("numeric", "expression")
+                   for question in content.get("questions") or [])
+    return False
 
 
 def _has_textbook_ref(block: dict[str, Any]) -> bool:

@@ -365,3 +365,73 @@ class FunctionExplorerTests(unittest.TestCase):
         steps = plan["component_plan"]
         self.assertEqual(next(step for step in steps if step["role"] == "apply")["allowed_components"], ["FunctionExplorer"])
         self.assertLessEqual(len(steps), plan["topic_contract"]["block_budget"]["max"])
+
+
+def russian_plan(objectives="Различать -тся и -ться в глаголах. Правильно писать -тся и -ться."):
+    return build_topic_contract(topic_name="Правописание -тся и -ться в глаголах", subject_name="Русский язык",
+                                learning_objectives=objectives, skills=None, resources=None, grade=5, hours=1, lesson_type="study")
+
+
+class RussianProfileTests(unittest.TestCase):
+    def test_russian_language_is_recognised_but_not_literature(self):
+        for name in ("Русский язык", "Русский язык и литература", "Орус тили", "Russian Language"):
+            self.assertEqual(subject_profile(name)["id"], "russian", name)
+        for name in ("Русская литература", "Кыргыз тили", "Литература"):
+            self.assertIsNone(subject_profile(name), name)
+
+    def test_plan_sorts_by_rule_then_finds_the_error_then_writes(self):
+        plan = russian_plan()
+        self.assertEqual(plan["topic_contract"]["subject_profile"], "russian")
+        steps = plan["component_plan"]
+        practices = [step["allowed_components"] for step in steps if step["role"] == "practice"]
+        self.assertEqual(practices[:2], [["SortAndClassify"], ["MisconceptionDebugger"]])
+        apply = next(step for step in steps if step["role"] == "apply")
+        self.assertEqual(apply["allowed_components"], ["GuidedPractice"])
+        for step in steps:
+            if step["evidence_stage"]:
+                self.assertTrue(set(step["allowed_components"]) <= STAGE_COMPONENTS[step["evidence_stage"]], step)
+        self.assertLessEqual(len(steps), plan["topic_contract"]["block_budget"]["max"])
+
+    def test_grammar_topic_applies_by_finding_in_text(self):
+        plan = russian_plan("Находить грамматическую основу предложения")
+        apply = next(step for step in plan["component_plan"] if step["role"] == "apply")
+        self.assertEqual(apply["allowed_components"], ["TextEvidencePicker"])
+
+    def test_russian_warnings(self):
+        blocks = [{"component": "Presentation", "content": {"slides": [], "objective_ids": ["a", "b"]}}]
+        self.assertEqual([w["code"] for w in subject_warnings(blocks, "Русский язык")],
+                         ["russian_without_worked_example", "russian_without_recognition",
+                          "russian_without_error_analysis", "russian_without_reasoning"])
+        complete = [
+            {"component": "WorkedExample", "content": {"objective_ids": ["a"], "steps": [{"description": "Задаём вопрос «что делает?»"}]}},
+            {"component": "SortAndClassify", "content": {"instruction": "Распределите глаголы"}},
+            {"component": "MisconceptionDebugger", "content": {"objective_ids": ["b"]}},
+            {"component": "GuidedPractice", "content": {"question": "Вставьте букву и объясните выбор: улыбает_ся", "input_type": "text"}},
+        ]
+        self.assertEqual(subject_warnings(complete, "Русский язык"), [])
+
+    def test_word_answers_must_not_be_checked_as_formulas(self):
+        blocks = [
+            {"component": "IndependentProblem", "content": {"type": "expression", "correct_answer": "хорошо"}},
+            {"component": "GuidedPractice", "content": {"input_type": "text", "correct_answer": "хорошо"}},
+            {"component": "MasteryCheck", "content": {"questions": [{"type": "numeric", "correct_answer": "5"}]}},
+        ]
+        flagged = next(w for w in subject_warnings(blocks, "Русский язык") if w["code"] == "word_answer_as_formula")
+        self.assertEqual(flagged["blocks"], [0, 2])
+        self.assertFalse(any(w["code"] == "word_answer_as_formula" for w in subject_warnings(blocks, "Алгебра")))
+
+    def test_russian_rules_reach_the_generator_prompt(self):
+        from ai.generator import generate_lesson
+        from llm import ToolResult
+        from llm.base import STOP_TOOL
+
+        prompts = []
+
+        async def fake_call_tool(task, **kwargs):
+            prompts.append(kwargs["user"])
+            return ToolResult(data={"blocks": [{"component": "ShortExplanation", "content": {"objective_ids": ["obj-1"]}}]}, stop_reason=STOP_TOOL)
+
+        with patch("llm.call_tool", fake_call_tool):
+            asyncio.run(generate_lesson("Правописание -тся и -ться", "Русский язык", "Различать -тся и -ться", None, None, grade=5))
+        self.assertIn("Профиль предмета «Русский язык»", prompts[0])
+        self.assertIn("пишу …, потому что …", prompts[0])
