@@ -494,6 +494,20 @@ class ObjectiveQualityTests(unittest.TestCase):
         self.assertFalse(report["quality_report"]["publishable"])
         self.assertTrue(any(item["code"] == "answer_not_in_options" for item in report["quality_report"]["errors"]))
 
+    def test_look_alike_options_block_publishing(self):
+        from objectives import validate_block_answers
+        latin = {"component": "IndependentProblem", "content": {
+            "type": "multiple_choice", "options": ["разливатся", "разливаться", "разливается", "разливатьcя"],
+            "correct_answer": "разливаться"}}
+        repeated = {"component": "MasteryCheck", "content": {"questions": [{
+            "objective_ids": ["a"], "type": "multiple_choice", "correct_answer": "учится — учиться",
+            "options": ["учится — учиться", "учится — учится", "учиться — учиться", "Учится — учится"]}]}}
+        distinct = {"component": "IndependentProblem", "content": {
+            "type": "multiple_choice", "options": ["учится", "учиться", "учатся", "учаться"], "correct_answer": "учится"}}
+        self.assertIn("duplicate_options", [item["code"] for item in validate_block_answers(latin, 0)])
+        self.assertIn("duplicate_options", [item["code"] for item in validate_block_answers(repeated, 0)])
+        self.assertEqual(validate_block_answers(distinct, 0), [])
+
     def test_latex_arithmetic_mismatch_is_critical(self):
         objective = decompose_objectives("Вычислять выражения")[0]
         report = quality_report(

@@ -432,6 +432,15 @@ def _safe_arithmetic(value: str) -> int | float | None:
         return None
 
 
+# Латинские буквы, неотличимые от русских: «разливатьcя» с латинской c выглядит как верный ответ.
+_LATIN_LOOKALIKES = str.maketrans("aceopxyACEHKMOPTXB", "асеорхуАСЕНКМОРТХВ")
+
+
+def _look_alike_options(options: list[Any]) -> bool:
+    seen = [" ".join(str(option).translate(_LATIN_LOOKALIKES).casefold().split()) for option in options]
+    return len(set(seen)) != len(seen)
+
+
 def validate_block_answers(block: dict[str, Any], index: int) -> list[dict[str, Any]]:
     errors: list[dict[str, Any]] = []
     content = block.get("content", {})
@@ -445,6 +454,8 @@ def validate_block_answers(block: dict[str, Any], index: int) -> list[dict[str, 
                 errors.append({"code": "invalid_options", "block": index, "message": "Нужно ровно 4 варианта ответа"})
             elif correct not in options:
                 errors.append({"code": "answer_not_in_options", "block": index, "message": "Правильный ответ отсутствует среди вариантов"})
+            elif _look_alike_options(options):
+                errors.append({"code": "duplicate_options", "block": index, "message": "Среди вариантов есть одинаковые на вид"})
     if block.get("component") == "MasteryCheck":
         questions = content.get("questions")
         if not isinstance(questions, list) or not questions:
@@ -463,6 +474,8 @@ def validate_block_answers(block: dict[str, Any], index: int) -> list[dict[str, 
             correct = question.get("correct_answer") if isinstance(question, dict) else None
             if question.get("type") == "multiple_choice" and (not isinstance(options, list) or len(options) != 4 or correct not in options):
                 errors.append({"code": "invalid_mastery_options", "block": index, "question": question_index, "message": "Некорректные варианты или ответ"})
+            elif question.get("type") == "multiple_choice" and _look_alike_options(options):
+                errors.append({"code": "duplicate_options", "block": index, "question": question_index, "message": "Среди вариантов есть одинаковые на вид"})
     question = content.get("question")
     correct = content.get("correct_answer")
     if isinstance(question, str) and isinstance(correct, str) and block.get("component") in {"IndependentProblem", "GuidedPractice"}:
