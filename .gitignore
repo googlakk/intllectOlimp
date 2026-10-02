@@ -62,3 +62,6 @@ output/
 outputs/
 undefined/
 .playwright-cli/
+
+# Журнал массовой генерации уроков (локальный)
+backend/bulk_generation_log.jsonl
