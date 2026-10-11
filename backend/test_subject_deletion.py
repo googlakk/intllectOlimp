@@ -12,7 +12,7 @@ def session(*, history=False, active_job=False, optional_tables=()):
     db = AsyncMock()
     db.scalar.side_effect = [Subject(id=4), history, active_job]
     results = []
-    for values in ([11], [21], [31], [41], optional_tables):
+    for values in ([11], [21], [31], [41], optional_tables, []):
         result = unittest.mock.Mock()
         result.all.return_value = values
         results.append(result)

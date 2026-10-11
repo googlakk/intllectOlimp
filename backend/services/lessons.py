@@ -2,6 +2,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from time import monotonic
 from typing import Any, Awaitable, Callable
+from types import SimpleNamespace
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,7 +31,7 @@ from models import (
     TopicSkill,
 )
 from objectives import quality_report
-from services.catalog import clear_subject_outline_cache_for_topic
+from services.catalog import clear_subject_outline_cache_for_topic, serialize_model
 from services.progress import serialize_progress
 
 LessonGenerator = Callable[..., Awaitable[list[dict[str, Any]]]]
@@ -824,6 +825,10 @@ async def unpublish_lesson(lesson_id: int, db: AsyncSession) -> GeneratedLesson:
 
 async def delete_lesson_record(lesson_id: int, db: AsyncSession) -> dict[str, str]:
     lesson = await get_lesson_or_error(lesson_id, db)
+    from services.lesson_generation_jobs import marker_expired, marker_for
+    marker = marker_for(lesson)
+    if marker.get("status") == "running" and not marker_expired(marker):
+        raise LessonServiceError(409, "Для темы создаётся урок. Дождитесь завершения.")
     if lesson.status == "published" or lesson.published_version_id:
         raise LessonServiceError(status_code=409, detail="Опубликованное занятие нельзя удалить вместе с историей. Используйте «Убрать из программы».")
     has_history = await db.scalar(select(or_(
@@ -847,6 +852,7 @@ async def generate_lesson_draft(
     lesson_generator: LessonGenerator | None = None,
     model_choice: str | None = None,
     content_language: str | None = None,
+    generation_job_id: str | None = None,
 ) -> GeneratedLesson:
     from languages import LANGUAGES, normalize_language
     if content_language is not None and content_language not in LANGUAGES:
@@ -875,6 +881,13 @@ async def generate_lesson_draft(
     lesson_language = content_language or normalize_language(subject.instruction_language)
     if getattr(topic, "archived_at", None):
         raise LessonServiceError(status_code=409, detail="Сначала восстановите тему из архива")
+    current = await db.scalar(select(GeneratedLesson).where(GeneratedLesson.topic_id == topic_id))
+    current_marker = (current.lesson_metadata or {}).get("generation_job", {}) if current else {}
+    if generation_job_id is None:
+        if current_marker.get("status") == "running":
+            raise LessonServiceError(409, "Для темы уже создаётся урок. Дождитесь завершения.")
+    elif current_marker.get("job_id") != generation_job_id or current_marker.get("status") != "running":
+        raise LessonServiceError(409, "Создание урока уже остановлено. Готовый урок сохранён.")
     resources = topic.resources
     covered_ids = getattr(topic, "covered_topic_ids", None) or []
     if covered_ids:
@@ -906,6 +919,11 @@ async def generate_lesson_draft(
             for section in textbook.get("sections") or []
         ),
     )
+    # Snapshot context before rollback expires ORM objects. The provider call
+    # must not keep a pool connection or an idle transaction for fifteen minutes.
+    topic = SimpleNamespace(**serialize_model(topic))
+    subject = SimpleNamespace(**serialize_model(subject))
+    await db.rollback()
     try:
         generated = await generator(
             topic_name=topic.name,
@@ -937,7 +955,29 @@ async def generate_lesson_draft(
         lesson_document = None
     intro = getattr(generated, "intro", None)
 
-    lesson = await db.scalar(select(GeneratedLesson).where(GeneratedLesson.topic_id == topic.id))
+    # Serialize completion with job reservation and re-read metadata after the
+    # provider call. A timed-out/superseded worker must never overwrite a lesson.
+    fresh_topic = await db.scalar(select(Topic).where(Topic.id == topic.id)
+                                  .execution_options(populate_existing=True).with_for_update())
+    if fresh_topic is None:
+        raise LessonServiceError(404, "Тема не найдена")
+    if fresh_topic.archived_at:
+        raise LessonServiceError(409, "Тема перенесена в архив во время генерации. Готовый урок сохранён.")
+    lesson = await db.scalar(select(GeneratedLesson).where(GeneratedLesson.topic_id == topic.id)
+                             .execution_options(populate_existing=True).with_for_update())
+    generation_marker = dict((lesson.lesson_metadata or {}).get("generation_job") or {}) if lesson else {}
+    if generation_job_id is not None:
+        from services.lesson_generation_jobs import marker_expired
+        if generation_marker.get("job_id") != generation_job_id or generation_marker.get("status") != "running":
+            raise LessonServiceError(409, "Создание урока уже остановлено. Готовый урок сохранён.")
+        if marker_expired(generation_marker):
+            raise LessonServiceError(409, "Время создания урока истекло. Повторите запуск вручную.")
+        if generation_marker.get("base_version_id") != lesson.active_version_id:
+            raise LessonServiceError(409, "Урок изменён во время генерации. Изменения сохранены; повторите создание вручную.")
+        if generation_marker.get("base_published_version_id") != lesson.published_version_id:
+            raise LessonServiceError(409, "Публикация изменена во время генерации. Повторите создание вручную.")
+    elif generation_marker.get("status") == "running":
+        raise LessonServiceError(409, "Для темы уже создаётся урок. Дождитесь завершения.")
     if lesson is None:
         lesson = GeneratedLesson(topic_id=topic.id)
         db.add(lesson)
@@ -985,6 +1025,10 @@ async def generate_lesson_draft(
     }
     if isinstance(intro, dict) and intro:
         lesson.lesson_metadata["intro"] = intro
+    if generation_job_id is not None:
+        lesson.lesson_metadata["generation_job"] = {
+            **generation_marker, "status": "succeeded", "finished_at": datetime.now(timezone.utc).isoformat(),
+        }
     lesson_document = normalize_lesson_document(
         lesson_document,
         lesson.blocks,

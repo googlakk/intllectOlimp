@@ -72,6 +72,13 @@ async def delete_subject(subject_id: int, db: AsyncSession) -> dict[str, bool]:
             GenerationJob.status.in_(("queued", "submitted", "processing", "running")),
         ).exists())):
             raise SubjectDeletionError(409, "Для программы создаются материалы. Дождитесь завершения и повторите удаление.")
+        running_lessons = (await db.scalars(select(GeneratedLesson).where(
+            GeneratedLesson.id.in_(lesson_ids),
+            GeneratedLesson.lesson_metadata.op("->")("generation_job").op("->>")("status") == "running",
+        ))).all()
+        from services.lesson_generation_jobs import marker_expired, marker_for
+        if any(not marker_expired(marker_for(row)) for row in running_lessons):
+            raise SubjectDeletionError(409, "Для программы создаётся урок. Дождитесь завершения и повторите удаление.")
 
         await db.execute(update(Teacher).where(Teacher.subject_id == subject_id).values(subject_id=None))
         if "textbooks" in optional_tables:

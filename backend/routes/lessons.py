@@ -1,4 +1,6 @@
 from typing import Any
+from uuid import UUID
+import asyncio
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -24,6 +26,9 @@ from services.lessons import (
 from auth_dependencies import require_roles
 from services.auth import AuthPrincipal, AuthServiceError
 from services.educator_access import require_lesson_management, require_topic_management
+from services.lesson_generation_jobs import generation_job_status, start_generation_job
+from services.lesson_generation_jobs import fail_generation_job
+from services.lesson_generation_jobs import GENERATION_TIMEOUT_SECONDS
 
 router = APIRouter(prefix="/api/lessons", tags=["lessons"])
 
@@ -34,6 +39,7 @@ class GenerateInput(BaseModel):
     # id варианта из /api/ai/models; пусто — модель по умолчанию.
     model: str | None = Field(default=None, max_length=200)
     content_language: Language | None = None
+    request_id: UUID | None = None
 
 
 class BlocksInput(BaseModel):
@@ -72,6 +78,38 @@ async def create_draft(
     return serialize_lesson(lesson)
 
 
+@router.post("/generate/start")
+async def start_generation(
+    payload: GenerateInput,
+    user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
+    db: AsyncSession = Depends(get_db),
+):
+    teacher_id = payload.teacher_id if user.role == "admin" else user.teacher_id
+    if teacher_id is None:
+        raise AuthServiceError(403, "Профиль учителя не связан с аккаунтом.")
+    await require_topic_management(user, payload.topic_id, db)
+    try:
+        return await start_generation_job(payload.topic_id, teacher_id, db,
+                                          model_choice=payload.model, content_language=payload.content_language,
+                                          request_id=str(payload.request_id) if payload.request_id else None)
+    except LessonServiceError as exc:
+        raise_http_error(exc)
+
+
+@router.get("/generate/status/{job_id}")
+async def generation_status(
+    job_id: UUID,
+    topic_id: int = Query(ge=1),
+    user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
+    db: AsyncSession = Depends(get_db),
+):
+    await require_topic_management(user, topic_id, db)
+    try:
+        return await generation_job_status(str(job_id), topic_id, db)
+    except LessonServiceError as exc:
+        raise_http_error(exc)
+
+
 @router.post("/generate")
 async def generate(
     payload: GenerateInput,
@@ -82,16 +120,30 @@ async def generate(
     if teacher_id is None:
         raise AuthServiceError(status_code=403, detail="Профиль учителя не связан с аккаунтом.")
     await require_topic_management(user, payload.topic_id, db)
+    job = None
     try:
-        lesson = await generate_lesson_draft(
+        job = await start_generation_job(payload.topic_id, teacher_id, db,
+                                          model_choice=payload.model, content_language=payload.content_language,
+                                          dispatch=False)
+        lesson = await asyncio.wait_for(generate_lesson_draft(
             topic_id=payload.topic_id,
             teacher_id=teacher_id,
             db=db,
             model_choice=payload.model,
             content_language=payload.content_language,
-        )
-    except LessonServiceError as exc:
-        raise_http_error(exc)
+            generation_job_id=job["job_id"],
+        ), timeout=GENERATION_TIMEOUT_SECONDS)
+    except (LessonServiceError, TimeoutError) as exc:
+        await db.rollback()
+        if job is not None:
+            await fail_generation_job(job["job_id"], payload.topic_id, "Не удалось создать урок. Повторите запуск вручную.")
+        error = LessonServiceError(504, "Создание урока заняло слишком много времени. Повторите запуск вручную.") if isinstance(exc, TimeoutError) else exc
+        raise_http_error(error)
+    except BaseException:
+        await db.rollback()
+        if job is not None:
+            await fail_generation_job(job["job_id"], payload.topic_id, "Создание урока прервано. Повторите запуск вручную.")
+        raise
     return serialize_lesson(lesson)
 
 

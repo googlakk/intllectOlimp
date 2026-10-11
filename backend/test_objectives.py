@@ -128,7 +128,12 @@ class FakeGenerateSession:
         return _FakeExecuteResult((self.topic, self.section, self.subject))
 
     async def scalar(self, _statement):
+        if _statement.column_descriptions[0].get("entity") is Topic:
+            return self.topic
         return self.lesson
+
+    async def rollback(self):
+        return None
 
     def add(self, row):
         self.added.append(row)

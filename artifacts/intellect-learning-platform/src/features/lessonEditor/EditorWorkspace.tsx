@@ -73,6 +73,7 @@ export default function EditorWorkspace({ topicId }: { topicId: number }) {
           if (!user) return;
           try { await createDraft.mutateAsync({ topic_id: topicId, teacher_id: user.id }); await Promise.all(lessonEditorInvalidationKeys(topicId).map(queryKey => client.invalidateQueries({ queryKey }))); } catch { /* Error is displayed above. */ }
         }} className="rounded-lg border px-5 py-3 font-bold">{createDraft.isPending ? 'Создаём…' : 'Добавить материалы вручную'}</button>}</div>
+        {workflow.generateLessonMutation.isPending && <p role="status" className="mb-5 text-sm text-muted-foreground">Урок готовится. Это может занять несколько минут; результат появится здесь автоматически.</p>}
         {lesson && blocks.length > 0 && <LessonTextbookNote metadata={lesson.lesson_metadata} />}
         {lesson && <LessonBlockBuilder lesson={lesson} topicId={topicId} onUnsavedChange={setUnsaved} />}
         {lesson && <details className="mt-6 rounded-lg border p-4"><summary className="cursor-pointer text-sm font-semibold">Дополнительные настройки: медиа, аватар и структура</summary><LessonPlanningSummary lesson={lesson} /><AvatarConfigurationPanel lesson={lesson} /></details>}
