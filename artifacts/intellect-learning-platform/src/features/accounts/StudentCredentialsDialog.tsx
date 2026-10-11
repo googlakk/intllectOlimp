@@ -3,8 +3,8 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { PasswordChoice } from './PasswordChoice';
 import { parseStudentCsv, type StudentCsvRow } from './studentCsv';
 
-export function StudentCredentialsDialog({ mode, names, count, onClose, onSubmit }: {
-  mode: 'create' | 'reset'; names?: string; count?: number;
+export function StudentCredentialsDialog({ mode, names, count, studentName, onClose, onSubmit }: {
+  mode: 'create' | 'reset'; names?: string; count?: number; studentName?: string;
   onClose: () => void; onSubmit: (rows: StudentCsvRow[], password?: string, onProgress?: (completed: number, total: number) => void) => Promise<void>;
 }) {
   const [source, setSource] = useState(names || '');
@@ -15,7 +15,7 @@ export function StudentCredentialsDialog({ mode, names, count, onClose, onSubmit
   const [error, setError] = useState('');
   const creating = mode === 'create';
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}><DialogContent>
-    <DialogTitle>{creating ? 'Создать аккаунты для класса' : `Сменить пароль · ${count} учеников`}</DialogTitle>
+    <DialogTitle>{creating ? 'Создать аккаунты для класса' : count === 1 ? `Сменить пароль · ${studentName || 'Ученик'}` : `Сменить пароли · ${count} учеников`}</DialogTitle>
     <DialogDescription>{creating ? 'Вставьте имена учеников, каждое с новой строки. Логин сформируется автоматически. Можно указать свой: Имя;Логин.' : 'Логины останутся прежними. Старые пароли выбранных учеников перестанут работать.'}</DialogDescription>
     <form className="space-y-4" onSubmit={async event => {
       event.preventDefault(); setError('');

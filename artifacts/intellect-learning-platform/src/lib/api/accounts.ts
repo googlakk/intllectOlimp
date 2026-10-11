@@ -116,7 +116,7 @@ export const useSetAccountBlocked = () => useRefreshingMutation(
 
 export const useBulkCreateStudents = () => useRefreshingMutation(
   (data: { classroom_id: number; students: StudentAccountInput[] }) =>
-    request<{ created: IssuedCredentials[]; errors: Array<{ row: number; login: string; error: string }> }>('/accounts/students/bulk', {
+    request<{ created: IssuedCredentials[]; errors: Array<{ row: number; login: string | null; error: string }> }>('/accounts/students/bulk', {
       method: 'POST', body: JSON.stringify(data),
     }),
   [['accounts', 'classrooms']],
