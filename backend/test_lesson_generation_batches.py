@@ -210,6 +210,57 @@ class BatchTests(unittest.IsolatedAsyncioTestCase):
 
 
 class QueueWorkerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_dispatched_batch_continues_after_request_returns_without_status_polling(self):
+        reserved = {}
+        started = []
+        first_two_started = asyncio.Event()
+        release_provider = asyncio.Event()
+        topics = {ident: topic(ident) for ident in (1, 2, 3)}
+
+        async def commit():
+            for ident, current in reserved.items():
+                current.id = ident + 100
+
+        db = SimpleNamespace(commit=AsyncMock(side_effect=commit), add=lambda current: reserved.setdefault(current.topic_id, current),
+                             scalar=AsyncMock(return_value=object()),
+                             get=AsyncMock(side_effect=lambda model, ident: Teacher(id=4) if model is Teacher else Section(id=2, subject_id=1)))
+
+        async def fake_provider(topic_id, *args, generation_job_id, **kwargs):
+            started.append(topic_id)
+            if len(started) == 2:
+                first_two_started.set()
+            await release_provider.wait()
+            current = reserved[topic_id]
+            self.assertEqual(jobs.marker_for(current)["job_id"], generation_job_id)
+            jobs.write_marker(current, {**jobs.marker_for(current), "status": "succeeded"})
+
+        with patch("llm.catalog.resolve_lesson_choice", return_value=None), patch.object(batches, "require_subject_management", AsyncMock()), patch.object(batches, "require_topic_management", AsyncMock(side_effect=lambda user, ident, session: topics[ident])), patch.object(batches, "subject_batch_rows", AsyncMock(return_value=[])), patch.object(jobs, "locked_lesson", AsyncMock(side_effect=lambda ident, session: reserved.get(ident))), patch.object(jobs, "AsyncSessionLocal", return_value=SessionContext(db)), patch.object(jobs, "_generation_slots", asyncio.Semaphore(2)), patch.object(jobs, "generate_lesson_draft", AsyncMock(side_effect=fake_provider)) as provider, patch.object(batches, "generation_batch_status", AsyncMock()) as status_poll, patch.object(batches, "list_generation_batches", AsyncMock()) as list_poll:
+            request = asyncio.create_task(batches.start_generation_batch(
+                1, [1, 2, 3], 4, "detached-batch", SimpleNamespace(role="admin"), db))
+            try:
+                result = await request
+                self.assertTrue(request.done())
+                self.assertEqual(result["counts"]["queued"], 3)
+                await asyncio.wait_for(first_two_started.wait(), timeout=1)
+                self.assertEqual(started, [1, 2])
+                self.assertEqual([jobs.marker_for(reserved[ident])["status"] for ident in (1, 2, 3)],
+                                 ["running", "running", "queued"])
+                workers = list(jobs._tasks)
+                self.assertEqual(len(workers), 3)
+                self.assertTrue(all(not worker.done() for worker in workers))
+                release_provider.set()
+                await asyncio.wait_for(asyncio.gather(*workers), timeout=1)
+                await asyncio.sleep(0)
+                self.assertEqual(started, [1, 2, 3])
+                self.assertEqual(provider.await_count, 3)
+                self.assertTrue(all(jobs.marker_for(current)["status"] == "succeeded" for current in reserved.values()))
+                status_poll.assert_not_awaited()
+                list_poll.assert_not_awaited()
+                self.assertFalse(jobs._tasks)
+            finally:
+                release_provider.set()
+                await asyncio.gather(*list(jobs._tasks), return_exceptions=True)
+
     async def test_generated_metadata_keeps_old_batch_history_and_current_completion(self):
         from models import Subject
         from services.lessons import generate_lesson_draft

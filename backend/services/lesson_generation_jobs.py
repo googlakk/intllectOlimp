@@ -217,7 +217,7 @@ async def _run_generation_job(job_id: str, topic_id: int, teacher_id: int,
         # Provider exception text may contain private request data. Persist only
         # a safe user-facing message, while logging the exception class.
         logger.warning("Lesson generation job failed: %s", type(exc).__name__)
-        error = "Не удалось создать урок. Готовый урок сохранён. Повторите запуск вручную."
+        error = "Не удалось создать урок. Существующие материалы сохранены. Повторите запуск вручную."
     if error:
         try:
             await fail_generation_job(job_id, topic_id, error)
