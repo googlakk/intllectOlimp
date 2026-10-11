@@ -20,4 +20,10 @@ describe('parseStudentCsv', () => {
       { display_name: 'Нурай', login: 'nurai.8b' },
     ]);
   });
+
+  it('accepts a class name list with automatic logins and mixed explicit logins', () => {
+    expect(parseStudentCsv('ФИО\nАлина Осмонова\nИван Петров;ivan.7a\nНурай Акматова;')).toEqual([
+      { display_name: 'Алина Осмонова' }, { display_name: 'Иван Петров', login: 'ivan.7a' }, { display_name: 'Нурай Акматова' },
+    ]);
+  });
 });

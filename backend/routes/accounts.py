@@ -13,11 +13,15 @@ from services.accounts import (
     list_classrooms,
     list_teachers,
     reset_temporary_password,
+    reset_classroom_passwords,
+    require_classroom_management,
     set_account_blocked,
     transfer_student,
     unassign_teacher,
 )
-from services.auth import AuthPrincipal
+from services.auth import AuthPrincipal, AuthServiceError
+from services.student_credentials import validate_temporary_password
+from services.supabase_auth import normalize_login
 from services.teacher_assignments import replace_teacher_subjects, teacher_subject_options
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
@@ -34,7 +38,21 @@ class AccountInput(BaseModel):
     display_name: str = Field(min_length=2, max_length=255)
 
 
-class StudentAccountInput(AccountInput):
+class StudentCredentialsInput(BaseModel):
+    login: str | None = Field(default=None, min_length=3, max_length=50)
+    display_name: str = Field(min_length=2, max_length=255)
+    temporary_password: str | None = Field(default=None, min_length=6, max_length=128)
+
+    @field_validator("display_name")
+    @classmethod
+    def student_name(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 2:
+            raise ValueError("Введите имя ученика (не менее двух символов).")
+        return value
+
+
+class StudentAccountInput(StudentCredentialsInput):
     classroom_id: int
 
 
@@ -57,7 +75,16 @@ class TeacherSubjectsInput(BaseModel):
 
 class BulkStudentAccountInput(BaseModel):
     classroom_id: int
-    students: list[AccountInput] = Field(min_length=1, max_length=100)
+    students: list[StudentCredentialsInput] = Field(min_length=1, max_length=100)
+    temporary_password: str | None = Field(default=None, min_length=6, max_length=128)
+
+
+class PasswordResetInput(BaseModel):
+    temporary_password: str | None = Field(default=None, min_length=6, max_length=128)
+
+
+class ClassroomPasswordResetInput(PasswordResetInput):
+    profile_ids: list[int] | None = Field(default=None, min_length=1, max_length=200)
 
 
 class TeacherAssignmentInput(BaseModel):
@@ -136,6 +163,12 @@ async def add_students_bulk(
     user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
     db: AsyncSession = Depends(get_db),
 ):
+    await require_classroom_management(user, payload.classroom_id, db)
+    validate_temporary_password(payload.temporary_password)
+    for student in payload.students:
+        if student.login is not None:
+            normalize_login(student.login)
+        validate_temporary_password(student.temporary_password)
     created = []
     errors = []
     for index, student in enumerate(payload.students):
@@ -145,12 +178,24 @@ async def add_students_bulk(
                 classroom_id=payload.classroom_id,
                 login=student.login,
                 display_name=student.display_name,
+                temporary_password=student.temporary_password or payload.temporary_password,
                 db=db,
             ))
         except Exception as exc:
             await db.rollback()
-            errors.append({"row": index + 1, "login": student.login, "error": str(exc)})
+            message = exc.detail if isinstance(exc, AuthServiceError) else "Не удалось создать аккаунт. Повторите для этого ученика."
+            errors.append({"row": index + 1, "login": student.login, "display_name": student.display_name, "error": message})
     return {"created": created, "errors": errors}
+
+
+@router.post("/classrooms/{classroom_id}/reset-passwords")
+async def reset_class_passwords(
+    classroom_id: int,
+    payload: ClassroomPasswordResetInput,
+    user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
+    db: AsyncSession = Depends(get_db),
+):
+    return await reset_classroom_passwords(user, classroom_id, db, **payload.model_dump())
 
 
 @router.get("/classrooms/{classroom_id}/students")
@@ -223,8 +268,10 @@ async def restore_account(
 @router.post("/{target_profile_id}/reset-password")
 async def reset_password(
     target_profile_id: int,
+    payload: PasswordResetInput | None = None,
     user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
     db: AsyncSession = Depends(get_db),
 ):
-    password = await reset_temporary_password(user, target_profile_id=target_profile_id, db=db)
+    password = await reset_temporary_password(user, target_profile_id=target_profile_id, db=db,
+                                            temporary_password=payload.temporary_password if payload else None)
     return {"temporary_password": password}

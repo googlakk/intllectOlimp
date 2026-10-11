@@ -1,4 +1,4 @@
-export type StudentCsvRow = { display_name: string; login: string };
+export type StudentCsvRow = { display_name: string; login?: string };
 
 function splitDelimitedLine(line: string, delimiter: string): string[] {
   const values: string[] = [];
@@ -31,6 +31,7 @@ export function parseStudentCsv(source: string): StudentCsvRow[] {
     const [display_name = '', login = ''] = splitDelimitedLine(line, delimiter);
     const normalizedLogin = login.toLocaleLowerCase('ru');
     if (index === 0 && ['login', 'логин', 'username'].includes(normalizedLogin)) return [];
-    return display_name && login ? [{ display_name, login }] : [];
+    if (index === 0 && !login && ['имя', 'фио', 'ученик', 'name', 'display_name'].includes(display_name.toLocaleLowerCase('ru'))) return [];
+    return display_name ? [{ display_name, ...(login ? { login } : {}) }] : [];
   });
 }

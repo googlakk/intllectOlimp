@@ -15,7 +15,12 @@ export type TeacherAccount = {
   subjects: Array<{ id: number; name: string; grade: number }>;
 };
 export type IssuedCredentials = {
-  profile_id: number; login: string; temporary_password: string; student_id?: number; teacher_id?: number; classroom_id?: number;
+  profile_id: number; login: string; temporary_password: string; display_name?: string; student_id?: number; teacher_id?: number; classroom_id?: number;
+};
+export type StudentAccountInput = { display_name: string; login?: string; temporary_password?: string };
+export type BulkCredentialsResult = {
+  updated: IssuedCredentials[];
+  errors: Array<{ profile_id: number; display_name: string; login: string; error: string }>;
 };
 
 export const useTeacherSubjectOptions = () => useQuery({
@@ -75,8 +80,8 @@ export const useSetTeacherSubjects = () => useRefreshingMutation(
 );
 
 export const useCreateStudent = () => useRefreshingMutation(
-  (data: { classroom_id: number; login: string; display_name: string }) => request<IssuedCredentials>('/accounts/students', { method: 'POST', body: JSON.stringify(data) }),
-  [['accounts', 'classrooms']],
+  (data: StudentAccountInput & { classroom_id: number }) => request<IssuedCredentials>('/accounts/students', { method: 'POST', body: JSON.stringify(data) }),
+  [['accounts', 'classrooms'], ['dashboard-students']],
 );
 
 export const useAssignTeacher = () => useRefreshingMutation(
@@ -89,9 +94,20 @@ export const useUnassignTeacher = () => useRefreshingMutation(
   [['accounts', 'classrooms']],
 );
 
-export const useResetAccountPassword = () => useMutation({
-  mutationFn: (profileId: number) => request<{ temporary_password: string }>(`/accounts/${profileId}/reset-password`, { method: 'POST' }),
-});
+export const resetAccountPassword = (input: number | { profileId: number; temporary_password?: string }) => {
+  const profileId = typeof input === 'number' ? input : input.profileId;
+  return request<{ temporary_password: string }>(`/accounts/${profileId}/reset-password`, {
+    method: 'POST', ...(typeof input === 'number' ? {} : { body: JSON.stringify({ temporary_password: input.temporary_password }) }),
+  });
+};
+export const useResetAccountPassword = () => useRefreshingMutation(resetAccountPassword,
+  [['accounts'], ['dashboard-students']],
+);
+
+export const resetClassroomPasswords = (classroomId: number, profileIds: number[], temporaryPassword?: string) =>
+  request<BulkCredentialsResult>(`/accounts/classrooms/${classroomId}/reset-passwords`, {
+    method: 'POST', body: JSON.stringify({ profile_ids: profileIds, ...(temporaryPassword ? { temporary_password: temporaryPassword } : {}) }),
+  });
 
 export const useSetAccountBlocked = () => useRefreshingMutation(
   (data: { profileId: number; blocked: boolean }) => request<{ ok: boolean }>(`/accounts/${data.profileId}/${data.blocked ? 'block' : 'restore'}`, { method: 'POST' }),
@@ -99,7 +115,7 @@ export const useSetAccountBlocked = () => useRefreshingMutation(
 );
 
 export const useBulkCreateStudents = () => useRefreshingMutation(
-  (data: { classroom_id: number; students: Array<{ login: string; display_name: string }> }) =>
+  (data: { classroom_id: number; students: StudentAccountInput[] }) =>
     request<{ created: IssuedCredentials[]; errors: Array<{ row: number; login: string; error: string }> }>('/accounts/students/bulk', {
       method: 'POST', body: JSON.stringify(data),
     }),

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import secrets
 import string
+import logging
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -24,11 +25,15 @@ from services.auth import AuthPrincipal, AuthServiceError, forget_principal
 from services.curriculum_graph import refresh_student_access
 from services.teacher_assignments import add_subject_assignments, subjects_by_teacher, validate_teacher_assignments
 from services.supabase_auth import (
+    SupabaseAuthError,
     admin_create_auth_user,
     admin_delete_auth_user,
     admin_update_auth_user,
     normalize_login,
 )
+from services.student_credentials import generated_student_login, student_temporary_password, validate_temporary_password
+
+logger = logging.getLogger(__name__)
 
 
 def temporary_password() -> str:
@@ -37,6 +42,9 @@ def temporary_password() -> str:
         value = "".join(secrets.choice(alphabet) for _ in range(14))
         if any(c.islower() for c in value) and any(c.isupper() for c in value) and any(c.isdigit() for c in value):
             return value
+
+
+strong_temporary_password = temporary_password
 
 
 async def require_classroom_management(user: AuthPrincipal, classroom_id: int, db: AsyncSession) -> Classroom:
@@ -163,6 +171,7 @@ async def _create_profile_with_auth(
     teacher_id: int | None,
     student_id: int | None,
     db: AsyncSession,
+    password_override: str | None = None,
 ) -> tuple[Profile, str, str]:
     login_name = normalize_login(login)
     duplicate = await db.scalar(select(Profile.id).where(
@@ -171,10 +180,18 @@ async def _create_profile_with_auth(
     ))
     if duplicate is not None:
         raise AuthServiceError(status_code=409, detail="Такой логин уже используется.")
-    password = temporary_password()
-    auth_user = await admin_create_auth_user(
-        login=login_name, password=password, display_name=display_name, role=role
-    )
+    password = password_override or (student_temporary_password() if role == "student" else temporary_password())
+    try:
+        auth_user = await admin_create_auth_user(
+            login=login_name, password=password, display_name=display_name, role=role
+        )
+    except SupabaseAuthError as exc:
+        detail = str(exc.detail).lower()
+        if exc.status_code == 409 or (exc.status_code == 422 and any(word in detail for word in ("already", "registered", "exists"))):
+            raise AuthServiceError(409, "Такой логин уже используется.") from exc
+        if exc.status_code in (400, 422):
+            raise AuthServiceError(422, "Сервис входа отклонил временный пароль. Выберите другой пароль или автоматическое создание.") from exc
+        raise AuthServiceError(503, "Сервис входа недоступен. Повторите позже.") from exc
     auth_user_id = str(auth_user.get("id") or (auth_user.get("user") or {}).get("id") or "")
     if not auth_user_id:
         raise AuthServiceError(status_code=502, detail="Supabase не вернул идентификатор пользователя.")
@@ -247,47 +264,46 @@ async def create_teacher_account(
 
 
 async def create_student_account(
-    user: AuthPrincipal,
-    *,
-    classroom_id: int,
-    login: str,
-    display_name: str,
-    db: AsyncSession,
+    user: AuthPrincipal, *, classroom_id: int, display_name: str, db: AsyncSession,
+    login: str | None = None, temporary_password: str | None = None,
 ) -> dict[str, Any]:
+    name = display_name.strip()
+    if len(name) < 2 or len(name) > 255:
+        raise AuthServiceError(422, "Введите имя ученика (не менее двух символов).")
+    password_override = validate_temporary_password(temporary_password)
+    login_name = normalize_login(login) if login is not None else None
     classroom = await require_classroom_management(user, classroom_id, db)
-    student = Student(name=display_name.strip(), grade=classroom.grade)
-    db.add(student)
-    await db.flush()
-    auth_user_id: str | None = None
-    try:
-        profile, password, auth_user_id = await _create_profile_with_auth(
-            user=user,
-            role="student",
-            login=login,
-            display_name=display_name,
-            teacher_id=None,
-            student_id=student.id,
-            db=db,
-        )
-        db.add(ClassroomStudent(
-            classroom_id=classroom.id,
-            student_id=student.id,
-            enrolled_by_profile_id=user.profile_id,
-        ))
-        await db.commit()
-        await db.refresh(profile)
-    except Exception:
-        await db.rollback()
-        if auth_user_id:
-            await admin_delete_auth_user(auth_user_id)
-        raise
-    return {
-        "profile_id": profile.id,
-        "student_id": student.id,
-        "classroom_id": classroom.id,
-        "login": profile.login_name,
-        "temporary_password": password,
-    }
+    if classroom.status == "archived":
+        raise AuthServiceError(409, "Сначала восстановите класс из архива.")
+    grade = classroom.grade
+    for attempt in range(3):
+        candidate = login_name or generated_student_login(user.organization_id, classroom_id)
+        student = Student(name=name, grade=grade)
+        auth_user_id = None
+        try:
+            db.add(student)
+            await db.flush()
+            profile, password, auth_user_id = await _create_profile_with_auth(
+                user=user, role="student", login=candidate, display_name=name,
+                teacher_id=None, student_id=student.id, db=db,
+                password_override=password_override,
+            )
+            db.add(ClassroomStudent(classroom_id=classroom_id, student_id=student.id,
+                                    enrolled_by_profile_id=user.profile_id))
+            await db.commit()
+            return {
+                "profile_id": profile.id, "student_id": student.id,
+                "classroom_id": classroom_id, "display_name": profile.display_name,
+                "login": profile.login_name, "temporary_password": password,
+            }
+        except Exception as exc:
+            await db.rollback()
+            if auth_user_id:
+                await admin_delete_auth_user(auth_user_id)
+            if login_name is None and isinstance(exc, AuthServiceError) and exc.status_code == 409 and attempt < 2:
+                continue
+            raise
+    raise AuthServiceError(409, "Не удалось подобрать свободный логин. Повторите создание.")
 
 
 async def assign_teacher(
@@ -430,12 +446,46 @@ async def set_account_blocked(
     forget_principal(profile.auth_user_id)
 
 
-async def reset_temporary_password(
-    user: AuthPrincipal, *, target_profile_id: int, db: AsyncSession
+async def _issue_temporary_password(
+    user: AuthPrincipal, profile: Profile, db: AsyncSession, password: str,
 ) -> str:
+    # Persist the mandatory-change flag BEFORE changing external credentials.
+    # If this fails, Auth is untouched; after Auth succeeds, the new credential
+    # is always returned even when the optional audit write is unavailable.
+    auth_id = profile.auth_user_id
+    profile_id = profile.id
+    profile.must_change_password = True
+    await db.commit()
+    forget_principal(auth_id)
+    try:
+        await admin_update_auth_user(str(auth_id), {"password": password})
+    except SupabaseAuthError as exc:
+        status = 422 if exc.status_code in (400, 422) else 503
+        message = "Сервис входа отклонил пароль. Выберите другой пароль или автоматическое создание." if status == 422 else "Сервис входа недоступен. Повторите позже."
+        raise AuthServiceError(status, message) from exc
+    try:
+        db.add(AccountEvent(
+            organization_id=user.organization_id, actor_profile_id=user.profile_id,
+            target_profile_id=profile_id, event_type="password_reset_issued", metadata_json={},
+        ))
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        logger.warning("Password reset audit unavailable: %s", type(exc).__name__)
+    forget_principal(auth_id)
+    return password
+
+
+async def reset_temporary_password(
+    user: AuthPrincipal, *, target_profile_id: int, db: AsyncSession,
+    temporary_password: str | None = None,
+) -> str:
+    custom_password = validate_temporary_password(temporary_password)
     profile = await db.get(Profile, target_profile_id)
     if profile is None or profile.organization_id != user.organization_id or profile.role == "admin":
         raise AuthServiceError(status_code=404, detail="Аккаунт не найден.")
+    if user.role not in ("admin", "teacher"):
+        raise AuthServiceError(403, "Нет доступа к смене паролей.")
     if user.role == "teacher":
         if profile.student_id is None:
             raise AuthServiceError(status_code=403, detail="Учитель может сбросить пароль только своему ученику.")
@@ -443,21 +493,54 @@ async def reset_temporary_password(
             ClassroomTeacher, ClassroomTeacher.classroom_id == ClassroomStudent.classroom_id
         ).where(
             ClassroomStudent.student_id == profile.student_id,
-            ClassroomStudent.left_at.is_(None),
-            ClassroomTeacher.teacher_id == user.teacher_id,
+            ClassroomStudent.left_at.is_(None), ClassroomTeacher.teacher_id == user.teacher_id,
         ))
         if enrollment is None:
             raise AuthServiceError(status_code=403, detail="Ученик не относится к вашим классам.")
-    password = temporary_password()
-    await admin_update_auth_user(str(profile.auth_user_id), {"password": password})
-    profile.must_change_password = True
-    db.add(AccountEvent(
-        organization_id=user.organization_id,
-        actor_profile_id=user.profile_id,
-        target_profile_id=profile.id,
-        event_type="password_reset_issued",
-        metadata_json={},
-    ))
-    await db.commit()
-    forget_principal(profile.auth_user_id)
-    return password
+    password = custom_password or (student_temporary_password() if profile.role == "student" else strong_temporary_password())
+    return await _issue_temporary_password(user, profile, db, password)
+
+
+async def reset_classroom_passwords(
+    user: AuthPrincipal, classroom_id: int, db: AsyncSession, *,
+    profile_ids: list[int] | None = None, temporary_password: str | None = None,
+) -> dict[str, Any]:
+    custom_password = validate_temporary_password(temporary_password)
+    if profile_ids is not None and (not profile_ids or len(profile_ids) > 200 or any(isinstance(value, bool) or not isinstance(value, int) or value < 1 for value in profile_ids)):
+        raise AuthServiceError(422, "Выберите от 1 до 200 учеников.")
+    classroom = await require_classroom_management(user, classroom_id, db)
+    if classroom.status != "active":
+        raise AuthServiceError(409, "Класс находится в архиве.")
+    rows = (await db.scalars(select(Profile).join(
+        ClassroomStudent, ClassroomStudent.student_id == Profile.student_id,
+    ).where(
+        ClassroomStudent.classroom_id == classroom_id, ClassroomStudent.left_at.is_(None),
+        Profile.organization_id == user.organization_id, Profile.role == "student", Profile.status == "active",
+    ).order_by(Profile.display_name, Profile.id))).all()
+    by_id = {profile.id: profile for profile in rows}
+    if profile_ids is not None and not set(profile_ids).issubset(by_id):
+        raise AuthServiceError(403, "Все выбранные ученики должны быть активными и состоять в этом классе.")
+    selected = list(dict.fromkeys(profile_ids)) if profile_ids is not None else list(by_id)
+    if len(selected) > 200:
+        raise AuthServiceError(422, "За один запрос можно обновить не более 200 учеников.")
+    # Snapshot before per-person rollback expires ORM rows. Preauthorization of
+    # the entire selection finishes before the first external mutation.
+    credentials = [{"profile_id": pid, "student_id": by_id[pid].student_id,
+                    "classroom_id": classroom_id, "display_name": by_id[pid].display_name,
+                    "login": by_id[pid].login_name} for pid in selected]
+    updated = []
+    errors = []
+    for credential in credentials:
+        try:
+            profile = await db.get(Profile, credential["profile_id"])
+            if profile is None or profile.organization_id != user.organization_id or profile.role != "student" or profile.status != "active":
+                raise AuthServiceError(403, "Ученик больше не доступен для обновления пароля.")
+            password = custom_password or student_temporary_password()
+            await _issue_temporary_password(user, profile, db, password)
+            updated.append({**credential, "temporary_password": password})
+        except Exception as exc:
+            await db.rollback()
+            # Never echo exception strings: provider/DB errors may include a password.
+            error = exc.detail if isinstance(exc, AuthServiceError) else "Не удалось обновить пароль. Повторите для этого ученика."
+            errors.append({key: credential[key] for key in ("profile_id", "display_name", "login")} | {"error": error})
+    return {"updated": updated, "errors": errors}
