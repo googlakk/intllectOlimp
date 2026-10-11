@@ -74,7 +74,7 @@ async def delete_subject(subject_id: int, db: AsyncSession) -> dict[str, bool]:
             raise SubjectDeletionError(409, "Для программы создаются материалы. Дождитесь завершения и повторите удаление.")
         running_lessons = (await db.scalars(select(GeneratedLesson).where(
             GeneratedLesson.id.in_(lesson_ids),
-            GeneratedLesson.lesson_metadata.op("->")("generation_job").op("->>")("status") == "running",
+            GeneratedLesson.lesson_metadata.op("->")("generation_job").op("->>")("status").in_(("queued", "running")),
         ))).all()
         from services.lesson_generation_jobs import marker_expired, marker_for
         if any(not marker_expired(marker_for(row)) for row in running_lessons):

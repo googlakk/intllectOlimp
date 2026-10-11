@@ -29,6 +29,9 @@ from services.educator_access import require_lesson_management, require_topic_ma
 from services.lesson_generation_jobs import generation_job_status, start_generation_job
 from services.lesson_generation_jobs import fail_generation_job
 from services.lesson_generation_jobs import GENERATION_TIMEOUT_SECONDS
+from services.lesson_generation_batches import (
+    start_generation_batch, list_generation_batches, generation_batch_status, cancel_generation_batch,
+)
 
 router = APIRouter(prefix="/api/lessons", tags=["lessons"])
 
@@ -44,6 +47,16 @@ class GenerateInput(BaseModel):
 
 class BlocksInput(BaseModel):
     blocks: list[dict[str, Any]]
+
+
+class GenerateBatchInput(BaseModel):
+    subject_id: int = Field(ge=1)
+    topic_ids: list[int] = Field(min_length=1, max_length=30)
+    teacher_id: int = Field(ge=1)
+    request_id: UUID
+    model: str | None = Field(default=None, max_length=200)
+    content_language: Language | None = None
+    replace_existing_drafts: bool = False
 
 
 class LessonDocumentInput(BaseModel):
@@ -110,6 +123,51 @@ async def generation_status(
         raise_http_error(exc)
 
 
+@router.post("/generate/batch")
+async def start_batch(payload: GenerateBatchInput,
+                      user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
+                      db: AsyncSession = Depends(get_db)):
+    teacher_id = payload.teacher_id if user.role == "admin" else user.teacher_id
+    if teacher_id is None:
+        raise AuthServiceError(403, "Профиль учителя не связан с аккаунтом.")
+    try:
+        return await start_generation_batch(payload.subject_id, payload.topic_ids, teacher_id,
+            str(payload.request_id), user, db, model_choice=payload.model,
+            content_language=payload.content_language, replace_existing_drafts=payload.replace_existing_drafts)
+    except LessonServiceError as exc:
+        raise_http_error(exc)
+
+
+@router.get("/generate/batches")
+async def batches(subject_id: int = Query(ge=1),
+                  user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
+                  db: AsyncSession = Depends(get_db)):
+    try:
+        return await list_generation_batches(subject_id, user, db)
+    except LessonServiceError as exc:
+        raise_http_error(exc)
+
+
+@router.get("/generate/batches/{batch_id}")
+async def batch_status(batch_id: UUID, subject_id: int = Query(ge=1),
+                       user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
+                       db: AsyncSession = Depends(get_db)):
+    try:
+        return await generation_batch_status(str(batch_id), subject_id, user, db)
+    except LessonServiceError as exc:
+        raise_http_error(exc)
+
+
+@router.post("/generate/batches/{batch_id}/cancel")
+async def cancel_batch(batch_id: UUID, subject_id: int = Query(ge=1),
+                       user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
+                       db: AsyncSession = Depends(get_db)):
+    try:
+        return await cancel_generation_batch(str(batch_id), subject_id, user, db)
+    except LessonServiceError as exc:
+        raise_http_error(exc)
+
+
 @router.post("/generate")
 async def generate(
     payload: GenerateInput,
@@ -125,14 +183,13 @@ async def generate(
         job = await start_generation_job(payload.topic_id, teacher_id, db,
                                           model_choice=payload.model, content_language=payload.content_language,
                                           dispatch=False)
-        lesson = await asyncio.wait_for(generate_lesson_draft(
-            topic_id=payload.topic_id,
-            teacher_id=teacher_id,
-            db=db,
-            model_choice=payload.model,
-            content_language=payload.content_language,
-            generation_job_id=job["job_id"],
-        ), timeout=GENERATION_TIMEOUT_SECONDS)
+        from services.lesson_generation_jobs import generation_slot
+        async with generation_slot():
+            lesson = await asyncio.wait_for(generate_lesson_draft(
+                topic_id=payload.topic_id, teacher_id=teacher_id, db=db,
+                model_choice=payload.model, content_language=payload.content_language,
+                generation_job_id=job["job_id"],
+            ), timeout=GENERATION_TIMEOUT_SECONDS)
     except (LessonServiceError, TimeoutError) as exc:
         await db.rollback()
         if job is not None:

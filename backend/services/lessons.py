@@ -827,7 +827,7 @@ async def delete_lesson_record(lesson_id: int, db: AsyncSession) -> dict[str, st
     lesson = await get_lesson_or_error(lesson_id, db)
     from services.lesson_generation_jobs import marker_expired, marker_for
     marker = marker_for(lesson)
-    if marker.get("status") == "running" and not marker_expired(marker):
+    if marker.get("status") in {"queued", "running"} and not marker_expired(marker):
         raise LessonServiceError(409, "Для темы создаётся урок. Дождитесь завершения.")
     if lesson.status == "published" or lesson.published_version_id:
         raise LessonServiceError(status_code=409, detail="Опубликованное занятие нельзя удалить вместе с историей. Используйте «Убрать из программы».")
@@ -884,7 +884,7 @@ async def generate_lesson_draft(
     current = await db.scalar(select(GeneratedLesson).where(GeneratedLesson.topic_id == topic_id))
     current_marker = (current.lesson_metadata or {}).get("generation_job", {}) if current else {}
     if generation_job_id is None:
-        if current_marker.get("status") == "running":
+        if current_marker.get("status") in {"queued", "running"}:
             raise LessonServiceError(409, "Для темы уже создаётся урок. Дождитесь завершения.")
     elif current_marker.get("job_id") != generation_job_id or current_marker.get("status") != "running":
         raise LessonServiceError(409, "Создание урока уже остановлено. Готовый урок сохранён.")
@@ -976,7 +976,7 @@ async def generate_lesson_draft(
             raise LessonServiceError(409, "Урок изменён во время генерации. Изменения сохранены; повторите создание вручную.")
         if generation_marker.get("base_published_version_id") != lesson.published_version_id:
             raise LessonServiceError(409, "Публикация изменена во время генерации. Повторите создание вручную.")
-    elif generation_marker.get("status") == "running":
+    elif generation_marker.get("status") in {"queued", "running"}:
         raise LessonServiceError(409, "Для темы уже создаётся урок. Дождитесь завершения.")
     if lesson is None:
         lesson = GeneratedLesson(topic_id=topic.id)
@@ -997,6 +997,7 @@ async def generate_lesson_draft(
         topic.learning_objectives,
     )
     used_route = model_route or resolve_route(TASK_LESSON)
+    batch_history = (lesson.lesson_metadata or {}).get("generation_batch_history")
     lesson.lesson_metadata = {
         # Какая книга и какие параграфы легли в основу урока (без текста книги); None — урок без учебника.
         "textbook": lesson_textbook_metadata(textbook),
@@ -1023,6 +1024,8 @@ async def generate_lesson_draft(
         "skills": topic.skills or [],
         "teacher_id": teacher_id,
     }
+    if batch_history:
+        lesson.lesson_metadata["generation_batch_history"] = batch_history
     if isinstance(intro, dict) and intro:
         lesson.lesson_metadata["intro"] = intro
     if generation_job_id is not None:

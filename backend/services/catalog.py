@@ -2,7 +2,7 @@ from typing import Any
 from copy import deepcopy
 from time import monotonic
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import GeneratedLesson, Section, Subject, Topic
@@ -134,7 +134,10 @@ async def list_subject_outline(
         return cached
     rows = (
         await db.execute(
-            select(Section, Topic, GeneratedLesson.id, GeneratedLesson.status)
+            select(Section, Topic, GeneratedLesson.id, GeneratedLesson.status,
+                   or_(GeneratedLesson.active_version_id.is_not(None),
+                       func.coalesce(func.json_array_length(GeneratedLesson.blocks), 0) > 0),
+                   GeneratedLesson.published_version_id.is_not(None))
             .outerjoin(Topic, and_(Topic.section_id == Section.id, *([] if include_archived else [Topic.archived_at.is_(None)])))
             .outerjoin(GeneratedLesson, GeneratedLesson.topic_id == Topic.id)
             .where(Section.subject_id == subject_id)
@@ -145,16 +148,18 @@ async def list_subject_outline(
         return []
 
     sections_by_id: dict[int, dict[str, Any]] = {}
-    for section, topic, lesson_id, lesson_status in rows:
+    for section, topic, lesson_id, lesson_status, has_materials, has_published_version in rows:
         section_payload = sections_by_id.setdefault(section.id, {
             **serialize_model(section),
             "topics": [],
         })
         if topic is None:
             continue
-        section_payload["topics"].append(
-            serialize_topic(topic, lesson_id=lesson_id, lesson_status=lesson_status)
-        )
+        section_payload["topics"].append({
+            **serialize_topic(topic, lesson_id=lesson_id, lesson_status=lesson_status),
+            "lesson_has_materials": bool(has_materials),
+            "lesson_has_published_version": bool(has_published_version),
+        })
 
     payload = list(sections_by_id.values())
     if not include_archived:

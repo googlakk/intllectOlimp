@@ -20,6 +20,10 @@ from services.lessons import LessonServiceError, attach_lesson_document, generat
 logger = logging.getLogger(__name__)
 GENERATION_TIMEOUT_SECONDS = 900
 STALE_GRACE_SECONDS = 30
+MAX_BATCH_TOPICS = 30
+WORKER_TOKEN = str(uuid4())
+ACTIVE_STATUSES = {"queued", "running"}
+_generation_slots = asyncio.Semaphore(2)
 _tasks: set[asyncio.Task] = set()
 
 
@@ -29,6 +33,8 @@ def marker_for(lesson: GeneratedLesson | None) -> dict[str, Any]:
 
 
 def marker_expired(marker: dict[str, Any], now: datetime | None = None) -> bool:
+    if marker.get("worker_token") and marker["worker_token"] != WORKER_TOKEN:
+        return True
     try:
         deadline = datetime.fromisoformat(marker["deadline_at"])
         return deadline <= (now or datetime.now(timezone.utc))
@@ -37,7 +43,16 @@ def marker_expired(marker: dict[str, Any], now: datetime | None = None) -> bool:
 
 
 def write_marker(lesson: GeneratedLesson, marker: dict[str, Any]) -> None:
-    lesson.lesson_metadata = {**(lesson.lesson_metadata or {}), "generation_job": marker}
+    metadata = dict(lesson.lesson_metadata or {})
+    previous = marker_for(lesson)
+    if previous.get("batch_id") and previous.get("job_id") != marker.get("job_id"):
+        if previous.get("status") in ACTIVE_STATUSES:
+            previous = {**previous, "status": "failed",
+                        "error": "Создание урока прервано. Повторите запуск вручную."}
+        history = dict(metadata.get("generation_batch_history") or {})
+        history[previous["batch_id"]] = previous
+        metadata["generation_batch_history"] = history
+    lesson.lesson_metadata = {**metadata, "generation_job": marker}
 
 
 def job_payload(lesson: GeneratedLesson) -> dict[str, Any]:
@@ -77,10 +92,10 @@ async def start_generation_job(
         raise LessonServiceError(404, "Преподаватель не найден")
     lesson = await locked_lesson(topic_id, db)
     marker = marker_for(lesson)
-    if marker.get("status") == "running" and marker_expired(marker):
+    if marker.get("status") in ACTIVE_STATUSES and marker_expired(marker):
         marker = {**marker, "status": "failed", "error": "Создание урока прервано или превысило время ожидания. Повторите запуск вручную."}
         write_marker(lesson, marker)
-    if marker and ((request_id and marker.get("request_id") == request_id) or marker.get("status") == "running"):
+    if marker and ((request_id and marker.get("request_id") == request_id) or marker.get("status") in ACTIVE_STATUSES):
         if not dispatch:
             raise LessonServiceError(409, "Для темы уже создаётся урок. Дождитесь завершения.")
         await db.commit()
@@ -93,17 +108,16 @@ async def start_generation_job(
     now = datetime.now(timezone.utc)
     job_id = str(uuid4())
     write_marker(lesson, {
-        "job_id": job_id, "request_id": request_id, "status": "running",
+        "job_id": job_id, "request_id": request_id, "status": "queued" if dispatch else "running",
+        "worker_token": WORKER_TOKEN,
         "started_at": now.isoformat(),
-        "deadline_at": (now + timedelta(seconds=GENERATION_TIMEOUT_SECONDS + STALE_GRACE_SECONDS)).isoformat(),
+        "deadline_at": (now + timedelta(seconds=GENERATION_TIMEOUT_SECONDS * MAX_BATCH_TOPICS + STALE_GRACE_SECONDS)).isoformat(),
         "base_version_id": lesson.active_version_id,
         "base_published_version_id": lesson.published_version_id,
     })
     await db.commit()
     if dispatch:
-        task = asyncio.create_task(run_generation_job(job_id, topic_id, teacher_id, model_choice, content_language))
-        _tasks.add(task)
-        task.add_done_callback(_tasks.discard)
+        dispatch_generation_job(job_id, topic_id, teacher_id, model_choice, content_language)
     return job_payload(lesson)
 
 
@@ -113,12 +127,12 @@ async def generation_job_status(job_id: str, topic_id: int, db: AsyncSession) ->
     marker = marker_for(lesson)
     if marker.get("job_id") != job_id:
         raise LessonServiceError(404, "Задание создания урока не найдено")
-    if marker.get("status") == "running" and marker_expired(marker):
+    if marker.get("status") in ACTIVE_STATUSES and marker_expired(marker):
         lesson = await locked_lesson(topic_id, db)
         marker = marker_for(lesson)
         if marker.get("job_id") != job_id:
             raise LessonServiceError(404, "Задание создания урока не найдено")
-        if marker.get("status") == "running" and marker_expired(marker):
+        if marker.get("status") in ACTIVE_STATUSES and marker_expired(marker):
             write_marker(lesson, {**marker, "status": "failed", "error": "Создание урока прервано или превысило время ожидания. Повторите запуск вручную."})
             await db.commit()
     if marker_for(lesson).get("status") == "succeeded":
@@ -130,16 +144,58 @@ async def fail_generation_job(job_id: str, topic_id: int, error: str) -> None:
     async with AsyncSessionLocal() as db:
         lesson = await db.scalar(select(GeneratedLesson).where(GeneratedLesson.topic_id == topic_id).with_for_update())
         marker = marker_for(lesson)
-        if marker.get("job_id") == job_id and marker.get("status") == "running":
+        if marker.get("job_id") == job_id and marker.get("status") in ACTIVE_STATUSES:
             write_marker(lesson, {**marker, "status": "failed", "error": error,
                                   "finished_at": datetime.now(timezone.utc).isoformat()})
             await db.commit()
 
 
+def dispatch_generation_job(job_id: str, topic_id: int, teacher_id: int,
+                            model_choice: str | None, content_language: str | None) -> None:
+    task = asyncio.create_task(run_generation_job(job_id, topic_id, teacher_id, model_choice, content_language))
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
+
+
+def generation_slot() -> asyncio.Semaphore:
+    """The legacy synchronous API and all background workers share this pool."""
+    return _generation_slots
+
+
+async def claim_generation_job(job_id: str, topic_id: int) -> bool:
+    """A cancelled, replaced, expired or revised reservation never calls a provider."""
+    async with AsyncSessionLocal() as db:
+        lesson = await locked_lesson(topic_id, db)
+        marker = marker_for(lesson)
+        if marker.get("job_id") != job_id or marker.get("status") != "queued":
+            return False
+        if marker_expired(marker):
+            write_marker(lesson, {**marker, "status": "failed", "error": "Создание урока прервано. Повторите запуск вручную."})
+            await db.commit()
+            return False
+        if marker.get("base_version_id") != lesson.active_version_id or marker.get("base_published_version_id") != lesson.published_version_id:
+            write_marker(lesson, {**marker, "status": "failed", "error": "Урок изменён в очереди. Изменения сохранены; повторите запуск вручную."})
+            await db.commit()
+            return False
+        now = datetime.now(timezone.utc)
+        write_marker(lesson, {**marker, "status": "running", "started_at": now.isoformat(),
+                              "deadline_at": (now + timedelta(seconds=GENERATION_TIMEOUT_SECONDS + STALE_GRACE_SECONDS)).isoformat()})
+        await db.commit()
+        return True
+
+
 async def run_generation_job(job_id: str, topic_id: int, teacher_id: int,
                              model_choice: str | None, content_language: str | None) -> None:
+    async with _generation_slots:
+        await _run_generation_job(job_id, topic_id, teacher_id, model_choice, content_language)
+
+
+async def _run_generation_job(job_id: str, topic_id: int, teacher_id: int,
+                              model_choice: str | None, content_language: str | None) -> None:
     error = None
     try:
+        if not await claim_generation_job(job_id, topic_id):
+            return
         async with AsyncSessionLocal() as db:
             await asyncio.wait_for(generate_lesson_draft(
                 topic_id, teacher_id, db, model_choice=model_choice,

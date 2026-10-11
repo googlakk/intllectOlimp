@@ -52,7 +52,7 @@ class FakeOutlineSession:
 
     async def execute(self, _statement):
         self.execute_calls += 1
-        return FakeExecuteResult([(self.section, self.topic, 42, "published")])
+        return FakeExecuteResult([(self.section, self.topic, 42, "published", True, True)])
 
     async def scalar(self, _statement):
         return self.section.subject_id
@@ -180,6 +180,8 @@ class CatalogOutlineTests(unittest.IsolatedAsyncioTestCase):
         topic = outline[0]["topics"][0]
         self.assertEqual(topic["lesson_id"], 42)
         self.assertEqual(topic["lesson_status"], "published")
+        self.assertTrue(topic["lesson_has_materials"])
+        self.assertTrue(topic["lesson_has_published_version"])
         self.assertNotIn("blocks", topic)
         self.assertNotIn("lesson_document", topic)
         self.assertNotIn("lesson_metadata", topic)

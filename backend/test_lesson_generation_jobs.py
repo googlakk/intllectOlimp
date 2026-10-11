@@ -38,7 +38,7 @@ class GenerationJobTests(unittest.IsolatedAsyncioTestCase):
             await gate.wait()
         with patch.object(jobs, "locked_lesson", AsyncMock(return_value=row)), patch.object(jobs, "run_generation_job", runner), patch("llm.catalog.resolve_lesson_choice", return_value=None):
             result = await jobs.start_generation_job(7, 4, db, request_id="new-request")
-            self.assertEqual(result["status"], "running")
+            self.assertEqual(result["status"], "queued")
             self.assertEqual(row.blocks, [{"original": True}])
             self.assertEqual(row.lesson_metadata["original"], "retained")
             self.assertEqual(jobs.marker_for(row)["request_id"], "new-request")
@@ -105,7 +105,7 @@ class GenerationJobTests(unittest.IsolatedAsyncioTestCase):
         db = object()
         generator = AsyncMock(side_effect=RuntimeError("secret-provider-response"))
         fail = AsyncMock()
-        with patch.object(jobs, "AsyncSessionLocal", return_value=SessionContext(db)), patch.object(jobs, "generate_lesson_draft", generator), patch.object(jobs, "fail_generation_job", fail):
+        with patch.object(jobs, "claim_generation_job", AsyncMock(return_value=True)), patch.object(jobs, "AsyncSessionLocal", return_value=SessionContext(db)), patch.object(jobs, "generate_lesson_draft", generator), patch.object(jobs, "fail_generation_job", fail):
             await jobs.run_generation_job("job-one", 7, 4, None, "ru")
         self.assertIs(generator.call_args.args[2], db)
         self.assertEqual(generator.call_args.kwargs["generation_job_id"], "job-one")
@@ -115,7 +115,7 @@ class GenerationJobTests(unittest.IsolatedAsyncioTestCase):
     async def test_timeout_stops_worker_without_retry(self):
         async def generator(*args, **kwargs):
             await asyncio.sleep(60)
-        with patch.object(jobs, "AsyncSessionLocal", return_value=SessionContext(object())), patch.object(jobs, "generate_lesson_draft", generator), patch.object(jobs, "GENERATION_TIMEOUT_SECONDS", .001), patch.object(jobs, "fail_generation_job", AsyncMock()) as fail:
+        with patch.object(jobs, "claim_generation_job", AsyncMock(return_value=True)), patch.object(jobs, "AsyncSessionLocal", return_value=SessionContext(object())), patch.object(jobs, "generate_lesson_draft", generator), patch.object(jobs, "GENERATION_TIMEOUT_SECONDS", .001), patch.object(jobs, "fail_generation_job", AsyncMock()) as fail:
             await jobs.run_generation_job("job-one", 7, 4, None, None)
         self.assertIn("слишком много времени", fail.call_args.args[2])
 
