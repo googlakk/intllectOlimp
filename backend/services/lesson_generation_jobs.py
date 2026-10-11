@@ -49,10 +49,18 @@ def write_marker(lesson: GeneratedLesson, marker: dict[str, Any]) -> None:
         if previous.get("status") in ACTIVE_STATUSES:
             previous = {**previous, "status": "failed",
                         "error": "Создание урока прервано. Повторите запуск вручную."}
-        history = dict(metadata.get("generation_batch_history") or {})
-        history[previous["batch_id"]] = previous
+        history = {batch_id: compact_batch_marker(item)
+                   for batch_id, item in (metadata.get("generation_batch_history") or {}).items()}
+        history[previous["batch_id"]] = compact_batch_marker(previous)
         metadata["generation_batch_history"] = history
     lesson.lesson_metadata = {**metadata, "generation_job": marker}
+
+
+def compact_batch_marker(marker: dict[str, Any]) -> dict[str, Any]:
+    """Retain replay identity/status, without obsolete worker fences or deadlines."""
+    keys = {"batch_id", "job_id", "status", "created_at", "topic_ids", "topic_names",
+            "request", "error", "finished_at"}
+    return {key: value for key, value in marker.items() if key in keys}
 
 
 def job_payload(lesson: GeneratedLesson) -> dict[str, Any]:

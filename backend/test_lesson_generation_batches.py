@@ -172,6 +172,36 @@ class BatchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result[0]["counts"]["failed"], 1)
         self.dispatch.assert_not_called()
 
+    async def test_list_keeps_all_active_and_three_recent_terminal_without_losing_old_replay(self):
+        first, second = row(1, "queued", batch_id="active-one", topic_ids=[1]), row(2, "running", batch_id="active-two", topic_ids=[2])
+        history = {}
+        for index in range(6):
+            marker = jobs.marker_for(row(1, "succeeded", batch_id=f"old-{index}", topic_ids=[1]))
+            marker.update(created_at=f"2026-10-0{index + 1}T00:00:00+00:00", request={
+                "topic_ids": [1], "teacher_id": 4, "model": None,
+                "content_language": None, "replace_existing_drafts": False})
+            history[f"old-{index}"] = jobs.compact_batch_marker(marker)
+        first.lesson_metadata = {**first.lesson_metadata, "generation_batch_history": history}
+        self.rows = [first, second]
+        with patch.object(batches, "batch_markers", wraps=batches.batch_markers) as scan:
+            result = await batches.list_generation_batches(1, self.user, self.db)
+        self.assertEqual(scan.call_count, 2)  # One grouping pass, not one scan per batch.
+        self.assertEqual({item["batch_id"] for item in result[:2]}, {"active-one", "active-two"})
+        self.assertEqual([item["batch_id"] for item in result[2:]], ["old-5", "old-4", "old-3"])
+        self.assertEqual(len(first.lesson_metadata["generation_batch_history"]), 6)
+        replay = await self.start(topic_ids=[1], request_id="old-0")
+        self.assertEqual(replay["status"], "succeeded")
+        self.dispatch.assert_not_called()
+
+    def test_archived_markers_keep_identity_but_drop_worker_fences(self):
+        current = row(1, "succeeded")
+        jobs.write_marker(current, {"job_id": "new-single", "status": "queued"})
+        archived = current.lesson_metadata["generation_batch_history"]["batch-one"]
+        self.assertEqual(archived["batch_id"], "batch-one")
+        self.assertEqual(archived["topic_ids"], [1, 2])
+        for private_key in ("worker_token", "deadline_at", "base_version_id", "base_published_version_id"):
+            self.assertNotIn(private_key, archived)
+
     def test_history_survives_new_single_job_and_missing_topic_is_failed(self):
         current = row(1, "succeeded")
         jobs.write_marker(current, {"job_id": "single-new", "status": "running"})

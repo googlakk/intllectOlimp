@@ -127,6 +127,12 @@ async def get_lesson_or_error(lesson_id: int, db: AsyncSession) -> GeneratedLess
     return lesson
 
 
+def lesson_content_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Worker state belongs to the job API, never lesson content or versions."""
+    return {key: value for key, value in metadata.items()
+            if key not in {"generation_job", "generation_batch_history"}}
+
+
 def serialize_lesson(lesson: GeneratedLesson) -> dict[str, Any]:
     lesson_document = getattr(lesson, "_lesson_document", None)
     if not isinstance(lesson_document, dict):
@@ -135,7 +141,7 @@ def serialize_lesson(lesson: GeneratedLesson) -> dict[str, Any]:
         "id": lesson.id,
         "topic_id": lesson.topic_id,
         "blocks": getattr(lesson, "_served_blocks", lesson.blocks or []),
-        "lesson_metadata": getattr(lesson, "_served_metadata", lesson.lesson_metadata or {}),
+        "lesson_metadata": lesson_content_metadata(getattr(lesson, "_served_metadata", lesson.lesson_metadata or {})),
         "status": lesson.status,
         "generated_at": lesson.generated_at,
         "published_at": lesson.published_at,
@@ -281,7 +287,7 @@ async def persist_lesson_version(
     latest = await db.scalar(
         select(func.max(LessonVersion.version_number)).where(LessonVersion.lesson_id == lesson.id)
     )
-    blueprint = deepcopy(lesson.lesson_metadata or {})
+    blueprint = deepcopy(lesson_content_metadata(lesson.lesson_metadata or {}))
     if hasattr(db, "scalars"):
         links = (await db.scalars(select(TopicSkill).where(
             TopicSkill.topic_id == lesson.topic_id, TopicSkill.role == "outcome",
@@ -467,6 +473,7 @@ async def student_version_payload(
 ) -> dict[str, Any]:
     """Resolve a student's attempt independently of the shared published cache."""
     version_id = (progress or {}).get("lesson_version_id") or payload.get("published_version_id")
+    payload = {**payload, "lesson_metadata": lesson_content_metadata(payload.get("lesson_metadata") or {})}
     if not version_id or version_id == payload.get("active_version_id"):
         return deepcopy(payload)
     version = await db.get(LessonVersion, version_id)
@@ -477,7 +484,7 @@ async def student_version_payload(
         "active_version_id": version.id,
         "lesson_document": deepcopy(version.lesson_document),
         "blocks": flatten_lesson_document(version.lesson_document),
-        "lesson_metadata": deepcopy(version.blueprint or {}),
+        "lesson_metadata": deepcopy(lesson_content_metadata(version.blueprint or {})),
         "model_used": version.model_used,
         "has_unpublished_changes": False,
     })
@@ -678,7 +685,7 @@ async def get_student_lesson_manifest(
         if version is not None:
             serialized_lesson.update({
                 "active_version_id": version.id,
-                "lesson_metadata": deepcopy(version.blueprint or {}),
+                "lesson_metadata": deepcopy(lesson_content_metadata(version.blueprint or {})),
                 "blocks": flatten_lesson_document(version.lesson_document),
                 "has_unpublished_changes": False,
             })
@@ -1119,7 +1126,7 @@ async def publish_lesson(
         active_version = await db.get(LessonVersion, lesson.active_version_id)
     if active_version is not None:
         if active_version.status != "published":
-            active_version.blueprint = {**deepcopy(metadata), "objective_skill_map": (active_version.blueprint or {}).get("objective_skill_map", {})}
+            active_version.blueprint = {**deepcopy(lesson_content_metadata(metadata)), "objective_skill_map": (active_version.blueprint or {}).get("objective_skill_map", {})}
             document = deepcopy(active_version.lesson_document)
             document["objectives"] = quality["objectives"]
             active_version.lesson_document = document

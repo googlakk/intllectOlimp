@@ -84,6 +84,43 @@ async def test_draft_edit_preserves_published_content_until_explicit_publish():
 
 
 @async_test
+async def test_worker_markers_are_private_to_database_and_absent_from_lesson_versions():
+    db = VersionSession()
+    private = {"generation_job": {"job_id": "private-job", "worker_token": "private-token"},
+               "generation_batch_history": {"old-batch": {"topic_ids": [1]}}}
+    db.lesson.lesson_metadata = {**db.lesson.lesson_metadata, **deepcopy(private)}
+    serialized = serialize_lesson(db.lesson)
+    for key in private:
+        assert key not in serialized["lesson_metadata"]
+        assert key in db.lesson.lesson_metadata
+    await update_lesson_blocks(2, deepcopy(db.lesson.blocks), db)
+    new_version = db.versions[db.lesson.active_version_id]
+    for key in private:
+        assert key not in new_version.blueprint
+        assert key in db.lesson.lesson_metadata
+    await publish_lesson(2, 3, True, db)
+    for key in private:
+        assert key not in new_version.blueprint
+        assert key in db.lesson.lesson_metadata
+
+
+@async_test
+async def test_student_payload_strips_operational_markers_from_legacy_version_and_same_version():
+    db = VersionSession()
+    private = {"generation_job": {"worker_token": "private-token"},
+               "generation_batch_history": {"old-batch": {"topic_ids": [1]}}}
+    db.versions[10].blueprint.update(deepcopy(private))
+    payload = {**serialize_lesson(db.lesson), "lesson_metadata": deepcopy(db.versions[10].blueprint)}
+    for selected_version in (10, 11):
+        payload["active_version_id"] = selected_version
+        result = await student_version_payload(payload, {"lesson_version_id": 10}, db)
+        for key in private:
+            assert key not in result["lesson_metadata"]
+            assert key in payload["lesson_metadata"]
+            assert key in db.versions[10].blueprint
+
+
+@async_test
 async def test_pinned_cache_response_cannot_leak_into_other_students():
     clear_lesson_manifest_cache()
     db = VersionSession()

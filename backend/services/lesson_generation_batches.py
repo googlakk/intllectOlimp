@@ -25,9 +25,17 @@ def batch_markers(lesson: GeneratedLesson) -> list[dict[str, Any]]:
     return [marker for marker in markers if isinstance(marker, dict)]
 
 
-def batch_payload(batch_id: str, subject_id: int, rows: list[GeneratedLesson]) -> dict[str, Any]:
-    found = {row.topic_id: (row, marker) for row in rows for marker in batch_markers(row)
-             if marker.get("batch_id") == batch_id}
+def batch_index(rows: list[GeneratedLesson]) -> dict[str, dict[int, tuple[GeneratedLesson, dict[str, Any]]]]:
+    groups: dict[str, dict[int, tuple[GeneratedLesson, dict[str, Any]]]] = {}
+    for row in rows:
+        for marker in batch_markers(row):
+            groups.setdefault(marker["batch_id"], {})[row.topic_id] = (row, marker)
+    return groups
+
+
+def batch_payload(batch_id: str, subject_id: int, rows: list[GeneratedLesson], *,
+                  index: dict[str, dict[int, tuple[GeneratedLesson, dict[str, Any]]]] | None = None) -> dict[str, Any]:
+    found = (index if index is not None else batch_index(rows)).get(batch_id, {})
     if not found:
         raise LessonServiceError(404, "Очередь создания уроков не найдена")
     sample = next(iter(found.values()))[1]
@@ -91,9 +99,12 @@ async def list_generation_batches(subject_id: int, user: AuthPrincipal, db: Asyn
     await require_subject_management(user, subject_id, db)
     rows = await subject_batch_rows(subject_id, db)
     await expire_batch_jobs(rows, db)
-    batch_ids = {marker["batch_id"] for row in rows for marker in batch_markers(row)}
-    return sorted((batch_payload(batch_id, subject_id, rows) for batch_id in batch_ids),
-                  key=lambda batch: batch["created_at"], reverse=True)
+    index = batch_index(rows)
+    ordered = sorted((batch_payload(batch_id, subject_id, rows, index=index) for batch_id in index),
+                     key=lambda batch: batch["created_at"], reverse=True)
+    active = [batch for batch in ordered if batch["status"] in jobs.ACTIVE_STATUSES]
+    terminal = [batch for batch in ordered if batch["status"] not in jobs.ACTIVE_STATUSES]
+    return active + terminal[:3]
 
 
 async def generation_batch_status(batch_id: str, subject_id: int, user: AuthPrincipal, db: AsyncSession) -> dict[str, Any]:
