@@ -12,8 +12,21 @@ from services.educator_access import (
     require_subject_management,
 )
 from services.teacher_assignments import teacher_subject_ids
+from services.subject_deletion import SubjectDeletionError, delete_subject
 
 router = APIRouter(prefix="/api", tags=["subjects"])
+
+
+@router.delete("/subjects/{subject_id}")
+async def remove_subject(
+    subject_id: int,
+    _user: AuthPrincipal = Depends(require_roles("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await delete_subject(subject_id, db)
+    except SubjectDeletionError as exc:
+        raise_http_error(exc)
 
 
 @router.get("/subjects")

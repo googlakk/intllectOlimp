@@ -77,3 +77,14 @@ export function useRenameSubject() {
   return useMutation({ mutationFn: (data: { subjectId: number; name: string; instructionLanguage?: InstructionLanguage }) => request<Subject>(`/subjects/${data.subjectId}`, { method: 'PATCH', body: JSON.stringify({ name: data.name, instruction_language: data.instructionLanguage }) }),
     onSuccess: async () => { await Promise.all(catalogInvalidationKeys.map(queryKey => client.invalidateQueries({ queryKey }))); } });
 }
+
+export function useDeleteSubject() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (subjectId: number) => request<{ deleted: boolean }>(`/subjects/${subjectId}`, { method: 'DELETE' }),
+    onSuccess: async () => {
+      await Promise.all([...catalogInvalidationKeys, ['lesson'], ['lesson-status'], ['lesson-manifest'], ['textbooks'], ['teacher-assignments']]
+        .map(queryKey => client.invalidateQueries({ queryKey })));
+    },
+  });
+}

@@ -15,6 +15,7 @@ import {
   type Topic,
 } from '@/lib/api';
 import { lessonStatusView, lessonTypeLabel } from './listModel';
+import { DeleteProgramButton } from './DeleteProgramButton';
 
 type SubjectPickerProps = {
   isLoading: boolean;
@@ -22,10 +23,11 @@ type SubjectPickerProps = {
   subjects: Subject[] | undefined;
   onSelect: (subjectId: number) => void;
   canManage?: boolean;
+  onDeleted?: (subjectId: number) => void;
 };
 
 /** Выпадающий список предметов выбранного класса и переименование выбранного. */
-export function SubjectPicker({ isLoading, selectedSubject, subjects, onSelect, canManage = false }: SubjectPickerProps) {
+export function SubjectPicker({ isLoading, selectedSubject, subjects, onSelect, canManage = false, onDeleted = () => {} }: SubjectPickerProps) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState('');
   const [language, setLanguage] = useState<InstructionLanguage>('ru');
@@ -106,6 +108,7 @@ export function SubjectPicker({ isLoading, selectedSubject, subjects, onSelect, 
           <Pencil className="h-4 w-4" /> Переименовать
         </button>
       )}
+      {canManage && current && <DeleteProgramButton key={current.id} subject={current} onDeleted={onDeleted} />}
     </div>
   );
 }

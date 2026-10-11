@@ -69,6 +69,10 @@ export default function Lessons() {
         canManage={isAdmin}
         subjects={visibleSubjects}
         onSelect={id => { setSelectedSubject(id); sessionStorage.setItem('teacher-subject', String(id)); }}
+        onDeleted={id => {
+          setSelectedSubject(previous => previous === id ? null : previous);
+          if (sessionStorage.getItem('teacher-subject') === String(id)) sessionStorage.removeItem('teacher-subject');
+        }}
       />
 
       {activeSubject && <SectionsList subjectId={activeSubject} canManage={isAdmin} />}
