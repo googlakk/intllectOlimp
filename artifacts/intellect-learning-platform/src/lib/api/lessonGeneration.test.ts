@@ -41,6 +41,24 @@ describe('background lesson generation', () => {
     expect(vi.mocked(request).mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
   });
 
+  it('waits while a single lesson is queued behind batch work, then returns the result', async () => {
+    vi.mocked(request).mockResolvedValueOnce({ ...running, status: 'queued' })
+      .mockResolvedValueOnce({ ...running, status: 'queued' }).mockResolvedValueOnce(running).mockResolvedValueOnce(succeeded);
+    const result = generateLesson(780, 3);
+    await vi.runAllTimersAsync();
+    await expect(result).resolves.toEqual(lesson);
+    expect(vi.mocked(request).mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+  });
+
+  it('shows cancellation without issuing another generation', async () => {
+    vi.mocked(request).mockResolvedValueOnce({ ...running, status: 'queued' })
+      .mockResolvedValueOnce({ ...running, status: 'cancelled', error: 'Очередь остановлена' });
+    const assertion = expect(generateLesson(780, 3)).rejects.toThrow('Очередь остановлена');
+    await vi.runAllTimersAsync();
+    await assertion;
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
   it('surfaces a failed job without creating a second job', async () => {
     vi.mocked(request).mockResolvedValueOnce(running).mockResolvedValueOnce({ ...running, status: 'failed', error: 'Модель недоступна' });
     const assertion = expect(generateLesson(780, 3)).rejects.toThrow('Модель недоступна');

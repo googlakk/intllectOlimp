@@ -5,7 +5,7 @@ import type { InstructionLanguage } from '@/lib/languages';
 export type LessonGenerationStatus = {
   job_id: string;
   topic_id: number;
-  status: 'running' | 'succeeded' | 'failed';
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
   error?: string | null;
   lesson?: GeneratedLesson | null;
 };
@@ -35,7 +35,7 @@ export async function generateLesson(
   });
   const deadline = Date.now() + MAX_WAIT_MS;
   let readFailures = 0;
-  while (job.status === 'running') {
+  while (job.status === 'queued' || job.status === 'running') {
     if (Date.now() >= deadline) {
       throw new Error('Не удалось дождаться результата. Откройте урок позже, чтобы проверить готовый черновик.');
     }
@@ -48,7 +48,7 @@ export async function generateLesson(
       if (!transient || ++readFailures >= MAX_READ_FAILURES) throw error;
     }
   }
-  if (job.status === 'failed') throw new Error(job.error || 'Не удалось подготовить урок. Попробуйте ещё раз.');
+  if (job.status === 'failed' || job.status === 'cancelled') throw new Error(job.error || 'Не удалось подготовить урок. Попробуйте ещё раз.');
   if (!job.lesson) throw new Error('Сервер не вернул подготовленный урок. Откройте урок повторно.');
   return job.lesson;
 }

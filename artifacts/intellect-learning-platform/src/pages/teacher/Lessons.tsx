@@ -75,7 +75,7 @@ export default function Lessons() {
         }}
       />
 
-      {activeSubject && <SectionsList subjectId={activeSubject} canManage={isAdmin} />}
+      {activeSubject && <SectionsList key={activeSubject} subjectId={activeSubject} canManage={isAdmin} />}
       {activeSubject && isAdmin && <CurriculumGraphPanel subjectId={activeSubject} />}
       {!activeSubject && visibleSubjects.length > 0 && (
         <NoSubjectSelected />

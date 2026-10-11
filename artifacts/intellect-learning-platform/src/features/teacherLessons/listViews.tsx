@@ -16,6 +16,15 @@ import {
 } from '@/lib/api';
 import { lessonStatusView, lessonTypeLabel } from './listModel';
 import { DeleteProgramButton } from './DeleteProgramButton';
+import { useBatchGeneration } from './useBatchGeneration';
+import { BatchGenerationControls } from './BatchGenerationControls';
+import { generationBlockReason, generationStatusLabels } from './batchGenerationModel';
+import type { BatchGenerationItem } from '@/lib/api';
+
+type GenerationSelection = {
+  selectedIds: number[]; active: Map<number, BatchGenerationItem>; disabled: boolean;
+  toggle: (id: number, checked: boolean) => void; select: (ids: number[]) => void;
+};
 
 type SubjectPickerProps = {
   isLoading: boolean;
@@ -127,6 +136,12 @@ export function SectionsList({ subjectId, canManage = false }: { subjectId: numb
   const [showArchive, setShowArchive] = useState(false);
   const [creatingIn, setCreatingIn] = useState<number | null>(null);
   const { data: sections, isLoading, error, refetch } = useTeacherOutline(subjectId, showArchive);
+  const topics = (sections || []).flatMap(section => section.topics).filter(topic => !topic.archived_at);
+  const generation = useBatchGeneration(subjectId, topics);
+  const selection: GenerationSelection = {
+    selectedIds: generation.selectedIds, active: generation.active, disabled: generation.start.isPending,
+    toggle: generation.toggle, select: generation.select,
+  };
 
   if (isLoading) {
     return (
@@ -138,33 +153,35 @@ export function SectionsList({ subjectId, canManage = false }: { subjectId: numb
 
   return (
     <div className="space-y-6">
-      {canManage && <div className="flex flex-wrap items-center gap-4"><button type="button" onClick={() => setShowArchive(!showArchive)} className="rounded-lg border px-4 py-2 font-semibold">{showArchive ? 'Вернуться к программе' : 'Архив уроков'}</button>{showArchive && <p className="text-sm text-muted-foreground">Результаты учеников сохранены. Восстановленные уроки вернутся черновиками.</p>}</div>}
+      {canManage && <div className="flex flex-wrap items-center gap-4"><button type="button" onClick={() => { generation.select([]); setShowArchive(!showArchive); }} className="rounded-lg border px-4 py-2 font-semibold">{showArchive ? 'Вернуться к программе' : 'Архив уроков'}</button>{showArchive && <p className="text-sm text-muted-foreground">Результаты учеников сохранены. Восстановленные уроки вернутся черновиками.</p>}</div>}
+      {!showArchive && !error && <BatchGenerationControls subjectId={subjectId} topics={topics} workflow={generation} />}
       {canManage && !showArchive && <CreateSection subjectId={subjectId} />}
       {error && <p role="alert">Не удалось загрузить программу. <button onClick={() => refetch()}>Повторить</button></p>}
       {sections?.map((section) => (
         <div key={section.id} className="bg-card rounded-[2rem] border border-border shadow-sm overflow-hidden">
-          <div className="px-6 md:px-8 py-5 bg-muted/30 border-b border-border flex justify-between items-center">
+          <div className="px-6 md:px-8 py-5 bg-muted/30 border-b border-border flex flex-wrap gap-3 justify-between items-center">
             <h3 className="font-bold text-lg text-foreground uppercase tracking-wide text-primary">
               Раздел {section.sort_order}: {section.name}
             </h3>
+            {!showArchive && <button type="button" disabled={selection.disabled} onClick={() => selection.select([...selection.selectedIds, ...section.topics.filter(topic => !generationBlockReason(topic, selection.active.get(topic.id))).map(topic => topic.id)])} className="rounded-lg border bg-card px-3 py-1 text-sm font-semibold">Выбрать раздел</button>}
             <span className="text-sm font-bold text-muted-foreground bg-card px-3 py-1 rounded-lg border border-border">
               {section.total_hours} часов
             </span>
           </div>
           {canManage && !showArchive && <div className="p-4"><button type="button" onClick={() => setCreatingIn(section.id)} className="rounded-lg bg-primary px-4 py-2 font-semibold text-primary-foreground">Создать урок</button></div>}
           {canManage && creatingIn === section.id && <TopicForm section={section} onClose={() => setCreatingIn(null)} />}
-          <TopicsList canManage={canManage} section={{ ...section, topics: section.topics.filter(topic => Boolean(topic.archived_at) === showArchive) }} />
+          <TopicsList selection={showArchive ? undefined : selection} canManage={canManage} section={{ ...section, topics: section.topics.filter(topic => Boolean(topic.archived_at) === showArchive) }} />
         </div>
       ))}
     </div>
   );
 }
 
-function TopicsList({ section, canManage }: { section: SectionOutline; canManage: boolean }) {
+function TopicsList({ section, canManage, selection }: { section: SectionOutline; canManage: boolean; selection?: GenerationSelection }) {
   return (
     <div className="divide-y divide-border/50">
       {section.topics.map((topic) => (
-        <TopicRow key={topic.id} topic={topic} canManage={canManage} />
+        <TopicRow key={topic.id} topic={topic} canManage={canManage} selection={selection} />
       ))}
       {section.topics.length === 0 && (
         <div className="p-8 text-center text-sm font-medium text-muted-foreground">Нет тем в этом разделе</div>
@@ -173,8 +190,10 @@ function TopicsList({ section, canManage }: { section: SectionOutline; canManage
   );
 }
 
-function TopicRow({ topic, canManage }: { topic: Topic; canManage: boolean }) {
+function TopicRow({ topic, canManage, selection }: { topic: Topic; canManage: boolean; selection?: GenerationSelection }) {
   const status = lessonStatusView(topic, false);
+  const activeJob = selection?.active.get(topic.id);
+  const blocked = generationBlockReason(topic, activeJob);
   const archive = useArchiveTopic();
   const queryClient = useQueryClient();
   const prefetchLesson = () => {
@@ -189,7 +208,8 @@ function TopicRow({ topic, canManage }: { topic: Topic; canManage: boolean }) {
   return (
     <div className="p-6 md:px-8 flex flex-col md:flex-row md:items-start justify-between gap-4 hover:bg-muted/10 transition-colors">
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-3 mb-2">
+        <div className="flex flex-wrap items-center gap-3 mb-2">
+          {selection && <input type="checkbox" aria-label={`Выбрать урок: ${topic.name}`} title={blocked || 'Выбрать для фоновой подготовки'} checked={selection.selectedIds.includes(topic.id)} disabled={selection.disabled || Boolean(blocked)} onChange={event => selection.toggle(topic.id, event.target.checked)} className="h-4 w-4 shrink-0 accent-primary" />}
           {topic.ktp_number && (
             <span className="text-xs font-mono font-bold bg-muted px-2 py-1 rounded text-muted-foreground">
               {topic.ktp_number}
@@ -201,6 +221,7 @@ function TopicRow({ topic, canManage }: { topic: Topic; canManage: boolean }) {
               {topic.archived_at ? 'В архиве' : status.badgeText}
             </span>
           )}
+          {activeJob && <span role="status" className="rounded bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">{generationStatusLabels[activeJob.status]}</span>}
         </div>
         <div className="text-sm font-semibold text-muted-foreground flex items-center gap-4">
           <span className="bg-card border border-border px-2 py-0.5 rounded">{topic.hours} ч.</span>
