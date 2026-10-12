@@ -1,5 +1,7 @@
 import unittest
 
+from sqlalchemy.dialects import postgresql
+
 from models import Section, Subject, Topic
 from services.catalog import (
     cached_subject_outline,
@@ -45,6 +47,7 @@ class FakeOutlineSession:
         )
         self.scalar_calls = 0
         self.execute_calls = 0
+        self.statement = None
 
     async def scalars(self, _statement):
         self.scalar_calls += 1
@@ -52,6 +55,7 @@ class FakeOutlineSession:
 
     async def execute(self, _statement):
         self.execute_calls += 1
+        self.statement = _statement
         return FakeExecuteResult([(self.section, self.topic, 42, "published", True, True)])
 
     async def scalar(self, _statement):
@@ -185,6 +189,19 @@ class CatalogOutlineTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("blocks", topic)
         self.assertNotIn("lesson_document", topic)
         self.assertNotIn("lesson_metadata", topic)
+
+    async def test_subject_outline_normalizes_json_type_before_counting_blocks(self):
+        db = FakeOutlineSession()
+        await list_subject_outline(1, db)  # type: ignore[arg-type]
+
+        sql = str(db.statement.compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True},
+        ))
+        self.assertIn("jsonb_array_length(CAST(generated_lessons.blocks AS JSONB))", sql)
+        self.assertIn("jsonb_typeof(CAST(generated_lessons.blocks AS JSONB)) = 'array'", sql)
+        self.assertIn("ELSE false END", sql)
+        self.assertNotIn("json_array_length(", sql)
+        self.assertNotIn("generated_lessons.blocks,", sql)
 
     async def test_subject_outline_uses_short_lived_cache(self):
         db = FakeOutlineSession()

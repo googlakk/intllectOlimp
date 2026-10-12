@@ -2,7 +2,8 @@ from typing import Any
 from copy import deepcopy
 from time import monotonic
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, cast, func, or_, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import GeneratedLesson, Section, Subject, Topic
@@ -132,11 +133,18 @@ async def list_subject_outline(
     cached = None if include_archived else cached_subject_outline(subject_id)
     if cached is not None:
         return cached
+    # Existing databases can store blocks as JSON or JSONB. Normalize the SQL
+    # operand explicitly and tolerate legacy null/scalar values in summaries.
+    blocks = cast(GeneratedLesson.blocks, JSONB)
+    has_blocks = case(
+        (func.jsonb_typeof(blocks) == "array", func.jsonb_array_length(blocks) > 0),
+        else_=False,
+    )
     rows = (
         await db.execute(
             select(Section, Topic, GeneratedLesson.id, GeneratedLesson.status,
                    or_(GeneratedLesson.active_version_id.is_not(None),
-                       func.coalesce(func.json_array_length(GeneratedLesson.blocks), 0) > 0),
+                       has_blocks),
                    GeneratedLesson.published_version_id.is_not(None))
             .outerjoin(Topic, and_(Topic.section_id == Section.id, *([] if include_archived else [Topic.archived_at.is_(None)])))
             .outerjoin(GeneratedLesson, GeneratedLesson.topic_id == Topic.id)
