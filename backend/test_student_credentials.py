@@ -24,7 +24,7 @@ def session(rows):
     result = MagicMock()
     result.all.return_value = rows
     db.scalars = AsyncMock(return_value=result)
-    db.get = AsyncMock(side_effect=lambda model, pid: next((row for row in rows if row.id == pid), None))
+    db.get = AsyncMock(side_effect=lambda model, pid, **kwargs: next((row for row in rows if row.id == pid), None))
     db.commit = AsyncMock()
     db.rollback = AsyncMock()
     db.flush = AsyncMock()

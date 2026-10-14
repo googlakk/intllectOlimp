@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { request } from './client';
-import { resetAccountPassword, resetClassroomPasswords } from './accounts';
+import { deleteStudentAccount, resetAccountPassword, resetClassroomPasswords, restoreStudentAccount } from './accounts';
 
 vi.mock('./client', () => ({ request: vi.fn(), ApiError: class extends Error {} }));
 
@@ -17,5 +17,17 @@ describe('temporary password requests', () => {
   it('resets only the explicit selected students and omits the password for automatic issuance', async () => {
     await resetClassroomPasswords(7, [11, 12]);
     expect(request).toHaveBeenCalledExactlyOnceWith('/accounts/classrooms/7/reset-passwords', { method: 'POST', body: JSON.stringify({ profile_ids: [11, 12] }) });
+  });
+});
+
+describe('student lifecycle requests', () => {
+  beforeEach(() => vi.mocked(request).mockReset());
+  it('removes only the selected profile from the expected classroom', async () => {
+    await deleteStudentAccount(7, 12);
+    expect(request).toHaveBeenCalledExactlyOnceWith('/accounts/classrooms/7/students/12', { method: 'DELETE' });
+  });
+  it('restores the exact profile to the explicitly chosen classroom', async () => {
+    await restoreStudentAccount(12, 8);
+    expect(request).toHaveBeenCalledExactlyOnceWith('/accounts/students/12/restore', { method: 'POST', body: JSON.stringify({ target_classroom_id: 8 }) });
   });
 });

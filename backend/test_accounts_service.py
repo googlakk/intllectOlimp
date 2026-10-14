@@ -53,7 +53,7 @@ class AccountServiceTests(unittest.IsolatedAsyncioTestCase):
         current = ClassroomStudent(id=20, classroom_id=7, student_id=9)
         student = Student(id=9, name="Student", grade=7)
         db = MagicMock()
-        db.get = AsyncMock(side_effect=lambda model, row_id: {
+        db.get = AsyncMock(side_effect=lambda model, row_id, **kwargs: {
             (Profile, 4): target_profile,
             (Student, 9): student,
         }.get((model, row_id)))

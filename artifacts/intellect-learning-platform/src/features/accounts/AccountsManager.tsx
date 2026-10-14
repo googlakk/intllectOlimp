@@ -5,6 +5,7 @@ import { type IssuedCredentials, type TeacherAccount, useAssignTeacher, useClass
 import { SubjectTeachersPanel } from './SubjectTeachersPanel';
 import { StudentAccountsPanel } from './StudentAccountsPanel';
 import { CredentialsDialog } from './CredentialsDialog';
+import { ArchivedStudentsPanel } from './ArchivedStudentsPanel';
 
 export function AccountsManager() {
   const { user } = useAuth();
@@ -33,7 +34,8 @@ export function AccountsManager() {
     {isAdmin && <SubjectTeachersPanel onCredentials={setCredentials} onBlock={teacher => void run(() => setBlocked.mutateAsync({ profileId: teacher.profile_id, blocked: teacher.status !== 'blocked' }))} onReset={teacher => void run(async () => { const result = await resetPassword.mutateAsync(teacher.profile_id); setCredentials([{ profile_id: teacher.profile_id, display_name: teacher.name, login: teacher.login, temporary_password: result.temporary_password }]); })} />}
     {isLoading && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Загружаем учебные классы…</p>}
     <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]"><aside className="border-r pr-4"><p className="mb-3 text-xs font-bold uppercase text-muted-foreground">Учебные классы</p><div className="space-y-1">{classrooms.map(room => <button key={room.id} onClick={() => setClassroomId(room.id)} className={`w-full rounded-md px-3 py-3 text-left ${room.id === classroomId ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}><span className="block font-semibold">{room.name}</span><span className="text-xs text-muted-foreground">{room.grade} класс · {room.student_count} учеников</span></button>)}{!classrooms.length && <p className="py-6 text-sm text-muted-foreground">Классы ещё не созданы</p>}</div></aside>
-    <section className="min-w-0 space-y-5">{classroomId && classroom ? <><StudentAccountsPanel key={classroomId} classroomId={classroomId} classrooms={classrooms} onCredentials={setCredentials} onError={setError} />{isAdmin && <AdminTeacherPanel classroom={classroom} teachers={teachers} onAssign={profileId => void run(() => assignTeacher.mutateAsync({ classroom_id: classroomId, teacher_profile_id: profileId }))} onUnassign={profileId => void run(() => unassignTeacher.mutateAsync({ classroom_id: classroomId, teacher_profile_id: profileId }))} />}</> : <div className="grid min-h-64 place-items-center text-muted-foreground"><Users className="h-8 w-8" /></div>}</section></div>
+    <section className="min-w-0 space-y-5">{classroomId && classroom ? <><StudentAccountsPanel key={classroomId} classroomId={classroomId} classrooms={classrooms} isAdmin={isAdmin} onCredentials={setCredentials} onError={setError} />{isAdmin && <AdminTeacherPanel classroom={classroom} teachers={teachers} onAssign={profileId => void run(() => assignTeacher.mutateAsync({ classroom_id: classroomId, teacher_profile_id: profileId }))} onUnassign={profileId => void run(() => unassignTeacher.mutateAsync({ classroom_id: classroomId, teacher_profile_id: profileId }))} />}</> : <div className="grid min-h-64 place-items-center text-muted-foreground"><Users className="h-8 w-8" /></div>}</section></div>
+    {isAdmin && <ArchivedStudentsPanel classrooms={classrooms} />}
     {credentials.length > 0 && <CredentialsDialog credentials={credentials} onClose={() => setCredentials([])} />}
   </div>;
 }

@@ -144,9 +144,40 @@ class AuthCacheTests(unittest.IsolatedAsyncioTestCase):
         db = MagicMock()
         db.execute = AsyncMock(return_value=result)
         first = await principal_for_auth_user(str(profile.auth_user_id), "t1", db)
+        db.scalar = AsyncMock(return_value="active")
         second = await principal_for_auth_user(str(profile.auth_user_id), "t2", db)
         self.assertEqual(db.execute.await_count, 1)
         self.assertEqual((first.access_token, second.access_token), ("t1", "t2"))
         forget_principal(profile.auth_user_id)
         await principal_for_auth_user(str(profile.auth_user_id), "t3", db)
         self.assertEqual(db.execute.await_count, 2)
+
+    async def test_removed_student_is_denied_even_with_cached_identity_and_valid_token(self):
+        from services import auth
+        target = Profile(id=12, auth_user_id=UUID("00000000-0000-0000-0000-000000000002"), organization_id=2, role="student",
+                         login_name="s", display_name="S", status="active", must_change_password=False, student_id=5)
+        result = MagicMock()
+        result.one_or_none.return_value = (target, 7)
+        db = MagicMock()
+        db.execute = AsyncMock(return_value=result)
+        await principal_for_auth_user(str(target.auth_user_id), "cached-token", db)
+        db.scalar = AsyncMock(return_value="archived")
+        with self.assertRaises(AuthServiceError) as error:
+            await principal_for_auth_user(str(target.auth_user_id), "cached-token", db)
+        self.assertEqual(error.exception.code, "account_inactive")
+        self.assertEqual(error.exception.status_code, 403)
+        self.assertNotIn(target.auth_user_id, auth._principals)
+        self.assertEqual(db.execute.await_count, 1)
+
+    async def test_teacher_identity_cache_keeps_existing_query_budget(self):
+        target = Profile(id=12, auth_user_id=UUID("00000000-0000-0000-0000-000000000002"), organization_id=2, role="teacher",
+                         login_name="t", display_name="T", status="active", must_change_password=False, teacher_id=5)
+        result = MagicMock()
+        result.one_or_none.return_value = (target, None)
+        db = MagicMock()
+        db.execute = AsyncMock(return_value=result)
+        db.scalar = AsyncMock()
+        await principal_for_auth_user(str(target.auth_user_id), "t1", db)
+        await principal_for_auth_user(str(target.auth_user_id), "t2", db)
+        db.scalar.assert_not_awaited()
+        self.assertEqual(db.execute.await_count, 1)

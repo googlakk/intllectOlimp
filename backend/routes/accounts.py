@@ -23,6 +23,7 @@ from services.auth import AuthPrincipal, AuthServiceError
 from services.student_credentials import validate_temporary_password
 from services.supabase_auth import normalize_login
 from services.teacher_assignments import replace_teacher_subjects, teacher_subject_options
+from services.student_lifecycle import list_removed_students, remove_student, restore_student
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -242,6 +243,37 @@ async def move_student(
     db: AsyncSession = Depends(get_db),
 ):
     await transfer_student(user, student_profile_id=student_profile_id, target_classroom_id=payload.target_classroom_id, db=db)
+    return {"ok": True}
+
+
+@router.delete("/classrooms/{classroom_id}/students/{student_profile_id}")
+async def delete_student(
+    classroom_id: int,
+    student_profile_id: int,
+    user: AuthPrincipal = Depends(require_roles("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    await remove_student(user, classroom_id=classroom_id, student_profile_id=student_profile_id, db=db)
+    return {"ok": True}
+
+
+@router.get("/students/archived")
+async def archived_students(
+    user: AuthPrincipal = Depends(require_roles("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    return await list_removed_students(user, db)
+
+
+@router.post("/students/{student_profile_id}/restore")
+async def restore_removed_student(
+    student_profile_id: int,
+    payload: TransferInput,
+    user: AuthPrincipal = Depends(require_roles("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    await restore_student(user, student_profile_id=student_profile_id,
+                          target_classroom_id=payload.target_classroom_id, db=db)
     return {"ok": True}
 
 

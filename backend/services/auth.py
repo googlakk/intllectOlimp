@@ -60,6 +60,15 @@ def forget_principal(auth_user_id: UUID | str | None) -> None:
         pass
 
 
+def _require_active_status(status: str | None) -> None:
+    if status == "active":
+        return
+    message = {"blocked": "Аккаунт заблокирован.", "archived": "Аккаунт ученика удалён. Обратитесь к администратору."}.get(
+        status, "Аккаунт пока не активирован.",
+    )
+    raise AuthServiceError(403, message, code="account_blocked" if status == "blocked" else "account_inactive")
+
+
 async def principal_for_auth_user(auth_user_id: str, access_token: str, db: AsyncSession) -> AuthPrincipal:
     try:
         parsed_auth_user_id = UUID(auth_user_id)
@@ -67,6 +76,13 @@ async def principal_for_auth_user(auth_user_id: str, access_token: str, db: Asyn
         raise AuthServiceError(status_code=401, detail="Сессия недействительна.", code="session_invalid") from exc
     cached = _principals.get(parsed_auth_user_id)
     if cached and cached[0] > time.monotonic():
+        # A removal on another worker must also deny an already verified session.
+        # Keep identity caching, but always read the authoritative access status.
+        if cached[1].role == "student":
+            status = await db.scalar(select(Profile.status).where(Profile.auth_user_id == parsed_auth_user_id))
+            if status != "active":
+                forget_principal(parsed_auth_user_id)
+                _require_active_status(status)
         return replace(cached[1], access_token=access_token)
     row = (
         await db.execute(
@@ -78,10 +94,7 @@ async def principal_for_auth_user(auth_user_id: str, access_token: str, db: Asyn
     if row is None:
         raise AuthServiceError(status_code=403, detail="Профиль платформы не создан.", code="profile_missing")
     profile, grade = row
-    if profile.status != "active":
-        message = "Аккаунт заблокирован." if profile.status == "blocked" else "Аккаунт пока не активирован."
-        code = "account_blocked" if profile.status == "blocked" else "account_inactive"
-        raise AuthServiceError(status_code=403, detail=message, code=code)
+    _require_active_status(profile.status)
     principal = AuthPrincipal(
         profile_id=profile.id,
         auth_user_id=profile.auth_user_id,

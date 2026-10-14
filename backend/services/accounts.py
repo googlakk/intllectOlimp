@@ -391,9 +391,11 @@ async def transfer_student(
     user: AuthPrincipal, *, student_profile_id: int, target_classroom_id: int, db: AsyncSession
 ) -> None:
     target = await require_classroom_management(user, target_classroom_id, db)
-    profile = await db.get(Profile, student_profile_id)
+    profile = await db.get(Profile, student_profile_id, with_for_update=True)
     if profile is None or profile.organization_id != user.organization_id or profile.student_id is None:
         raise AuthServiceError(status_code=404, detail="Ученик не найден.")
+    if profile.status == "archived":
+        raise AuthServiceError(409, "Сначала восстановите удалённого ученика.")
     current = await db.scalar(select(ClassroomStudent).where(
         ClassroomStudent.student_id == profile.student_id,
         ClassroomStudent.left_at.is_(None),
@@ -421,14 +423,17 @@ async def transfer_student(
     await db.flush()
     await refresh_student_access(profile.student_id, db)
     await db.commit()
+    forget_principal(profile.auth_user_id)
 
 
 async def set_account_blocked(
     user: AuthPrincipal, *, target_profile_id: int, blocked: bool, db: AsyncSession
 ) -> None:
-    profile = await db.get(Profile, target_profile_id)
+    profile = await db.get(Profile, target_profile_id, with_for_update=True)
     if profile is None or profile.organization_id != user.organization_id or profile.role == "admin":
         raise AuthServiceError(status_code=404, detail="Аккаунт не найден.")
+    if profile.status == "archived":
+        raise AuthServiceError(409, "Сначала восстановите удалённого ученика.")
     if user.role == "teacher":
         if profile.student_id is None:
             raise AuthServiceError(status_code=403, detail="Учитель может блокировать только своего ученика.")
@@ -481,9 +486,11 @@ async def reset_temporary_password(
     temporary_password: str | None = None,
 ) -> str:
     custom_password = validate_temporary_password(temporary_password)
-    profile = await db.get(Profile, target_profile_id)
+    profile = await db.get(Profile, target_profile_id, with_for_update=True)
     if profile is None or profile.organization_id != user.organization_id or profile.role == "admin":
         raise AuthServiceError(status_code=404, detail="Аккаунт не найден.")
+    if profile.status == "archived":
+        raise AuthServiceError(409, "Сначала восстановите удалённого ученика.")
     if user.role not in ("admin", "teacher"):
         raise AuthServiceError(403, "Нет доступа к смене паролей.")
     if user.role == "teacher":

@@ -9,6 +9,7 @@ export type ClassroomStudent = {
   student_id: number; profile_id: number; name: string; login: string; grade: number;
   status: 'active' | 'blocked' | 'invited' | 'archived'; must_change_password: boolean; enrolled_at: string;
 };
+export type ArchivedStudent = Omit<ClassroomStudent, 'enrolled_at'> & { status: 'archived' };
 export type TeacherAccount = {
   teacher_id: number; profile_id: number; name: string; login: string;
   status: string; must_change_password: boolean;
@@ -127,4 +128,28 @@ export const useTransferStudent = () => useRefreshingMutation(
     method: 'POST', body: JSON.stringify({ target_classroom_id: data.target_classroom_id }),
   }),
   [['accounts', 'classrooms']],
+);
+
+export const deleteStudentAccount = (classroomId: number, profileId: number) =>
+  request<{ ok: boolean }>(`/accounts/classrooms/${classroomId}/students/${profileId}`, { method: 'DELETE' });
+
+export const useDeleteStudentAccount = () => useRefreshingMutation(
+  (data: { classroomId: number; profileId: number }) => deleteStudentAccount(data.classroomId, data.profileId),
+  [['accounts'], ['dashboard-students'], ['dashboard-overview']],
+);
+
+export const useArchivedStudents = (enabled: boolean) => useQuery({
+  queryKey: ['accounts', 'archived-students'],
+  queryFn: () => request<ArchivedStudent[]>('/accounts/students/archived'),
+  enabled,
+});
+
+export const restoreStudentAccount = (profileId: number, targetClassroomId: number) =>
+  request<{ ok: boolean }>(`/accounts/students/${profileId}/restore`, {
+    method: 'POST', body: JSON.stringify({ target_classroom_id: targetClassroomId }),
+  });
+
+export const useRestoreStudentAccount = () => useRefreshingMutation(
+  (data: { profileId: number; targetClassroomId: number }) => restoreStudentAccount(data.profileId, data.targetClassroomId),
+  [['accounts'], ['dashboard-students'], ['dashboard-overview']],
 );
