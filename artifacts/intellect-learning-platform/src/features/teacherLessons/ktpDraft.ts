@@ -1,5 +1,7 @@
 import type { KtpDraft, KtpSectionDraft, KtpTopicDraft } from '@/lib/api';
 
+export const KTP_GRADES = [7, 8, 9, 10, 11];
+
 export type KtpDraftSummary = {
   sections: number;
   topics: number;
@@ -47,7 +49,7 @@ export function normalizeKtpDraft(draft: KtpDraft): KtpDraft {
 
 export function validateKtpDraft(draft: KtpDraft): string | null {
   if (!draft.subject_name.trim()) return 'Укажите предмет';
-  if (draft.grade < 7 || draft.grade > 10) return 'Для этого шаблона выберите 7–10 класс';
+  if (!KTP_GRADES.includes(draft.grade)) return 'Для этого шаблона выберите 7–11 класс';
   if (draft.hours_per_week <= 0) return 'Часов в неделю должно быть больше 0';
   if (!draft.sections.length) return 'В КТП нет разделов с темами';
   return null;

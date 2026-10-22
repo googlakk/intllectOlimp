@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { KtpDraft } from '@/lib/api';
-import { normalizeKtpDraft, summarizeKtpDraft, validateKtpDraft } from './ktpDraft';
+import { KTP_GRADES, normalizeKtpDraft, summarizeKtpDraft, validateKtpDraft } from './ktpDraft';
 
 const draft: KtpDraft = {
   subject_name: ' Математика ', grade: 7, hours_per_week: 4, hours_per_year: 99,
@@ -23,8 +23,20 @@ describe('KTP draft helpers', () => {
     expect(normalized.hours_per_year).toBe(3);
   });
 
-  it('limits the standard 2026 workflow to grades 7-10', () => {
-    expect(validateKtpDraft({ ...draft, grade: 6 })).toContain('7–10');
-    expect(validateKtpDraft(draft)).toBeNull();
+  it.each([6, 12, 10.5, Number.NaN])('rejects unsupported grade %s', (grade) => {
+    expect(validateKtpDraft({ ...draft, grade })).toContain('7–11');
+  });
+
+  it.each([7, 8, 9, 10, 11])('accepts grade %s in the import selector and validation', (grade) => {
+    expect(KTP_GRADES).toContain(grade);
+    expect(validateKtpDraft({ ...draft, grade })).toBeNull();
+  });
+
+  it('preserves an English grade 11 course when normalizing for upload', () => {
+    const normalized = normalizeKtpDraft({ ...draft, subject_name: ' Geography ', grade: 11, instruction_language: 'en' });
+    expect(normalized.grade).toBe(11);
+    expect(normalized.instruction_language).toBe('en');
+    expect(normalized.subject_name).toBe('Geography');
+    expect(validateKtpDraft(normalized)).toBeNull();
   });
 });

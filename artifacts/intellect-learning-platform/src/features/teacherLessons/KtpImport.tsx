@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { parseKtpFile, uploadKtp, type KtpDraft, type KtpTopicDraft } from '@/lib/api';
-import { emptySection, emptyTopic, normalizeKtpDraft, summarizeKtpDraft, validateKtpDraft } from './ktpDraft';
+import { emptySection, emptyTopic, KTP_GRADES, normalizeKtpDraft, summarizeKtpDraft, validateKtpDraft } from './ktpDraft';
 import { isInstructionLanguage, LANGUAGE_OPTIONS } from '@/lib/languages';
 
 const TEMPLATE_URL = '/templates/ktp-template-2026.xlsx';
@@ -157,7 +157,7 @@ function KtpImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
             <div className="flex flex-col justify-between gap-3 border-t border-border pt-5 sm:flex-row sm:items-center">
               <div>
                 <p className="font-bold text-foreground">Нет готового файла?</p>
-                <p className="text-sm text-muted-foreground">Шаблон подходит для любого предмета 7–10 классов.</p>
+                <p className="text-sm text-muted-foreground">Шаблон подходит для любого предмета 7–11 классов.</p>
               </div>
               <a href={TEMPLATE_URL} download className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-bold text-foreground hover:bg-muted">
                 <Download className="h-4 w-4" /> Скачать шаблон
@@ -190,7 +190,7 @@ function KtpImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
                   </label>
                   <label className="text-sm font-semibold text-foreground">Класс
                     <select value={draft.grade} onChange={(event) => setDraft({ ...draft, grade: Number(event.target.value) })} className={`${fieldClass()} mt-1.5`}>
-                      {[7, 8, 9, 10].map((grade) => <option value={grade} key={grade}>{grade}</option>)}
+                      {KTP_GRADES.map((grade) => <option value={grade} key={grade}>{grade}</option>)}
                     </select>
                   </label>
                   <label className="text-sm font-semibold text-foreground">Язык
@@ -278,7 +278,7 @@ export function KtpImportPanel() {
     <section className="grid gap-6 border-y border-border py-6 md:grid-cols-[1fr_auto] md:items-center">
       <div className="flex items-start gap-4">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><FileSpreadsheet className="h-5 w-5" /></div>
-        <div><h2 className="text-lg font-bold text-foreground">Добавить КТП</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Загрузите план по любому предмету для 7–10 классов. Перед импортом вы увидите все разделы, темы и цели.</p></div>
+        <div><h2 className="text-lg font-bold text-foreground">Добавить КТП</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Загрузите план по любому предмету для 7–11 классов. Перед импортом вы увидите все разделы, темы и цели.</p></div>
       </div>
       <div className="flex flex-wrap gap-2 md:justify-end">
         <a href={TEMPLATE_URL} download className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-bold hover:bg-muted"><Download className="h-4 w-4" /> Шаблон</a>
