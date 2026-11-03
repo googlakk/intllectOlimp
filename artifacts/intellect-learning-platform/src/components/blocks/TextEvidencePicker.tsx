@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, XCircle } from 'lucide-react';
@@ -9,9 +10,10 @@ export interface TextEvidencePickerProps {
   correct_segments: string[];
   explanation: string;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 }
 
-export default function TextEvidencePicker({ passage, claim, correct_segments, explanation, onAnswer }: TextEvidencePickerProps) {
+export default function TextEvidencePicker({ passage, claim, correct_segments, explanation, onAnswer, onResponse }: TextEvidencePickerProps) {
   const [selected, setSelected] = useState<number[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
@@ -51,6 +53,7 @@ export default function TextEvidencePicker({ passage, claim, correct_segments, e
     const correct = allSelectedCorrect && allCorrectSelected;
     
     setIsCorrect(correct);
+    onResponse?.({ value: selected.map(index => sentences[index]).join('\n'), outcome: correct ? 'correct' : 'incorrect' });
     onAnswer?.(correct);
   };
 

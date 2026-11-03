@@ -1,3 +1,4 @@
+import type { ResponseDetails } from '@/features/lessons/responseDetails';
 import type { InstructionLanguage } from '../languages';
 
 export type User = {
@@ -83,7 +84,7 @@ export type WarpGate = {
   explanation: string;
   trigger_skill_ids: number[];
 };
-export type ProgressRecord = { responses?: Record<string, string>; topic_name?: string; archived_at?: string | null; id: number; student_id: number; topic_id: number; status: 'not_started' | 'in_progress' | 'completed'; score: number | null; mastery_level: string | null; mastery_status?: MasteryStatus; objective_mastery?: Record<string, ObjectiveMastery>; objective_evidence?: Record<string, ObjectiveEvidence[]>; time_spent_sec: number; attempts: number; current_step: number; max_opened_step: number; answers: Record<string, boolean>; attempts_by_step: Record<string, number>; elapsed_time_sec: number; lesson_version_id?: number | null; current_episode_id?: string | null; current_scene_id?: string | null; avatar_enabled?: boolean; audio_enabled?: boolean; updated_at?: string | null; warp_gates?: WarpGate[]; };
+export type ProgressRecord = { response_details?: ResponseDetails; responses?: Record<string, string>; topic_name?: string; archived_at?: string | null; id: number; student_id: number; topic_id: number; status: 'not_started' | 'in_progress' | 'completed'; score: number | null; mastery_level: string | null; mastery_status?: MasteryStatus; objective_mastery?: Record<string, ObjectiveMastery>; objective_evidence?: Record<string, ObjectiveEvidence[]>; time_spent_sec: number; attempts: number; current_step: number; max_opened_step: number; answers: Record<string, boolean>; attempts_by_step: Record<string, number>; elapsed_time_sec: number; lesson_version_id?: number | null; current_episode_id?: string | null; current_scene_id?: string | null; avatar_enabled?: boolean; audio_enabled?: boolean; updated_at?: string | null; warp_gates?: WarpGate[]; };
 export type CurriculumTopicState = 'locked' | 'available' | 'in_progress' | 'mastered';
 export type CurriculumMapTopic = {
   lesson_type?: LessonType;

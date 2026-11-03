@@ -54,3 +54,16 @@ describe('buildSaveProgressInput', () => {
     });
   });
 });
+
+it('keeps the latest submitted answer through subsequent answer and completion saves', () => {
+  const responses = { current: {} as import('./responseDetails').ResponseDetails };
+  const build = (status: 'in_progress' | 'completed') => buildSaveProgressInput({
+    studentId: 1, topicId: 2, status, answers: { '3_q0': true }, attemptsByStep: {},
+    elapsedTimeSec: 12, maxStep: 3, step: 3, responseDetails: responses.current,
+  });
+  responses.current = { '3_q0': { value: '42', outcome: 'correct', questionIndex: 0 } };
+  const intermediate = build('in_progress');
+  const completed = build('completed');
+  expect(intermediate.response_details).toEqual(responses.current);
+  expect(completed.response_details?.['3_q0'].value).toBe('42');
+});

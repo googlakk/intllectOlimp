@@ -1,20 +1,21 @@
+import type { ResponseCaptureProps } from '@/features/lessons/responseDetails';
 import { useState } from 'react';
 import { Mountain, Signpost, ArrowRight } from 'lucide-react';
 import { RichText } from '@/components/blocks/RichText';
 import { ChoiceButtons, GameError, GameFrame, GameResult } from './GameFrame';
 import { readGame, type GameData, type GameProps } from './model';
 
-export default function LearningPath(props: GameProps) {
+export default function LearningPath(props: GameProps & ResponseCaptureProps) {
   const [session, setSession] = useState(0); const data = readGame('LearningPath', props);
-  return data ? <Journey key={`${session}:${JSON.stringify(data)}`} data={data} reset={() => setSession(n => n + 1)} onAnswer={props.onAnswer} /> : <GameError />;
+  return data ? <Journey key={`${session}:${JSON.stringify(data)}`} data={data} reset={() => setSession(n => n + 1)} onAnswer={props.onAnswer} onResponse={props.onResponse} /> : <GameError />;
 }
-function Journey({ data, reset, onAnswer }: { data: GameData['LearningPath']; reset: () => void; onAnswer?: (v: boolean) => void }) {
+function Journey({ data, reset, onAnswer, onResponse }: ResponseCaptureProps & { data: GameData['LearningPath']; reset: () => void; onAnswer?: (v: boolean) => void }) {
   const [step, setStep] = useState(0), [route, setRoute] = useState<'support' | 'challenge' | null>(null);
   const [answer, setAnswer] = useState<number | null>(null), [checked, setChecked] = useState<boolean | null>(null);
   const [paths, setPaths] = useState<string[]>([]);
   const done = step === data.checkpoints.length, point = data.checkpoints[step];
   const question = !done && route ? point[route] : null;
-  function verify() { if (!question || answer === null) return; const ok = answer === question.correct_index; setChecked(ok); if (!ok) onAnswer?.(false); }
+  function verify() { if (!question || answer === null) return; const ok = answer === question.correct_index; onResponse?.({ value: question.options[answer], outcome: ok ? 'correct' : 'incorrect', questionIndex: step, variant: route ?? undefined }); setChecked(ok); if (!ok) onAnswer?.(false); }
   function next() {
     if (checked !== true || !route || done) return;
     setPaths(old => [...old, route]); setStep(n => n + 1); setRoute(null); setAnswer(null); setChecked(null);

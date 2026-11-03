@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import { useCallback, useMemo } from 'react';
 import type React from 'react';
 import { BlockShell } from './shared';
@@ -18,6 +19,7 @@ export interface ArgumentMapProps {
   correct_links: Array<{ from: string; to: string }>;
   explanation: string;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 }
 
 const KIND_STYLE: Record<ArgumentNode['kind'], React.CSSProperties> = {
@@ -30,7 +32,7 @@ const KIND_STYLE: Record<ArgumentNode['kind'], React.CSSProperties> = {
 const NODE_WIDTH = 230;
 const GAP = 60;
 
-export default function ArgumentMap({ title, prompt, nodes: argumentNodes, correct_links, explanation, onAnswer }: ArgumentMapProps) {
+export default function ArgumentMap({ title, prompt, nodes: argumentNodes, correct_links, explanation, onAnswer, onResponse }: ArgumentMapProps) {
   // Тезисы сверху, остальные карточки перемешаны ниже — раскладка не подсказывает связи.
   const claims = useMemo(() => argumentNodes.filter((node) => node.kind === 'claim'), [argumentNodes]);
   const others = useMemo(() => boardOrder(argumentNodes.filter((node) => node.kind !== 'claim')), [argumentNodes]);
@@ -64,7 +66,7 @@ export default function ArgumentMap({ title, prompt, nodes: argumentNodes, corre
         <span className="rounded-full bg-muted px-2 py-1 text-muted-foreground">доказательство</span>
         <span className="rounded-full bg-destructive/10 px-2 py-1 text-destructive">контраргумент</span>
       </div>
-      <LinkBoard key={argumentNodes.map((node) => node.id).join('|')} layout={layout} expected={correct_links} checkLabel="Проверить аргумент" explanation={explanation} onAnswer={onAnswer} />
+      <LinkBoard key={argumentNodes.map((node) => node.id).join('|')} layout={layout} expected={correct_links} checkLabel="Проверить аргумент" explanation={explanation} onAnswer={onAnswer} onResponse={onResponse} nodeLabels={Object.fromEntries(argumentNodes.map(node => [node.id, node.label]))} />
     </BlockShell>
   );
 }

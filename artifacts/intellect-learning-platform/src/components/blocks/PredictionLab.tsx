@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import { createMachine } from 'xstate';
 import { useMachine } from '@xstate/react';
 import { useMemo, useState } from 'react';
@@ -26,6 +27,7 @@ export interface PredictionLabProps {
   explanation: string;
   media?: unknown;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 }
 
 const labMachine = createMachine({
@@ -48,6 +50,7 @@ export default function PredictionLab({
   explanation,
   media,
   onAnswer,
+  onResponse,
 }: PredictionLabProps) {
   const [snapshot, send] = useMachine(labMachine);
   const [selected, setSelected] = useState('');
@@ -57,6 +60,7 @@ export default function PredictionLab({
 
   const observe = () => {
     setResult(correct ? 'correct' : 'incorrect');
+    onResponse?.({ value: options.find(option => option.id === selected)?.label ?? selected, outcome: correct ? 'correct' : 'incorrect' });
     onAnswer?.(correct);
     send({ type: 'observe' });
   };

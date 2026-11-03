@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   Background,
@@ -90,6 +91,8 @@ type LinkBoardProps = {
   checkLabel: string;
   explanation: string;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
+  nodeLabels?: Record<string, string>;
 };
 
 /**
@@ -113,7 +116,7 @@ function toFlowNodes(boardNodes: BoardNode[]): Node[] {
   }));
 }
 
-function Board({ layout, expected, checkLabel, explanation, onAnswer }: LinkBoardProps) {
+function Board({ layout, expected, checkLabel, explanation, onAnswer, onResponse, nodeLabels }: LinkBoardProps) {
   const container = useRef<HTMLDivElement>(null);
   const [columns, setColumns] = useState(3);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(toFlowNodes(layout(3)));
@@ -182,6 +185,7 @@ function Board({ layout, expected, checkLabel, explanation, onAnswer }: LinkBoar
     setSummary(score);
     setResult(resultFromScore(score.score));
     setPending(null);
+    onResponse?.({ value: edges.map(edge => `${nodeLabels?.[edge.source] ?? edge.source} → ${nodeLabels?.[edge.target] ?? edge.target}`).join('\n') || 'Связи не выбраны', outcome: score.score >= 80 ? 'correct' : 'incorrect' });
     onAnswer?.(score.score >= 80);
   };
 

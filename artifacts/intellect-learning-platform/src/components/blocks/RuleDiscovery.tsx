@@ -1,17 +1,20 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import { useState } from 'react';
 import { applyHiddenRule, displayNumber, isBoundedNumber, matchingOutputs, parseNumericAnswer, readRuleSpec, type RuleSpec } from '@/features/interactiveEngines/numberMachines';
 import { BlockShell, PrimaryAction } from './shared';
 import { RichText } from './RichText';
 
-type Props = Record<string, unknown> & { onAnswer?: (correct: boolean) => void };
+type Props = Record<string, unknown> & { onAnswer?: (correct: boolean) => void
+  onResponse?: (response: SubmittedResponse) => void; };
 
 export default function RuleDiscovery(props: Props) {
   const spec = readRuleSpec(props);
   if (!spec) return <p role="alert" className="p-4">Не удалось открыть правило: проверьте данные задания.</p>;
-  return <RuleSession key={JSON.stringify(spec)} spec={spec} title={typeof props.title === 'string' ? props.title : 'Скрытое правило'} prompt={typeof props.prompt === 'string' ? props.prompt : ''} explanation={typeof props.explanation === 'string' ? props.explanation : ''} onAnswer={props.onAnswer} />;
+  return <RuleSession key={JSON.stringify(spec)} spec={spec} title={typeof props.title === 'string' ? props.title : 'Скрытое правило'} prompt={typeof props.prompt === 'string' ? props.prompt : ''} explanation={typeof props.explanation === 'string' ? props.explanation : ''} onAnswer={props.onAnswer} onResponse={props.onResponse} />;
 }
 
-function RuleSession({ spec, title, prompt, explanation, onAnswer }: { spec: RuleSpec; title: string; prompt: string; explanation: string; onAnswer?: (correct: boolean) => void }) {
+function RuleSession({ spec, title, prompt, explanation, onAnswer, onResponse }: { spec: RuleSpec; title: string; prompt: string; explanation: string; onAnswer?: (correct: boolean) => void
+  onResponse?: (response: SubmittedResponse) => void; }) {
   const [history, setHistory] = useState(spec.examples);
   const [probe, setProbe] = useState('');
   const [hypothesis, setHypothesis] = useState('');
@@ -27,6 +30,7 @@ function RuleSession({ spec, title, prompt, explanation, onAnswer }: { spec: Rul
     const success = matchingOutputs(predicted as number[], expected);
     setCorrect(success);
     setFeedback(success ? 'Все прогнозы совпали! Обсудите, почему правило работает.' : 'Пока не все прогнозы совпали. Проверьте гипотезу на новых числах.');
+    onResponse?.({ value: `Гипотеза: ${hypothesis || 'Не указана'}\nПрогнозы:\n${spec.challenge_inputs.map((input, index) => `${displayNumber(input)} → ${answers[index]}`).join('\n')}`, outcome: success ? 'correct' : 'incorrect' });
     onAnswer?.(success);
   };
   return <BlockShell title={title} subtitle={prompt}>

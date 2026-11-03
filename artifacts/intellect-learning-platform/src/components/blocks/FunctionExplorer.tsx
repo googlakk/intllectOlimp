@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import katex from 'katex';
 import { CheckCircle2, Eye, Target, XCircle } from 'lucide-react';
@@ -20,6 +21,7 @@ export interface FunctionExplorerProps {
   prediction?: unknown;
   explanation?: string;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 }
 
 const PAD = 24;
@@ -107,7 +109,7 @@ function Plane({ xRange, yRange, curves, points }: {
   );
 }
 
-export default function FunctionExplorer({ title, instruction, formula, params, x_range, y_range, target, points, prediction, explanation, onAnswer }: FunctionExplorerProps) {
+export default function FunctionExplorer({ title, instruction, formula, params, x_range, y_range, target, points, prediction, explanation, onAnswer, onResponse }: FunctionExplorerProps) {
   const explorer = useMemo(
     () => normalizeExplorer({ formula, params, x_range, y_range, target, points, prediction }),
     [formula, params, x_range, y_range, target, points, prediction],
@@ -134,8 +136,9 @@ export default function FunctionExplorer({ title, instruction, formula, params, 
     reported.current = true;
     setFinished(true);
     // Засчитывается прогноз; цель с подсказкой «Показать ответ» — уже не самостоятельное решение.
+    onResponse?.({ value: `${choice !== null ? `Прогноз: ${choice}\n` : ''}Параметры графика:\n${Object.entries(values).map(([name, value]) => `${name} = ${value}`).join('\n')}`, outcome: !predictionRight ? 'incorrect' : revealed ? 'assisted' : 'correct' });
     onAnswer?.(predictionRight && !revealed);
-  }, [explorer, predicted, onTarget, predictionRight, revealed, onAnswer]);
+  }, [explorer, predicted, onTarget, predictionRight, revealed, onAnswer, onResponse, choice, values]);
 
   if (!explorer) {
     return <BlockShell title={title || 'График по формуле'}><p className="text-sm text-muted-foreground">Задание собрано с ошибкой — сообщите учителю.</p></BlockShell>;

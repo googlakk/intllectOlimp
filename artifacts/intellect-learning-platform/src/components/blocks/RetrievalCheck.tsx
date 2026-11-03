@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import React, { useState } from 'react';
 import { parseMathText } from './ShortExplanation';
 import { CheckCircle2, XCircle } from 'lucide-react';
@@ -11,9 +12,10 @@ export interface RetrievalCheckProps {
   /** «diagnostic» — вопрос-разминка в начале урока. */
   evidence_stage?: string;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 }
 
-export default function RetrievalCheck({ question, options, correct_answer, explanation, evidence_stage, onAnswer }: RetrievalCheckProps) {
+export default function RetrievalCheck({ question, options, correct_answer, explanation, evidence_stage, onAnswer, onResponse }: RetrievalCheckProps) {
   const [selected, setSelected] = useState<string | null>(null);
   const [status, setStatus] = useState<'idle' | 'correct' | 'incorrect'>('idle');
 
@@ -26,6 +28,7 @@ export default function RetrievalCheck({ question, options, correct_answer, expl
     
     const isCorrect = normalizedSelected === normalizedCorrect;
     setStatus(isCorrect ? 'correct' : 'incorrect');
+    onResponse?.({ value: opt, outcome: isCorrect ? 'correct' : 'incorrect' });
     onAnswer?.(isCorrect);
   };
 

@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from './responseDetails';
 import { Link } from 'wouter';
 import { ArrowLeft } from 'lucide-react';
 import { useCallback, useEffect, useState, type ReactNode, type RefObject, type Dispatch, type SetStateAction } from 'react';
@@ -49,6 +50,7 @@ type StudentLessonPageViewProps = {
   topicTitle: string;
   warpGates?: WarpGate[];
   onAnswer: (blockIndex: number, isCorrect: boolean) => void;
+  onResponse?: (originalIndex: number, response: SubmittedResponse) => void;
   onNavigate: (index: number) => void;
   onNext: () => void;
   onOpenSummary: () => void;
@@ -98,6 +100,7 @@ export function StudentLessonPageView({
   topicTitle,
   warpGates,
   onAnswer,
+  onResponse,
   onNavigate,
   onNext,
   onOpenSummary,
@@ -181,6 +184,7 @@ export function StudentLessonPageView({
         prefersReducedMotion={prefersReducedMotion}
         retryKeys={retryKeys}
         onAnswer={onAnswer}
+        onResponse={onResponse}
         onNavigate={onNavigate}
         onNext={onNext}
         onOpenSummary={onOpenSummary}

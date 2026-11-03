@@ -172,14 +172,14 @@ def _answer_spec(item: dict, *, numeric: bool, choice: bool = False) -> dict[str
     }
 
 
-def grade_assessment(blocks: list[dict], responses: dict[str, str]) -> tuple[dict[str, bool], int]:
-    answers: dict[str, bool] = {}
+def assessment_outcomes(blocks: list[dict], responses: dict[str, str]) -> dict[str, str]:
+    answers: dict[str, str] = {}
     for index, block in enumerate(blocks):
         content = block.get("content") or {}
         if block.get("component") == "MasteryCheck":
             for question_index, question in enumerate(content.get("questions") or []):
                 key = f"{index}_q{question_index}"
-                answers[key] = equal_answer(
+                answers[key] = check_answer(
                     responses.get(key, ""), question.get("correct_answer", ""),
                     **_answer_spec(question, numeric=question.get("type") in {"numeric", "number"},
                                    choice=question.get("type") == "multiple_choice"),
@@ -188,8 +188,13 @@ def grade_assessment(blocks: list[dict], responses: dict[str, str]) -> tuple[dic
             key = str(index)
             # Варианты ответа (RetrievalCheck, multiple_choice) — только точное совпадение.
             numeric = block.get("component") == "IndependentProblem" and content.get("type") in {"numeric", "number"}
-            answers[key] = equal_answer(
+            answers[key] = check_answer(
                 responses.get(key, ""), content.get("correct_answer", ""), **_answer_spec(content, numeric=numeric, choice=block.get("component") == "RetrievalCheck" or content.get("type") == "multiple_choice"),
             )
+    return answers
+
+
+def grade_assessment(blocks: list[dict], responses: dict[str, str]) -> tuple[dict[str, bool], int]:
+    answers = {key: result == "correct" for key, result in assessment_outcomes(blocks, responses).items()}
     score = round(100 * sum(answers.values()) / len(answers)) if answers else 0
     return answers, score

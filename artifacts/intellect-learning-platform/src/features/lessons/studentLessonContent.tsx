@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from './responseDetails';
 import { BookMarked, ChevronDown, RefreshCw } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -62,6 +63,7 @@ type ActiveLessonContentProps = {
   prefersReducedMotion: boolean | null;
   retryKeys: Record<number, number>;
   onAnswer: (blockIndex: number, isCorrect: boolean) => void;
+  onResponse?: (originalIndex: number, response: SubmittedResponse) => void;
   onNavigate: (index: number) => void;
   onNext: () => void;
   onOpenSummary: () => void;
@@ -93,6 +95,7 @@ export function ActiveLessonContent({
   prefersReducedMotion,
   retryKeys,
   onAnswer,
+  onResponse,
   onNavigate,
   onNext,
   onOpenSummary,
@@ -161,6 +164,7 @@ export function ActiveLessonContent({
               maxOpenedStep={maxOpenedStep}
               retryKeys={retryKeys}
               onAnswer={onAnswer}
+              onResponse={onResponse}
               onNavigate={onNavigate}
               onSaveIntermediate={onSaveIntermediate}
               onSetAnswers={onSetAnswers}
@@ -287,6 +291,7 @@ function LessonStepCard({
   currentStep,
   retryKeys,
   onAnswer,
+  onResponse,
   onNavigate,
   onSaveIntermediate,
   onSetAnswers,
@@ -306,6 +311,7 @@ function LessonStepCard({
 
   const injectProps = isAssessment
     ? {
+      onResponse: (response: SubmittedResponse) => onResponse?.(originalIndex, response),
       onAnswer: (correct: boolean, detail?: { questionIndex: number; isFinished: boolean }) => {
         if (block.component === 'MasteryCheck' && detail) {
           if (!detail.isFinished) {

@@ -401,6 +401,7 @@ class Progress(Base):
     current_step: Mapped[int] = mapped_column(Integer, default=0)
     max_opened_step: Mapped[int] = mapped_column(Integer, default=0)
     responses: Mapped[dict[str, str]] = mapped_column(JSONB, default=dict)
+    response_details: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default=text("'{}'::jsonb"))
     answers: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     attempts_by_step: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     elapsed_time_sec: Mapped[int] = mapped_column(Integer, default=0)

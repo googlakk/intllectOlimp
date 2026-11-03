@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -19,9 +20,10 @@ export interface MisconceptionDebuggerProps {
   repair_steps: string[];
   explanation: string;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 }
 
-export default function MisconceptionDebugger({ title, prompt, steps, repair_steps, explanation, onAnswer }: MisconceptionDebuggerProps) {
+export default function MisconceptionDebugger({ title, prompt, steps, repair_steps, explanation, onAnswer, onResponse }: MisconceptionDebuggerProps) {
   const [selectedError, setSelectedError] = useState<string>('');
   const [repairOrder, setRepairOrder] = useState(repair_steps.map((text, index) => ({ id: `repair-${index}`, text })).reverse());
   const [result, setResult] = useState<BlockResult>('idle');
@@ -43,6 +45,7 @@ export default function MisconceptionDebugger({ title, prompt, steps, repair_ste
       && repairOrder.every((item, index) => item.text === repair_steps[index]);
     const ok = errorCorrect && orderCorrect;
     setResult(ok ? 'correct' : errorCorrect ? 'partial' : 'incorrect');
+    onResponse?.({ value: `Ошибка: ${steps.find(step => step.id === selectedError)?.text ?? 'Не выбрано'}\nИсправление:\n${repairOrder.map((step, index) => `${index + 1}. ${step.text}`).join('\n')}`, outcome: ok ? 'correct' : 'incorrect' });
     onAnswer?.(ok);
   };
 

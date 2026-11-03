@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import embed, { type Result } from 'vega-embed';
 import { useEffect, useRef, useState } from 'react';
 import { BlockShell, PrimaryAction, ResultPanel } from './shared';
@@ -17,6 +18,7 @@ export interface DataInvestigationProps {
   question: DataQuestion;
   explanation: string;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 }
 
 /**
@@ -31,7 +33,7 @@ function responsiveSpec(spec: DataInvestigationProps['vega_lite_spec']): DataInv
   return { height: 260, ...spec, width: 'container', autosize: { type: 'fit', contains: 'padding' } } as DataInvestigationProps['vega_lite_spec'];
 }
 
-export default function DataInvestigation({ title, description, vega_lite_spec, question, explanation, onAnswer }: DataInvestigationProps) {
+export default function DataInvestigation({ title, description, vega_lite_spec, question, explanation, onAnswer, onResponse }: DataInvestigationProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [selected, setSelected] = useState('');
   const [result, setResult] = useState<BlockResult>('idle');
@@ -52,6 +54,7 @@ export default function DataInvestigation({ title, description, vega_lite_spec, 
   const check = () => {
     const ok = normalizeText(selected) === normalizeText(question.correct_answer);
     setResult(ok ? 'correct' : 'incorrect');
+    onResponse?.({ value: selected, outcome: ok ? 'correct' : 'incorrect' });
     onAnswer?.(ok);
   };
 

@@ -1,3 +1,4 @@
+import type { ResponseDetails, SubmittedResponse } from './responseDetails';
 import { LearningContext } from './LearningContext';
 import { useParams } from 'wouter';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
@@ -35,6 +36,7 @@ export function RegularLesson() {
   const [maxOpenedStep, setMaxOpenedStep] = useState(0);
   const [answers, setAnswers] = useState<LessonAnswers>({});
   const [attemptsByStep, setAttemptsByStep] = useState<AttemptsByStep>({});
+  const responseDetails = useRef<ResponseDetails>({});
   const [retryKeys, setRetryKeys] = useState<Record<number, number>>({});
   const [isCompleted, setIsCompleted] = useState(false);
   const [result, setResult] = useState<{ score: number; level: string } | null>(null);
@@ -61,6 +63,7 @@ export function RegularLesson() {
   );
   const { saveError, saveState } = useLessonProgressSaver({
     baseElapsedTime,
+    responseDetails,
     setObjectiveMastery,
     setSavedObjectiveEvidence,
     startTime,
@@ -84,6 +87,7 @@ export function RegularLesson() {
       if (!restored.isCompleted) setCurrentStep(restored.currentStep);
       setMaxOpenedStep(restored.maxOpenedStep);
       setAnswers(restored.answers);
+      responseDetails.current = restored.responseDetails;
       setAttemptsByStep(restored.attemptsByStep);
       setDiagnosticComplete(restored.diagnosticComplete);
       setAvatarEnabled(progress.avatar_enabled ?? true);
@@ -156,7 +160,15 @@ export function RegularLesson() {
     setMaxOpenedStep(nextMaxOpenedStep);
     saveState(nextStep, nextMaxOpenedStep, 'in_progress', answers, attemptsByStep);
   };
+  const handleResponse = (originalIndex: number, response: SubmittedResponse) => {
+    if (isCompleted) return;
+    const key = response.questionIndex === undefined ? String(originalIndex) : `${originalIndex}_q${response.questionIndex}`;
+    // Update synchronously: onAnswer can save again before React renders.
+    responseDetails.current = { ...responseDetails.current, [key]: response };
+    saveState(currentStep, maxOpenedStep, 'in_progress', answers, attemptsByStep);
+  };
   const handleBlockAnswer = (blockIndex: number, isCorrect: boolean) => {
+    if (isCompleted) return;
     const { answers: newAnswers, attemptsByStep: newAttempts } = applyBlockAnswer({
       activeOriginalIndices,
       answers,
@@ -233,6 +245,7 @@ export function RegularLesson() {
         topicTitle={topicTitle}
         warpGates={progress?.warp_gates}
         onAnswer={handleBlockAnswer}
+        onResponse={handleResponse}
         onNavigate={navigateToStep}
         onNext={handleNextStep}
         onOpenSummary={() => setCurrentStep(activeBlocks.length)}
@@ -240,7 +253,7 @@ export function RegularLesson() {
         onRestart={restartLesson}
         isRestarting={restartProgress.isPending}
         restartError={restartProgress.error as Error | null}
-        onSaveIntermediate={(nextAnswers, nextAttempts) => saveState(currentStep, maxOpenedStep, 'in_progress', nextAnswers, nextAttempts)}
+        onSaveIntermediate={(nextAnswers, nextAttempts) => { if (!isCompleted) saveState(currentStep, maxOpenedStep, 'in_progress', nextAnswers, nextAttempts); }}
         onSetAnswers={setAnswers}
         onSetRetryKeys={setRetryKeys}
         avatarEnabled={avatarEnabled}

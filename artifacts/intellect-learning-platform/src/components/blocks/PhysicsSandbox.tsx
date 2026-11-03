@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import Matter from 'matter-js';
 import { useEffect, useRef, useState } from 'react';
 import { BlockShell, PrimaryAction, ResultPanel } from './shared';
@@ -34,9 +35,10 @@ export interface PhysicsSandboxProps {
   correct_answer: string;
   explanation: string;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 }
 
-export default function PhysicsSandbox({ title, prompt, bodies, params, question, options, correct_answer, explanation, onAnswer }: PhysicsSandboxProps) {
+export default function PhysicsSandbox({ title, prompt, bodies, params, question, options, correct_answer, explanation, onAnswer, onResponse }: PhysicsSandboxProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [values, setValues] = useState(() => Object.fromEntries(params.map((param) => [param.name, param.default])));
   const [version, setVersion] = useState(0);
@@ -89,6 +91,7 @@ export default function PhysicsSandbox({ title, prompt, bodies, params, question
   const check = () => {
     const ok = normalizeText(selected) === normalizeText(correct_answer);
     setResult(ok ? 'correct' : 'incorrect');
+    onResponse?.({ value: `${selected}\nПараметры опыта:\n${params.map(param => `${param.label}: ${values[param.name]}`).join('\n')}`, outcome: ok ? 'correct' : 'incorrect' });
     onAnswer?.(ok);
   };
 

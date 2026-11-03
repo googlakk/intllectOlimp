@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import { useCallback, useMemo } from 'react';
 import { BlockShell } from './shared';
 import { RichText } from './RichText';
@@ -23,11 +24,12 @@ export interface ProcessBuilderProps {
   correct_edges: ProcessEdge[];
   explanation: string;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 }
 
 const NODE_WIDTH = 240;
 
-export default function ProcessBuilder({ title, instruction, steps, correct_edges, explanation, onAnswer }: ProcessBuilderProps) {
+export default function ProcessBuilder({ title, instruction, steps, correct_edges, explanation, onAnswer, onResponse }: ProcessBuilderProps) {
   const ordered = useMemo(() => boardOrder(steps), [steps]);
   const layout = useCallback((columns: number): BoardNode[] => ordered.map((step, index) => ({
     id: step.id,
@@ -43,7 +45,7 @@ export default function ProcessBuilder({ title, instruction, steps, correct_edge
 
   return (
     <BlockShell title={title} subtitle={instruction}>
-      <LinkBoard key={ordered.map((step) => step.id).join('|')} layout={layout} expected={correct_edges} checkLabel="Проверить схему" explanation={explanation} onAnswer={onAnswer} />
+      <LinkBoard key={ordered.map((step) => step.id).join('|')} layout={layout} expected={correct_edges} checkLabel="Проверить схему" explanation={explanation} onAnswer={onAnswer} onResponse={onResponse} nodeLabels={Object.fromEntries(steps.map(step => [step.id, step.label]))} />
     </BlockShell>
   );
 }

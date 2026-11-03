@@ -1,3 +1,4 @@
+import type { ResponseDetails } from './responseDetails';
 import type {
   MasteryStatus,
   ObjectiveEvidence,
@@ -8,6 +9,7 @@ import type { AttemptsByStep, LessonAnswers } from './studentProgress';
 
 export type BuildSaveProgressInputParams = {
   answers: LessonAnswers;
+  responseDetails?: ResponseDetails;
   attemptsByStep: AttemptsByStep;
   elapsedTimeSec: number;
   finalLevel?: string;
@@ -30,6 +32,7 @@ export type BuildSaveProgressInputParams = {
 export function buildSaveProgressInput(params: BuildSaveProgressInputParams): SaveProgressInput {
   const {
     answers,
+    responseDetails,
     attemptsByStep,
     elapsedTimeSec,
     finalLevel,
@@ -56,6 +59,7 @@ export function buildSaveProgressInput(params: BuildSaveProgressInputParams): Sa
     current_step: step,
     max_opened_step: maxStep,
     answers,
+    ...(responseDetails !== undefined ? { response_details: responseDetails } : {}),
     attempts_by_step: attemptsByStep,
     time_spent_sec: elapsedTimeSec,
     elapsed_time_sec: elapsedTimeSec,

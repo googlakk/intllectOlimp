@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import { DndContext, KeyboardSensor, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { useMemo, useState } from 'react';
 import type React from 'react';
@@ -24,9 +25,10 @@ export interface SortAndClassifyProps {
   groups: SortGroup[];
   explanation: string;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 }
 
-export default function SortAndClassify({ title, instruction, items, groups, explanation, onAnswer }: SortAndClassifyProps) {
+export default function SortAndClassify({ title, instruction, items, groups, explanation, onAnswer, onResponse }: SortAndClassifyProps) {
   const [placements, setPlacements] = useState<Record<string, string>>({});
   const [result, setResult] = useState<BlockResult>('idle');
   // Короткое нажатие — выбор элемента (на телефоне тащить через прокрутку неудобно), сдвиг — перетаскивание.
@@ -54,6 +56,7 @@ export default function SortAndClassify({ title, instruction, items, groups, exp
     const score = scoreRatio(correct, items.length);
     const next = resultFromScore(score);
     setResult(next);
+    onResponse?.({ value: items.map(item => `${item.label} → ${groups.find(group => group.id === placements[item.id])?.label ?? 'Не выбрано'}`).join('\n'), outcome: score >= 80 ? 'correct' : 'incorrect' });
     onAnswer?.(score >= 80);
   };
 

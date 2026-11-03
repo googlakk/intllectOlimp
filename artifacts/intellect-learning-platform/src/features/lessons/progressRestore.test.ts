@@ -53,3 +53,9 @@ describe('restoreLessonProgress', () => {
     expect(restored.baseElapsedTimeSec).toBe(40);
   });
 });
+
+it('restores submitted values and supports records predating answer capture', () => {
+  const response_details = { '1_q0': { value: '2 м', outcome: 'wrong_unit' as const, questionIndex: 0 } };
+  expect(restoreLessonProgress(progressRecord({ response_details }), []).responseDetails).toEqual(response_details);
+  expect(restoreLessonProgress(progressRecord({}), []).responseDetails).toEqual({});
+});

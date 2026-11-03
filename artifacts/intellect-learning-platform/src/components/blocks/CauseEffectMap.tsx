@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MarkerType, Position, ReactFlow, ReactFlowProvider, useReactFlow, type Edge, type Node } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -17,6 +18,7 @@ export interface CauseEffectMapProps {
   factors: unknown;
   explanation?: string;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 }
 
 const PASS_SCORE = 80;
@@ -94,7 +96,7 @@ export default function CauseEffectMap(props: CauseEffectMapProps) {
   return <ReactFlowProvider><CauseEffectBoard {...props} /></ReactFlowProvider>;
 }
 
-function CauseEffectBoard({ title, instruction, event, factors: raw, explanation, onAnswer }: CauseEffectMapProps) {
+function CauseEffectBoard({ title, instruction, event, factors: raw, explanation, onAnswer, onResponse }: CauseEffectMapProps) {
   const factors = useMemo(() => normalizeFactors(raw), [raw]);
   const eventLabel = typeof event === 'string' ? event : `${event?.label ?? ''}${event?.year ? ` (${event.year})` : ''}`;
   const [chosen, setChosen] = useState<Record<string, CauseRole | undefined>>({});
@@ -113,7 +115,7 @@ function CauseEffectBoard({ title, instruction, event, factors: raw, explanation
           Задание повреждено: не хватает события или факторов. Сообщите учителю — а урок можно продолжать.
         </p>
         {/* Не засчитываем как верное: повреждённое задание не должно давать «освоено». */}
-        {!skipped && <div className="mt-4"><PrimaryAction onClick={() => { setSkipped(true); onAnswer?.(false); }}>Продолжить урок</PrimaryAction></div>}
+        {!skipped && <div className="mt-4"><PrimaryAction onClick={() => { setSkipped(true); onResponse?.({ value: 'Повреждённое задание пропущено', outcome: 'skipped' }); onAnswer?.(false); }}>Продолжить урок</PrimaryAction></div>}
       </BlockShell>
     );
   }
@@ -124,6 +126,7 @@ function CauseEffectBoard({ title, instruction, event, factors: raw, explanation
     setVerdicts(next);
     setResult(resultFromScore(score));
     requestAnimationFrame(() => resultRef.current?.focus());
+    onResponse?.({ value: factors.map(factor => `${factor.label} → ${chosen[factor.id] ? ROLE_LABELS[chosen[factor.id]!] : 'Не выбрано'}`).join('\n'), outcome: score >= PASS_SCORE ? 'correct' : 'incorrect' });
     onAnswer?.(score >= PASS_SCORE);
   };
 

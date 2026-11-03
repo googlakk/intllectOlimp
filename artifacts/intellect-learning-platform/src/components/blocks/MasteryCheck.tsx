@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, XCircle, Trophy } from 'lucide-react';
@@ -20,9 +21,10 @@ export interface MasteryCheckQuestion {
 export interface MasteryCheckProps {
   questions: MasteryCheckQuestion[];
   onAnswer?: (isCorrect: boolean, detail?: { questionIndex: number; isFinished: boolean }) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 }
 
-export default function MasteryCheck({ questions, onAnswer }: MasteryCheckProps) {
+export default function MasteryCheck({ questions, onAnswer, onResponse }: MasteryCheckProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, boolean>>({});
   const [showExplanation, setShowExplanation] = useState(false);
@@ -63,6 +65,7 @@ export default function MasteryCheck({ questions, onAnswer }: MasteryCheckProps)
         acceptedUnits: currentQ.accepted_units,
         tolerance: currentQ.tolerance,
       });
+    onResponse?.({ value: value.trim(), outcome: result, questionIndex: currentIndex });
     // Верное число с неверной единицей: просим проверить единицы, ответ не засчитываем как ошибку.
     if (result === 'wrong_unit') {
       setUnitHint(true);

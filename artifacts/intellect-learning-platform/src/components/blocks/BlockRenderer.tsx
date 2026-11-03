@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import React, { Suspense } from 'react';
 import type { Block } from '@/lib/api/types';
 import { isAssessmentBlock } from '@/lib/lessonBlocks';
@@ -5,6 +6,7 @@ import { BlockMedia } from './BlockMedia';
 
 type BlockComponentProps = Record<string, unknown> & {
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 };
 type BlockComponent = React.ComponentType<BlockComponentProps>;
 type BlockModule = { default: React.ComponentType<unknown> };

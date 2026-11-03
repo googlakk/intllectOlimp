@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import * as Blockly from 'blockly/core';
 import 'blockly/blocks';
 import { javascriptGenerator } from 'blockly/javascript';
@@ -18,9 +19,10 @@ export interface CodeBlocksLabProps {
   explanation: string;
   starter_xml?: string;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 }
 
-export default function CodeBlocksLab({ title, task, toolbox_xml, expected_block_types, explanation, starter_xml, onAnswer }: CodeBlocksLabProps) {
+export default function CodeBlocksLab({ title, task, toolbox_xml, expected_block_types, explanation, starter_xml, onAnswer, onResponse }: CodeBlocksLabProps) {
   const divRef = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<Blockly.WorkspaceSvg | null>(null);
   const [code, setCode] = useState('');
@@ -59,6 +61,7 @@ export default function CodeBlocksLab({ title, task, toolbox_xml, expected_block
     const present = new Set(workspace?.getAllBlocks(false).map((block) => block.type) || []);
     const ok = expected_block_types.every((type) => present.has(type));
     setResult(ok ? 'correct' : 'incorrect');
+    onResponse?.({ value: workspace ? javascriptGenerator.workspaceToCode(workspace) || `Блоки: ${[...present].join(', ')}` : 'Алгоритм не собран', outcome: ok ? 'correct' : 'incorrect' });
     onAnswer?.(ok);
   };
 

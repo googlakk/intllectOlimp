@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import { useMemo, useState } from 'react';
 import katex from 'katex';
 import { CheckCircle2, Eye, Lightbulb, XCircle } from 'lucide-react';
@@ -19,6 +20,7 @@ export interface StepSolverProps {
   mistakes?: unknown;
   explanation?: string;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
   onAttempt?: (attempt: BlockAttempt) => void;
 }
 
@@ -46,7 +48,7 @@ const FEEDBACK: Record<Exclude<StepVerdict['status'], 'ok' | 'mistake'>, string>
   unreadable: 'Не получается прочитать запись. Пиши как в тетради: 2√3, 3/4, x^2, 3x − 6 = x + 4.',
 };
 
-export default function StepSolver({ title, instruction, kind, start, steps, final_answer, answer_mode, mistakes, explanation, onAnswer, onAttempt }: StepSolverProps) {
+export default function StepSolver({ title, instruction, kind, start, steps, final_answer, answer_mode, mistakes, explanation, onAnswer, onAttempt, onResponse }: StepSolverProps) {
   const spec = useMemo(
     () => normalizeSolver({ kind, start, steps, final_answer, answer_mode, mistakes }),
     [kind, start, steps, final_answer, answer_mode, mistakes],
@@ -85,6 +87,7 @@ export default function StepSolver({ title, instruction, kind, start, steps, fin
     const text = value.trim();
     if (!text || done) return;
     const verdict = checkStep(text, spec);
+    onResponse?.({ value: [`Задание: ${spec.start}`, ...lines.map((line, index) => `${line.shown ? 'Образец' : `Шаг ${index + 1}`}: ${line.text}`), `Шаг ${lines.length + 1}: ${text}`].join('\n'), outcome: verdict.status !== 'ok' ? 'incorrect' : revealed > 0 ? 'assisted' : 'correct' });
     onAttempt?.({ value: text, outcome: verdict.status === 'ok' ? 'correct' : 'incorrect', hintsSeen });
     if (verdict.status === 'ok') {
       accept(text, false, verdict.done);
@@ -97,6 +100,7 @@ export default function StepSolver({ title, instruction, kind, start, steps, fin
   const showStep = () => {
     if (!nextStep) return;
     const verdict = checkStep(nextStep.expected, spec);
+    onResponse?.({ value: [`Задание: ${spec.start}`, ...lines.map((line, index) => `${line.shown ? 'Образец' : `Шаг ${index + 1}`}: ${line.text}`), `Образец: ${nextStep.expected}`].join('\n'), outcome: 'assisted' });
     accept(nextStep.expected, true, verdict.status === 'ok' && verdict.done);
   };
 

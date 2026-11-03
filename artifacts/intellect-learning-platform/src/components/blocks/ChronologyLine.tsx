@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as visTimeline from 'vis-timeline/standalone';
 import type { TimelineOptions } from 'vis-timeline/standalone';
@@ -19,6 +20,7 @@ export interface ChronologyLineProps {
   tolerance_years?: number;
   explanation?: string;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 }
 
 const PASS_SCORE = 80;
@@ -54,7 +56,7 @@ function itemFor(event: { id: string; label: string; lane?: string }, year: numb
  * (мышью или пальцем; год можно ввести и в списке под лентой). Проверка ставит каждую на место
  * и показывает, на сколько лет ошибся. Лента — vis-timeline (MIT/Apache-2.0).
  */
-export default function ChronologyLine({ title, instruction, events, lanes, tolerance_years, explanation, onAnswer }: ChronologyLineProps) {
+export default function ChronologyLine({ title, instruction, events, lanes, tolerance_years, explanation, onAnswer, onResponse }: ChronologyLineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
   const itemsRef = useRef<VisDataSet | null>(null);
@@ -157,6 +159,7 @@ export default function ChronologyLine({ title, instruction, events, lanes, tole
       timelineRef.current?.fit({ animation: false });
       resultRef.current?.focus();
     });
+    onResponse?.({ value: valid.map(item => `${item.label}: ${placed[item.id] ?? 'Год не указан'}`).join('\n'), outcome: score >= PASS_SCORE ? 'correct' : 'incorrect' });
     onAnswer?.(score >= PASS_SCORE);
   };
 
@@ -169,7 +172,7 @@ export default function ChronologyLine({ title, instruction, events, lanes, tole
           Задание повреждено: в нём не хватает событий с годами. Сообщите учителю — а урок можно продолжать.
         </p>
         {/* Не засчитываем как верное: повреждённое задание не должно давать «освоено». */}
-        {!skipped && <div className="mt-4"><PrimaryAction onClick={() => { setSkipped(true); onAnswer?.(false); }}>Продолжить урок</PrimaryAction></div>}
+        {!skipped && <div className="mt-4"><PrimaryAction onClick={() => { setSkipped(true); onResponse?.({ value: 'Повреждённое задание пропущено', outcome: 'skipped' }); onAnswer?.(false); }}>Продолжить урок</PrimaryAction></div>}
       </BlockShell>
     );
   }

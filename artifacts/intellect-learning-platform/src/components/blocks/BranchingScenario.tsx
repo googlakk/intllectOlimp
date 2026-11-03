@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import { createMachine } from 'xstate';
 import { useMachine } from '@xstate/react';
 import { useMemo, useState } from 'react';
@@ -30,6 +31,7 @@ export interface BranchingScenarioProps {
   failure_feedback: string;
   media?: unknown;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 }
 
 export default function BranchingScenario({
@@ -41,6 +43,7 @@ export default function BranchingScenario({
   failure_feedback,
   media,
   onAnswer,
+  onResponse,
 }: BranchingScenarioProps) {
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const machine = useMemo(() => createMachine({
@@ -58,18 +61,22 @@ export default function BranchingScenario({
   }), [nodes, start_node_id]);
   const [snapshot, send] = useMachine(machine);
   const [lastFeedback, setLastFeedback] = useState('');
+  const [path, setPath] = useState<string[]>([]);
   const [result, setResult] = useState<BlockResult>('idle');
   const current = nodeById.get(String(snapshot.value)) || nodes[0];
   const hasImage = Boolean(blockImage(media));
   const atStart = current.id === start_node_id;
 
   const choose = (choice: ScenarioChoice, index: number) => {
+    const nextPath = [...path, `${current.title}: ${choice.label}`];
+    setPath(nextPath);
     setLastFeedback(choice.feedback || '');
     send({ type: `choose.${index}` });
     const next = nodeById.get(choice.next);
     if (next?.terminal) {
       const success = next.success === true;
       setResult(success ? 'correct' : 'incorrect');
+      onResponse?.({ value: [...nextPath, `Итог: ${next.title}`].join('\n'), outcome: success ? 'correct' : 'incorrect' });
       onAnswer?.(success);
     }
   };

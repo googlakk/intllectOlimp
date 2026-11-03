@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import DOMPurify from 'dompurify';
 import { useMemo, useState } from 'react';
 import { BlockShell, PrimaryAction, ResultPanel } from './shared';
@@ -21,9 +22,10 @@ export interface HotspotInvestigationProps {
   required_hotspots: string[];
   explanation: string;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 }
 
-export default function HotspotInvestigation({ title, instruction, svg_content, hotspots, required_hotspots, explanation, onAnswer }: HotspotInvestigationProps) {
+export default function HotspotInvestigation({ title, instruction, svg_content, hotspots, required_hotspots, explanation, onAnswer, onResponse }: HotspotInvestigationProps) {
   const cleanSvg = useMemo(() => DOMPurify.sanitize(svg_content, { USE_PROFILES: { svg: true, svgFilters: true } }), [svg_content]);
   const [selected, setSelected] = useState<string[]>([]);
   const [result, setResult] = useState<BlockResult>('idle');
@@ -39,6 +41,7 @@ export default function HotspotInvestigation({ title, instruction, svg_content, 
   const check = () => {
     const ok = sameSet(selected, required_hotspots);
     setResult(ok ? 'correct' : selected.length ? 'partial' : 'incorrect');
+    onResponse?.({ value: selected.map(id => hotspots.find(hotspot => hotspot.id === id)?.label ?? id).join('\n') || 'Ничего не выбрано', outcome: ok ? 'correct' : 'incorrect' });
     onAnswer?.(ok);
   };
 

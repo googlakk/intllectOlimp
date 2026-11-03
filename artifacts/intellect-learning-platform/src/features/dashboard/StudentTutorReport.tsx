@@ -33,7 +33,7 @@ function TutorDialogue({ studentId, topic, onClose }: { studentId: number; topic
   const { data, isLoading, isError } = useStudentTutorDialogue(studentId, topic.id);
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto [overflow-wrap:anywhere]">
         <DialogTitle>Диалог с помощником: {topic.name}</DialogTitle>
         <DialogDescription>Реплики ученика и помощника по заданиям урока. Серым — пометки только для учителя.</DialogDescription>
         {isLoading && <p>Загружаем диалог…</p>}
@@ -84,10 +84,10 @@ export function StudentTutorReport({ studentId }: { studentId: number }) {
   const topicName = (id: number) => data?.topics.find((topic) => topic.topic_id === id)?.name ?? `Тема ${id}`;
 
   return (
-    <section className="space-y-3" aria-label="Помощник">
+    <section className="min-w-0 space-y-3 [overflow-wrap:anywhere]" aria-label="Помощник">
       <h3 className="flex items-center gap-2 font-semibold"><MessageCircle className="h-4 w-4 text-primary" aria-hidden /> Помощник (ИИ-тьютор)</h3>
       {isLoading && <p>Загружаем диалоги…</p>}
-      {isError && <p role="alert">Не удалось загрузить данные помощника. <button className="underline text-primary" onClick={() => refetch()}>Повторить</button></p>}
+      {isError && <p role="alert">Не удалось загрузить данные помощника. <button className="min-h-11 underline text-primary" onClick={() => refetch()}>Повторить</button></p>}
       {data && !data.available && <p className="text-muted-foreground">Журнал помощника пока недоступен.</p>}
       {data?.available && data.topics.length === 0 && <p className="text-muted-foreground">Ученик ещё не обращался к помощнику.</p>}
 
@@ -100,7 +100,7 @@ export function StudentTutorReport({ studentId }: { studentId: number }) {
                 <strong>{alert.kind === 'distress' ? 'Тревожное сообщение' : 'Нужна помощь учителя'}</strong>
                 {' — '}{topicName(alert.topic_id)}, {formatTutorTime(alert.created_at)}
                 {alert.student_text && <span className="text-muted-foreground">: «{alert.student_text}»</span>}
-                {' '}<button className="underline text-primary" onClick={() => setOpenTopic({ id: alert.topic_id, name: topicName(alert.topic_id) })}>Открыть диалог</button>
+                {' '}<button className="min-h-11 underline text-primary" onClick={() => setOpenTopic({ id: alert.topic_id, name: topicName(alert.topic_id) })}>Открыть диалог</button>
               </li>
             ))}
           </ul>
@@ -108,25 +108,21 @@ export function StudentTutorReport({ studentId }: { studentId: number }) {
       )}
 
       {data?.available && data.topics.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-muted-foreground">
-              <tr><th className="py-1 pr-3">Тема</th><th className="pr-3">Вопросы</th><th className="pr-3">Подсказки</th><th className="pr-3">Нужен учитель</th><th className="pr-3">Пометки</th><th /></tr>
-            </thead>
-            <tbody>
-              {data.topics.map((topic) => (
-                <tr key={topic.topic_id} className="border-t border-border">
-                  <td className="py-2 pr-3">{topic.name}<span className="block text-xs text-muted-foreground">{formatTutorTime(topic.last_at)}</span></td>
-                  <td className="pr-3">{topic.messages}</td>
-                  <td className="pr-3">{topic.hints}</td>
-                  <td className="pr-3">{topic.teacher_calls || '—'}</td>
-                  <td className="pr-3">{topic.safety_flags + topic.leaks_blocked || '—'}</td>
-                  <td><button className="whitespace-nowrap font-semibold text-primary" onClick={() => setOpenTopic({ id: topic.topic_id, name: topic.name })}>Показать диалог</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul className="grid min-w-0 gap-3 lg:grid-cols-2">
+          {data.topics.map((topic) => (
+            <li key={topic.topic_id} className="min-w-0 rounded-xl border border-border p-4">
+              <p className="break-words text-sm font-semibold [overflow-wrap:anywhere]">{topic.name}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{formatTutorTime(topic.last_at)}</p>
+              <dl className="my-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-4">
+                <div><dt className="text-muted-foreground">Вопросы</dt><dd className="mt-1 font-bold">{topic.messages}</dd></div>
+                <div><dt className="text-muted-foreground">Подсказки</dt><dd className="mt-1 font-bold">{topic.hints}</dd></div>
+                <div><dt className="text-muted-foreground">Нужен учитель</dt><dd className="mt-1 font-bold">{topic.teacher_calls || '—'}</dd></div>
+                <div><dt className="text-muted-foreground">Пометки</dt><dd className="mt-1 font-bold">{topic.safety_flags + topic.leaks_blocked || '—'}</dd></div>
+              </dl>
+              <button className="min-h-11 rounded-lg pr-3 text-sm font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={() => setOpenTopic({ id: topic.topic_id, name: topic.name })}>Показать диалог</button>
+            </li>
+          ))}
+        </ul>
       )}
 
       {data?.available && data.misconceptions.length > 0 && (

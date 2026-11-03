@@ -78,32 +78,38 @@ class LearningReportTests(unittest.IsolatedAsyncioTestCase):
     async def _report(self, user, subject_rows):
         from unittest.mock import AsyncMock, MagicMock
         from services.dashboard import get_student_learning_report
-        assignments, skills, lessons = MagicMock(), MagicMock(), MagicMock()
+        assignments, subjects, skills, lessons, attempts = [MagicMock() for _ in range(5)]
         assignments.all.return_value = subject_rows
+        subjects.scalars.return_value.all.return_value = [SimpleNamespace(id=12, name="Математика", grade=7)]
         skills.all.return_value = []
         progress = SimpleNamespace(status="completed", mastery_status="mastered", score=90.0, completed_at=None)
         topic = SimpleNamespace(id=31, name="Дроби", archived_at=None)
         subject = SimpleNamespace(id=12, name="Математика", grade=7)
-        lessons.all.return_value = [(progress, topic, subject)]
-        results = ([assignments] if user.role != "admin" else []) + [skills, lessons]
-        db = SimpleNamespace(scalar=AsyncMock(return_value=SimpleNamespace(name="Аня")), execute=AsyncMock(side_effect=results))
+        lessons.all.return_value = [(topic, subject, "published", progress)]
+        attempts.scalars.return_value.all.return_value = []
+        results = ([assignments] if user.role != "admin" else []) + [subjects, skills, lessons, attempts]
+        db = SimpleNamespace(scalar=AsyncMock(return_value=SimpleNamespace(name="Аня", grade=7)), execute=AsyncMock(side_effect=results))
         report = await get_student_learning_report(2, db, user=user)
         queries = [str(call.args[0].compile(compile_kwargs={"literal_binds": True})) for call in db.execute.await_args_list]
         return report, queries
 
     async def test_teacher_report_lists_only_assigned_subjects(self):
         report, queries = await self._report(SimpleNamespace(role="teacher", teacher_id=5, organization_id=1), [(12,)])
-        skills_query, lessons_query = queries[-2], queries[-1]
+        subjects_query, skills_query, lessons_query, attempts_query = queries[-4:]
+        self.assertIn("subjects.id IN (12)", subjects_query)
+        self.assertIn("student_skill_mastery.source_topic_id IN", skills_query)
         self.assertIn("sections.subject_id IN (12)", skills_query)
         self.assertIn("subjects.id IN (12)", lessons_query)
+        self.assertIn("sections.subject_id IN (12)", attempts_query)
         self.assertEqual(report["lessons"][0]["subject_name"], "Математика")
         self.assertEqual(report["lessons"][0]["subject_grade"], 7)
+        self.assertEqual(report["summary"]["completed"], 1)
 
     async def test_admin_report_is_not_limited_by_subject(self):
         report, queries = await self._report(SimpleNamespace(role="admin"), [])
-        self.assertEqual(len(queries), 2)
-        self.assertNotIn("subjects.id IN", queries[1])
-        self.assertNotIn("topic_skills", queries[0])
+        self.assertEqual(len(queries), 4)
+        self.assertNotIn("subjects.id IN", queries[2])
+        self.assertNotIn("topic_skills", queries[1])
         self.assertEqual(report["lessons"][0]["subject_id"], 12)
 
     async def test_teacher_student_list_counts_only_own_subjects(self):

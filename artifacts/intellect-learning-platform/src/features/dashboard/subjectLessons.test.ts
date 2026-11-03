@@ -3,6 +3,8 @@ import { groupLessonsBySubject, type ReportLesson } from './subjectLessons';
 
 const lesson = (fields: Partial<ReportLesson>): ReportLesson => ({
   topic_id: 1, name: 'Тема', status: 'completed', mastery_status: 'mastered', score: 90, completed_at: null,
+  published: true, historical: false, retrying: false, has_progress: true,
+  started_at: null, updated_at: null, elapsed_time_sec: 0, last_completed: null,
   subject_id: 12, subject_name: 'Математика', subject_grade: 7, archived: false, ...fields,
 });
 

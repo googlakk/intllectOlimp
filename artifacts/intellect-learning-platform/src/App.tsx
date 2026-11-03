@@ -13,6 +13,7 @@ const Learn = lazy(() => import('@/pages/student/Learn'));
 const SubjectView = lazy(() => import('@/pages/student/Subject'));
 const Lesson = lazy(() => import('@/pages/student/Lesson'));
 const Progress = lazy(() => import('@/pages/student/Progress'));
+const StudentStatistics = lazy(() => import('@/pages/teacher/StudentStatistics'));
 const Dashboard = lazy(() => import('@/pages/teacher/Dashboard'));
 const Lessons = lazy(() => import('@/pages/teacher/Lessons'));
 const LessonEditor = lazy(() => import('@/pages/teacher/LessonEditor'));
@@ -91,6 +92,7 @@ function Router() {
       <Route path="/progress" component={() => <RoutedPage component={Progress} allowedRoles={['student']} />} />
       
       <Route path="/dashboard" component={() => <RoutedPage component={Dashboard} allowedRoles={['teacher', 'admin']} />} />
+      <Route path="/dashboard/students/:studentId" component={() => <RoutedPage component={StudentStatistics} allowedRoles={['teacher', 'admin']} />} />
       <Route path="/dashboard/students" component={() => <RoutedPage component={Accounts} allowedRoles={['teacher', 'admin']} />} />
       <Route path="/dashboard/lessons" component={() => <RoutedPage component={Lessons} allowedRoles={['teacher', 'admin']} />} />
       <Route path="/dashboard/lessons/:topicId" component={() => <RoutedPage component={LessonEditor} allowedRoles={['teacher', 'admin']} />} />

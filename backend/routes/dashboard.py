@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from services.dashboard import get_dashboard_overview, get_dashboard_students, get_student_learning_report
+from services.dashboard import get_dashboard_overview, get_dashboard_students, get_student_learning_report, get_student_lesson_report
 from services.tutor_report import get_student_tutor_dialogue, get_student_tutor_summary
 from errors import ApplicationError
 from routes.http_errors import raise_http_error
@@ -40,6 +40,18 @@ async def student_learning(student_id: int, user: AuthPrincipal = Depends(requir
 async def student_tutor(student_id: int, user: AuthPrincipal = Depends(require_roles("admin", "teacher")), db: AsyncSession = Depends(get_db)):
     try:
         return await get_student_tutor_summary(student_id, db, user=user)
+    except ApplicationError as exc:
+        raise_http_error(exc)
+
+
+@router.get("/students/{student_id}/learning/lessons/{topic_id}")
+async def student_lesson_report(
+    student_id: int, topic_id: int,
+    user: AuthPrincipal = Depends(require_roles("admin", "teacher")),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await get_student_lesson_report(student_id, topic_id, db, user=user)
     except ApplicationError as exc:
         raise_http_error(exc)
 

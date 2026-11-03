@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { StudentLearningReport } from '@/features/dashboard/StudentLearningReport';
+import { Link } from 'wouter';
+import { useDashboardListPosition } from '@/features/dashboard/dashboardListPosition';
 import { Users, BookOpen, Layers, Activity, Search } from 'lucide-react';
 import { useDashboardOverview, useDashboardStudents } from '@/lib/api';
 import { buildDashboardMetrics, scoreBadgeClass, type DashboardMetricKey } from '@/features/dashboard/overview';
@@ -13,10 +13,9 @@ const metricIcons: Record<DashboardMetricKey, typeof Users> = {
 };
 
 export default function Dashboard() {
-  const [selectedStudent, setSelectedStudent] = useState<number | null>(null);
-  const [search, setSearch] = useState('');
   const { data: overviewData } = useDashboardOverview();
   const { data: studentData } = useDashboardStudents();
+  const { search, setSearch, remember } = useDashboardListPosition(studentData !== undefined);
   const metrics = buildDashboardMetrics(overviewData);
   const students = (studentData ?? []).filter(student => student.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
 
@@ -45,7 +44,6 @@ export default function Dashboard() {
       </div>
 
       <KtpImportPanel />
-      {selectedStudent !== null && <StudentLearningReport studentId={selectedStudent} onClose={() => setSelectedStudent(null)} />}
 
       <div className="bg-card rounded-[2rem] border border-border shadow-sm overflow-hidden">
         <div className="p-6 md:p-8 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
@@ -83,7 +81,7 @@ export default function Dashboard() {
                     </span>
                   </td>
                   <td className="px-8 py-5 text-right">
-                    <button onClick={() => setSelectedStudent(student.id)} className="text-primary hover:text-primary/80 font-bold transition-colors">Подробнее</button>
+                    <Link href={`/dashboard/students/${student.id}`} onClick={remember} className="inline-flex min-h-11 items-center text-primary hover:text-primary/80 font-bold transition-colors">Подробнее</Link>
                   </td>
                 </tr>
               ))}

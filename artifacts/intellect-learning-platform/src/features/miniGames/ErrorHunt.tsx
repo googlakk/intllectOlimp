@@ -1,20 +1,21 @@
+import type { ResponseCaptureProps } from '@/features/lessons/responseDetails';
 import { useState } from 'react';
 import { Check, ScanLine, Wrench } from 'lucide-react';
 import { RichText } from '@/components/blocks/RichText';
 import { ChoiceButtons, GameError, GameFrame, GameResult } from './GameFrame';
 import { readGame, repairsCorrect, type GameData, type GameProps } from './model';
 
-export default function ErrorHunt(props: GameProps) {
+export default function ErrorHunt(props: GameProps & ResponseCaptureProps) {
   const [session, setSession] = useState(0); const data = readGame('ErrorHunt', props);
-  return data ? <Hunt key={`${session}:${JSON.stringify(data)}`} data={data} reset={() => setSession(n => n + 1)} onAnswer={props.onAnswer} /> : <GameError />;
+  return data ? <Hunt key={`${session}:${JSON.stringify(data)}`} data={data} reset={() => setSession(n => n + 1)} onAnswer={props.onAnswer} onResponse={props.onResponse} /> : <GameError />;
 }
-function Hunt({ data, reset, onAnswer }: { data: GameData['ErrorHunt']; reset: () => void; onAnswer?: (v: boolean) => void }) {
+function Hunt({ data, reset, onAnswer, onResponse }: ResponseCaptureProps & { data: GameData['ErrorHunt']; reset: () => void; onAnswer?: (v: boolean) => void }) {
   const [answers, setAnswers] = useState<Record<number, number>>({}), [suspect, setSuspect] = useState<number | null>(null);
   const [checked, setChecked] = useState(false), [done, setDone] = useState(false);
   function decide(line: number, answer: number) { setAnswers(old => ({ ...old, [line]: answer })); setChecked(false); }
   function verify() {
     if (Object.keys(answers).length !== data.lines.length || done) return;
-    const success = repairsCorrect(data, answers); setChecked(true); setDone(success); onAnswer?.(success);
+    const success = repairsCorrect(data, answers); setChecked(true); setDone(success); onResponse?.({ value: data.lines.map((line, index) => `${index + 1}. ${line.text} → ${answers[index] === -1 ? 'Оставлено без изменений' : line.fixes[answers[index]] ?? 'Отмечено как ошибка без исправления'}`).join('\n'), outcome: success ? 'correct' : 'incorrect' }); onAnswer?.(success);
   }
   return <GameFrame game={data} theme="errors" name="Почини решение" group={false} onReset={reset}>
     {done ? <GameResult headline="Проверено. Исправлено. Понятно." takeaway={data.takeaway}>{data.lines.filter(line => line.is_error).map((line, i) => <div key={i} className="mg-takeaway"><RichText text={line.fixes[line.correct_index!]} /><RichText className="mg-muted mt-2" text={line.explanation} /></div>)}</GameResult> : <>

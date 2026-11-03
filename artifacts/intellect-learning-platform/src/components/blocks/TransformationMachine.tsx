@@ -1,16 +1,19 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import { useState } from 'react';
 import { displayNumber, matchingOutputs, readMachineSpec, runMachine, type MachineSpec } from '@/features/interactiveEngines/numberMachines';
 import { BlockShell, PrimaryAction } from './shared';
 import { RichText } from './RichText';
 
-type Props = Record<string, unknown> & { onAnswer?: (correct: boolean) => void };
+type Props = Record<string, unknown> & { onAnswer?: (correct: boolean) => void
+  onResponse?: (response: SubmittedResponse) => void; };
 export default function TransformationMachine(props: Props) {
   const spec = readMachineSpec(props);
   if (!spec) return <p role="alert" className="p-4">Не удалось открыть фабрику: проверьте операции и образец решения.</p>;
-  return <MachineSession key={JSON.stringify(spec)} spec={spec} title={typeof props.title === 'string' ? props.title : 'Фабрика преобразований'} prompt={typeof props.prompt === 'string' ? props.prompt : ''} explanation={typeof props.explanation === 'string' ? props.explanation : ''} onAnswer={props.onAnswer} />;
+  return <MachineSession key={JSON.stringify(spec)} spec={spec} title={typeof props.title === 'string' ? props.title : 'Фабрика преобразований'} prompt={typeof props.prompt === 'string' ? props.prompt : ''} explanation={typeof props.explanation === 'string' ? props.explanation : ''} onAnswer={props.onAnswer} onResponse={props.onResponse} />;
 }
 
-function MachineSession({ spec, title, prompt, explanation, onAnswer }: { spec: MachineSpec; title: string; prompt: string; explanation: string; onAnswer?: (correct: boolean) => void }) {
+function MachineSession({ spec, title, prompt, explanation, onAnswer, onResponse }: { spec: MachineSpec; title: string; prompt: string; explanation: string; onAnswer?: (correct: boolean) => void
+  onResponse?: (response: SubmittedResponse) => void; }) {
   const [sequence, setSequence] = useState<string[]>([]);
   const [stages, setStages] = useState<number[][] | null>(null);
   const [tries, setTries] = useState(0);
@@ -32,6 +35,7 @@ function MachineSession({ spec, title, prompt, explanation, onAnswer }: { spec: 
     const success = result !== null && matchingOutputs(result[result.length - 1], spec.target_outputs);
     setCorrect(success);
     setMessage(result === null ? 'Числа вышли за допустимый диапазон. Попробуйте другую цепочку.' : success ? 'Фабрика работает: все выходы совпали с целью!' : 'Выходы отличаются от цели. Измените операции или их порядок.');
+    onResponse?.({ value: `${sequence.map((id, index) => `${index + 1}. ${spec.operations.find(operation => operation.id === id)?.label ?? id}`).join('\n')}\nПолучившийся выход: ${result ? result[result.length - 1].map(displayNumber).join(', ') : 'Вне допустимого диапазона'}`, outcome: !success ? 'incorrect' : revealed ? 'assisted' : 'correct' });
     onAnswer?.(success);
   };
   return <BlockShell title={title} subtitle={prompt}>

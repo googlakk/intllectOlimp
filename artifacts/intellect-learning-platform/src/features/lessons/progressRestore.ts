@@ -1,8 +1,10 @@
+import type { ResponseDetails } from './responseDetails';
 import type { ObjectiveEvidence, ObjectiveMastery, ProgressRecord } from '@/lib/api/types';
 import { isDiagnosticFinished, type AttemptsByStep, type LessonAnswers } from './studentProgress';
 
 export type RestoredLessonProgress = {
   answers: LessonAnswers;
+  responseDetails: ResponseDetails;
   attemptsByStep: AttemptsByStep;
   baseElapsedTimeSec: number;
   currentStep: number;
@@ -24,6 +26,7 @@ export function restoreLessonProgress(
 
   return {
     answers,
+    responseDetails: progress.response_details || {},
     attemptsByStep: progress.attempts_by_step || {},
     baseElapsedTimeSec: progress.elapsed_time_sec || progress.time_spent_sec || 0,
     currentStep: isCompleted ? 0 : progress.current_step || 0,

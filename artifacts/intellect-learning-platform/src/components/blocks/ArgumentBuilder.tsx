@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, XCircle } from 'lucide-react';
@@ -11,6 +12,7 @@ export interface ArgumentBuilderProps {
   correct_evidence: string[];
   model_reasoning: string;
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
 }
 
 export default function ArgumentBuilder({ 
@@ -20,7 +22,8 @@ export default function ArgumentBuilder({
   correct_thesis, 
   correct_evidence, 
   model_reasoning, 
-  onAnswer 
+  onAnswer,
+  onResponse,
 }: ArgumentBuilderProps) {
   const [selectedThesis, setSelectedThesis] = useState<string>('');
   const [selectedEvidence, setSelectedEvidence] = useState<string[]>([]);
@@ -47,6 +50,7 @@ export default function ArgumentBuilder({
     const overallCorrect = isThesisCorrect && isEvidenceCorrect;
     setIsCorrect(overallCorrect);
     setStep(3);
+    onResponse?.({ value: `Тезис: ${selectedThesis}\nДоказательства:\n${selectedEvidence.join('\n')}`, outcome: overallCorrect ? 'correct' : 'incorrect' });
     onAnswer?.(overallCorrect);
   };
 

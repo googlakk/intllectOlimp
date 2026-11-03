@@ -1,3 +1,4 @@
+import type { ResponseDetails } from '@/features/lessons/responseDetails';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { request } from './client';
@@ -19,6 +20,7 @@ export type SaveProgressInput = {
   max_opened_step?: number;
   answers?: Record<string, boolean>;
   responses?: Record<string, string>;
+  response_details?: ResponseDetails;
   attempts_by_step?: Record<string, number>;
   elapsed_time_sec?: number;
   objective_mastery?: Record<string, ObjectiveMastery>;

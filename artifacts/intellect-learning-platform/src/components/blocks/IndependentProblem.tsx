@@ -1,3 +1,4 @@
+import type { SubmittedResponse } from '@/features/lessons/responseDetails';
 import React, { useState } from 'react';
 import { parseMathText } from './ShortExplanation';
 import { TaskCondition } from './BlockMedia';
@@ -21,10 +22,11 @@ export interface IndependentProblemProps {
   media?: unknown;
   difficulty: "basic" | "advanced" | "easy" | "medium" | "hard";
   onAnswer?: (isCorrect: boolean) => void;
+  onResponse?: (response: SubmittedResponse) => void;
   onAttempt?: (attempt: BlockAttempt) => void;
 }
 
-export default function IndependentProblem({ question, type, options, correct_answer, answer_mode, explanation, difficulty, answer_unit, accepted_units, tolerance, media, onAnswer, onAttempt }: IndependentProblemProps) {
+export default function IndependentProblem({ question, type, options, correct_answer, answer_mode, explanation, difficulty, answer_unit, accepted_units, tolerance, media, onAnswer, onAttempt, onResponse }: IndependentProblemProps) {
   const [value, setValue] = useState('');
   const [status, setStatus] = useState<'idle' | 'correct' | 'incorrect' | 'wrong_unit'>('idle');
   const [attempts, setAttempts] = useState(0);
@@ -36,6 +38,7 @@ export default function IndependentProblem({ question, type, options, correct_an
     // Варианты ответа сравниваются точно; как число — только числовые вопросы.
     const numeric = type !== 'multiple_choice' && (type === 'numeric' || type === 'number' || Boolean(answer_unit));
     const result = checkAnswer(value, { correct: correct_answer, mode: type === 'multiple_choice' ? 'choice' : answer_mode, numeric, unit: answer_unit, acceptedUnits: accepted_units, tolerance });
+    onResponse?.({ value: value.trim(), outcome: result });
     setStatus(result);
     onAttempt?.({ value: value.trim(), outcome: result, locked: result === 'correct' || (result === 'incorrect' && attempts + 1 >= 3) });
     // Верное число с неверной единицей не тратит попытку: просим проверить единицы.

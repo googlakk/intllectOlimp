@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from errors import ApplicationError
 from models import GeneratedLesson, Progress, LessonAttempt, LessonVersion, Student, Topic
 from lesson_contracts import flatten_lesson_document
-from services.assessment import grade_assessment
+from services.assessment import grade_assessment, assessment_outcomes
 from objectives import calculate_objective_mastery, quality_report
 from services.grade_access import GradeAccessError, require_topic_access
 from services.curriculum_graph import (
@@ -113,9 +113,18 @@ async def save_progress_record(payload: Any, db: AsyncSession) -> Progress:
     blocks = flatten_lesson_document(document) if document else lesson.blocks or []
     raw_objectives = ((version.blueprint or {}).get("learning_objectives") if version is not None else None) or topic.learning_objectives
     responses = getattr(payload, "responses", {})
+    raw_details = getattr(payload, "response_details", None)
+    response_details = ({key: value.model_dump(exclude_none=True) if hasattr(value, "model_dump") else value
+                         for key, value in raw_details.items()} if raw_details is not None else None)
     lesson_type = ((version.blueprint or {}).get("lesson_type") if version is not None else None) or topic.lesson_type
     if lesson_type == "assessment":
         payload.answers, payload.score = grade_assessment(blocks, responses) if payload.status == "completed" else ({}, None)
+        # Control work is graded on the server; client labels must not contradict it.
+        if payload.status == "completed":
+            response_details = {key: {"value": responses.get(key, ""), "outcome": outcome}
+                                for key, outcome in assessment_outcomes(blocks, responses).items()}
+        elif response_details is not None:
+            response_details = {}
     objective_mastery, objective_evidence, mastery_status = {}, {}, "not_assessed"
     derived = derive_canonical_mastery(blocks, raw_objectives, payload.answers, payload.attempts_by_step,
                                       lesson_completed=payload.status == "completed")
@@ -173,6 +182,7 @@ async def save_progress_record(payload: Any, db: AsyncSession) -> Progress:
             max_opened_step=payload.max_opened_step,
             answers=payload.answers,
             responses=responses,
+            response_details=response_details or {},
             attempts_by_step=payload.attempts_by_step,
             elapsed_time_sec=payload.elapsed_time_sec,
             objective_evidence=insert_objective_evidence,
@@ -190,6 +200,10 @@ async def save_progress_record(payload: Any, db: AsyncSession) -> Progress:
             set_={
                 "status": status_update,
                 "responses": literal(responses, type_=Progress.__table__.c.responses.type),
+                "response_details": case(
+                    (Progress.status == "completed", Progress.response_details),
+                    else_=Progress.response_details if response_details is None else progress_json_literal("response_details", response_details),
+                ),
                 "score": score_update,
                 "mastery_level": mastery_update,
                 # A completed attempt is a snapshot. Reviewing its answers must
@@ -336,6 +350,7 @@ async def restart_progress_record(student_id: int, topic_id: int, db: AsyncSessi
             max_opened_step=0,
             answers={},
             responses={},
+            response_details={},
             lesson_version_id=lesson.published_version_id,
             attempts_by_step={},
             elapsed_time_sec=0,

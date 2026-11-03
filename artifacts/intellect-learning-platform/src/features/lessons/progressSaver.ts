@@ -1,3 +1,4 @@
+import type { ResponseDetails } from './responseDetails';
 import { useCallback, useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -31,6 +32,7 @@ export type SaveLessonProgress = (
 
 export function useLessonProgressSaver(params: {
   baseElapsedTime: RefObject<number>;
+  responseDetails: RefObject<ResponseDetails>;
   setObjectiveMastery: Dispatch<SetStateAction<Record<string, ObjectiveMastery>>>;
   setSavedObjectiveEvidence: Dispatch<SetStateAction<Record<string, ObjectiveEvidence[]>>>;
   startTime: RefObject<number>;
@@ -44,6 +46,7 @@ export function useLessonProgressSaver(params: {
 }) {
   const {
     baseElapsedTime,
+    responseDetails,
     setObjectiveMastery,
     setSavedObjectiveEvidence,
     startTime,
@@ -122,6 +125,7 @@ export function useLessonProgressSaver(params: {
       step,
       maxStep,
       answers,
+      responseDetails: responseDetails.current,
       attemptsByStep,
       elapsedTimeSec,
       finalScore,
@@ -148,6 +152,7 @@ export function useLessonProgressSaver(params: {
     pendingTimerRef.current = window.setTimeout(flushPendingProgress, IN_PROGRESS_SAVE_DEBOUNCE_MS);
   }, [
     baseElapsedTime,
+    responseDetails,
     clearPendingTimer,
     commitProgress,
     flushPendingProgress,
