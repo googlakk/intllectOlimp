@@ -2,6 +2,8 @@
 
 ## Mission
 
+Start with `docs/PROJECT_HANDOFF.md` for the current release and handoff; owner constraints and older subsystem context remain in `docs/CLAUDE_HANDOFF.md`.
+
 Build Intellect Platform through small, evidence-backed product increments. The refactoring foundation is considered sufficient; do not start a new broad refactoring phase unless the user explicitly asks for one.
 
 ## Development Contract

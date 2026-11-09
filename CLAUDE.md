@@ -1,6 +1,7 @@
 # Start here — Intellect Platform
 
-Read `docs/CLAUDE_HANDOFF.md` first (current state, owner rules, deploy, file map, open issues), then `AGENTS.md`,
+Read `docs/PROJECT_HANDOFF.md` first (current release, completed work, checks and handoff), then
+`docs/CLAUDE_HANDOFF.md` (owner rules, deploy, file map and historical issues), `AGENTS.md`,
 `docs/ARCHITECTURE_GUIDE.md` and `docs/QUALITY_REQUIREMENTS.md`. The owner writes in Russian — answer in Russian.
 
 Non-negotiable:
