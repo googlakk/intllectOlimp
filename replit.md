@@ -14,6 +14,7 @@ Replit:
 
 - `cd backend && pip install -r requirements.txt && python migrate.py && uvicorn main:app --host 0.0.0.0 --port 5000` — run the FastAPI server
 - `pnpm --filter @workspace/intellect-learning-platform run dev` — run the React frontend
+- `cd backend && uv pip install --python .venv -r requirements-dev.txt && .venv/bin/pytest` — backend tests (use TEST_DATABASE_URL, schema rebuilt from migrations)
 - `pnpm run typecheck` — full typecheck across all packages
 - Required env: `DATABASE_URL` — Postgres connection string
 
