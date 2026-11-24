@@ -4,6 +4,14 @@ Russian-language learning and lesson-management platform for grade 7 olympiad st
 
 ## Run & Operate
 
+Local (macOS/Linux):
+- `docker compose up -d` — Postgres 16 + pgvector (db `intellect`, test db `intellect_test`)
+- `cp .env.example backend/.env` and fill keys
+- `cd backend && uv venv --python 3.12 .venv && uv pip install --python .venv -r requirements.txt && .venv/bin/uvicorn main:app --port 5000`
+- `cd artifacts/intellect-learning-platform && PORT=5173 BASE_PATH=/ pnpm exec vite`
+
+Replit:
+
 - `cd backend && pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 5000` — run the FastAPI server
 - `pnpm --filter @workspace/intellect-learning-platform run dev` — run the React frontend
 - `pnpm run typecheck` — full typecheck across all packages

@@ -47,3 +47,11 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Local environment
+.env
+backend/.env
+uploads/
+__pycache__/
+.venv/
+.pytest_cache/
