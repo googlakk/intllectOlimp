@@ -6,8 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from models import Section, Subject, Topic
+from deps import require_staff
 
-router = APIRouter(prefix="/api/ktp", tags=["ktp"])
+router = APIRouter(prefix="/api/ktp", tags=["ktp"], dependencies=[Depends(require_staff)])
 
 
 class TopicInput(BaseModel):

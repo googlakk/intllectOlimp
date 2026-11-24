@@ -1,9 +1,10 @@
 import json
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from deps import require_staff
 
-router = APIRouter(prefix="/api", tags=["components"])
+router = APIRouter(prefix="/api", tags=["components"], dependencies=[Depends(require_staff)])
 REGISTRY = Path(__file__).resolve().parent.parent / "component_registry.json"
 
 

@@ -1,14 +1,15 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.generator import MODEL, classify_subject, generate_lesson, select_archetype
 from database import get_db
-from models import GeneratedLesson, Section, Subject, Teacher, Topic
+from deps import current_teacher, current_user, require_staff
+from models import GeneratedLesson, Section, Subject, Teacher, Topic, User
 from objectives import quality_report
 
 router = APIRouter(prefix="/api/lessons", tags=["lessons"])
@@ -16,7 +17,6 @@ router = APIRouter(prefix="/api/lessons", tags=["lessons"])
 
 class GenerateInput(BaseModel):
     topic_id: int
-    teacher_id: int
 
 
 class BlocksInput(BaseModel):
@@ -24,7 +24,6 @@ class BlocksInput(BaseModel):
 
 
 class PublishInput(BaseModel):
-    teacher_id: int
     acknowledge_warnings: bool = False
 
 
@@ -50,9 +49,11 @@ async def get_lesson_or_404(lesson_id: int, db: AsyncSession) -> GeneratedLesson
 
 
 @router.post("/generate")
-async def generate(payload: GenerateInput, db: AsyncSession = Depends(get_db)):
-    if await db.get(Teacher, payload.teacher_id) is None:
-        raise HTTPException(status_code=404, detail="Преподаватель не найден")
+async def generate(
+    payload: GenerateInput,
+    teacher: Teacher = Depends(current_teacher),
+    db: AsyncSession = Depends(get_db),
+):
 
     row = (
         await db.execute(
@@ -107,7 +108,7 @@ async def generate(payload: GenerateInput, db: AsyncSession = Depends(get_db)):
         "objectives": quality["objectives"],
         "quality_report": quality["quality_report"],
         "skills": topic.skills or [],
-        "teacher_id": payload.teacher_id,
+        "teacher_id": teacher.id,
     }
     lesson.status = "draft"
     lesson.published_at = None
@@ -122,9 +123,10 @@ async def generate(payload: GenerateInput, db: AsyncSession = Depends(get_db)):
 @router.get("/{topic_id}")
 async def by_topic(
     topic_id: int,
-    role: str | None = Query(default=None),
+    user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    role = user.role
     statement = select(GeneratedLesson).where(GeneratedLesson.topic_id == topic_id)
     if role == "student":
         statement = statement.where(GeneratedLesson.status == "published")
@@ -150,6 +152,7 @@ async def update_blocks(
     lesson_id: int,
     payload: BlocksInput,
     db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_staff),
 ):
     lesson = await get_lesson_or_404(lesson_id, db)
     topic = await db.get(Topic, lesson.topic_id)
@@ -170,7 +173,9 @@ async def update_blocks(
 
 
 @router.get("/{lesson_id}/quality")
-async def lesson_quality(lesson_id: int, db: AsyncSession = Depends(get_db)):
+async def lesson_quality(
+    lesson_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(require_staff)
+):
     lesson = await get_lesson_or_404(lesson_id, db)
     topic = await db.get(Topic, lesson.topic_id)
     if topic is None:
@@ -183,9 +188,8 @@ async def publish(
     lesson_id: int,
     payload: PublishInput,
     db: AsyncSession = Depends(get_db),
+    teacher: Teacher = Depends(current_teacher),
 ):
-    if await db.get(Teacher, payload.teacher_id) is None:
-        raise HTTPException(status_code=404, detail="Преподаватель не найден")
     lesson = await get_lesson_or_404(lesson_id, db)
     topic = await db.get(Topic, lesson.topic_id)
     if topic is None:
@@ -212,7 +216,7 @@ async def publish(
     metadata["objectives"] = quality["objectives"]
     metadata["quality_report"] = quality["quality_report"]
     metadata["quality_review"] = {
-        "teacher_id": payload.teacher_id,
+        "teacher_id": teacher.id,
         "reviewed_at": datetime.now(timezone.utc).isoformat(),
         "acknowledged_warning_codes": [
             item.get("code") for item in warnings if isinstance(item, dict)
@@ -222,14 +226,16 @@ async def publish(
     lesson.lesson_metadata = metadata
     lesson.status = "published"
     lesson.published_at = datetime.now(timezone.utc)
-    lesson.published_by = payload.teacher_id
+    lesson.published_by = teacher.id
     await db.commit()
     await db.refresh(lesson)
     return serialize_lesson(lesson)
 
 
 @router.put("/{lesson_id}/unpublish")
-async def unpublish(lesson_id: int, db: AsyncSession = Depends(get_db)):
+async def unpublish(
+    lesson_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(require_staff)
+):
     lesson = await get_lesson_or_404(lesson_id, db)
     lesson.status = "draft"
     lesson.published_at = None
@@ -240,7 +246,9 @@ async def unpublish(lesson_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/{lesson_id}")
-async def delete_lesson(lesson_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_lesson(
+    lesson_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(require_staff)
+):
     lesson = await get_lesson_or_404(lesson_id, db)
     await db.delete(lesson)
     await db.commit()

@@ -4,8 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from models import Section, Subject, Topic
+from deps import require_any
 
-router = APIRouter(prefix="/api", tags=["subjects"])
+router = APIRouter(prefix="/api", tags=["subjects"], dependencies=[Depends(require_any)])
 
 
 def serialize(row):

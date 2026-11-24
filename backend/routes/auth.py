@@ -1,36 +1,100 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy import select
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel, Field
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from models import Student, Teacher
+from deps import current_user
+from models import Student, Teacher, User
+from security import (
+    SESSION_COOKIE,
+    SESSION_TTL,
+    cookie_secure,
+    create_session_token,
+    hash_password,
+    verify_password,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+MIN_PASSWORD_LENGTH = 8
+
 
 class LoginInput(BaseModel):
-    role: str
-    name: str
+    login: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=1, max_length=200)
 
 
-def to_dict(user, role: str):
-    return {"id": user.id, "name": user.name, "role": role, "grade": getattr(user, "grade", None)}
+class ChangePasswordInput(BaseModel):
+    current_password: str = Field(min_length=1, max_length=200)
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=200)
 
 
-@router.get("/users")
-async def users(db: AsyncSession = Depends(get_db)):
-    students = (await db.scalars(select(Student).order_by(Student.name))).all()
-    teachers = (await db.scalars(select(Teacher).order_by(Teacher.name))).all()
-    return {"students": [to_dict(u, "student") for u in students], "teachers": [to_dict(u, "teacher") for u in teachers]}
+async def serialize_user(user: User, db: AsyncSession) -> dict:
+    data = {
+        "id": user.id,
+        "login": user.login,
+        "name": user.full_name,
+        "role": user.role,
+        "must_change_password": user.must_change_password,
+        "student_id": None,
+        "teacher_id": None,
+        "grade": None,
+    }
+    if user.role == "student":
+        student = await db.scalar(select(Student).where(Student.user_id == user.id))
+        if student:
+            data["student_id"], data["grade"] = student.id, student.grade
+    elif user.role == "teacher":
+        teacher = await db.scalar(select(Teacher).where(Teacher.user_id == user.id))
+        if teacher:
+            data["teacher_id"] = teacher.id
+    return data
 
 
 @router.post("/login")
-async def login(payload: LoginInput, db: AsyncSession = Depends(get_db)):
-    if payload.role not in {"student", "teacher"}:
-        raise HTTPException(400, "Неизвестная роль")
-    model = Student if payload.role == "student" else Teacher
-    user = await db.scalar(select(model).where(model.name == payload.name))
-    if not user:
-        raise HTTPException(404, "Пользователь не найден")
-    return to_dict(user, payload.role)
+async def login(payload: LoginInput, response: Response, db: AsyncSession = Depends(get_db)):
+    user = await db.scalar(select(User).where(func.lower(User.login) == payload.login.strip().lower()))
+    password_ok = verify_password(payload.password, user.password_hash if user else None)
+    if user is None or not password_ok or not user.is_active:
+        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+    user.last_login_at = datetime.now(timezone.utc)
+    await db.commit()
+    response.set_cookie(
+        SESSION_COOKIE,
+        create_session_token(user.id),
+        max_age=int(SESSION_TTL.total_seconds()),
+        httponly=True,
+        secure=cookie_secure(),
+        samesite="lax",
+        path="/",
+    )
+    return await serialize_user(user, db)
+
+
+@router.post("/logout", status_code=204)
+async def logout(response: Response):
+    response.delete_cookie(SESSION_COOKIE, path="/")
+
+
+@router.get("/me")
+async def me(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)):
+    return await serialize_user(user, db)
+
+
+@router.post("/change-password")
+async def change_password(
+    payload: ChangePasswordInput,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Текущий пароль указан неверно")
+    if payload.new_password == payload.current_password:
+        raise HTTPException(status_code=400, detail="Новый пароль должен отличаться от текущего")
+    user.password_hash = hash_password(payload.new_password)
+    user.must_change_password = False
+    await db.commit()
+    return await serialize_user(user, db)

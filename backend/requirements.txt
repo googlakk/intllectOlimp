@@ -6,3 +6,5 @@ python-dotenv
 anthropic
 pydantic
 alembic
+pwdlib[argon2]
+pyjwt

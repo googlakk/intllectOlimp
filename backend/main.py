@@ -4,13 +4,13 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine
+from security import create_session_token
 from routes import auth, components, dashboard, ktp, lessons, progress, subjects
-from seed import seed_if_empty
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await seed_if_empty()
+    create_session_token(0)  # fail fast if SECRET_KEY is missing
     yield
     await engine.dispose()
 

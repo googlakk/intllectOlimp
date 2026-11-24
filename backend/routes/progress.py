@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from deps import current_student, require_staff
 from models import GeneratedLesson, Progress, Student, Topic
 from objectives import calculate_objective_mastery, quality_report
 
@@ -14,7 +15,6 @@ router = APIRouter(prefix="/api/progress", tags=["progress"])
 
 
 class ProgressInput(BaseModel):
-    student_id: int
     topic_id: int
     score: int | None = Field(default=None, ge=0, le=100)
     mastery_level: str | None = Field(default=None, min_length=1)
@@ -63,9 +63,11 @@ def serialize_progress(row: Progress) -> dict:
 
 
 @router.post("")
-async def save_progress(payload: ProgressInput, db: AsyncSession = Depends(get_db)):
-    if await db.get(Student, payload.student_id) is None:
-        raise HTTPException(status_code=404, detail="Ученик не найден")
+async def save_progress(
+    payload: ProgressInput,
+    student: Student = Depends(current_student),
+    db: AsyncSession = Depends(get_db),
+):
     topic = await db.get(Topic, payload.topic_id)
     if topic is None:
         raise HTTPException(status_code=404, detail="Тема не найдена")
@@ -123,7 +125,7 @@ async def save_progress(payload: ProgressInput, db: AsyncSession = Depends(get_d
     statement = (
         insert(Progress)
         .values(
-            student_id=payload.student_id,
+            student_id=student.id,
             topic_id=payload.topic_id,
             status=payload.status,
             score=payload.score,
@@ -186,21 +188,37 @@ async def save_progress(payload: ProgressInput, db: AsyncSession = Depends(get_d
     return serialize_progress(row)
 
 
-@router.get("/{student_id}")
-async def by_student(student_id: int, db: AsyncSession = Depends(get_db)):
+async def _student_progress(student_id: int, db: AsyncSession) -> list[dict]:
     rows = (await db.scalars(select(Progress).where(Progress.student_id == student_id))).all()
     return [serialize_progress(row) for row in rows]
 
 
-@router.get("/{student_id}/{topic_id}")
-async def by_student_topic(
-    student_id: int, topic_id: int, db: AsyncSession = Depends(get_db)
-):
+async def _student_topic_progress(student_id: int, topic_id: int, db: AsyncSession) -> dict:
     row = await db.scalar(
-        select(Progress).where(
-            Progress.student_id == student_id, Progress.topic_id == topic_id
-        )
+        select(Progress).where(Progress.student_id == student_id, Progress.topic_id == topic_id)
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Сессия урока не найдена")
     return serialize_progress(row)
+
+
+@router.get("/me")
+async def my_progress(student: Student = Depends(current_student), db: AsyncSession = Depends(get_db)):
+    return await _student_progress(student.id, db)
+
+
+@router.get("/me/{topic_id}")
+async def my_topic_progress(
+    topic_id: int, student: Student = Depends(current_student), db: AsyncSession = Depends(get_db)
+):
+    return await _student_topic_progress(student.id, topic_id, db)
+
+
+@router.get("/{student_id}", dependencies=[Depends(require_staff)])
+async def by_student(student_id: int, db: AsyncSession = Depends(get_db)):
+    return await _student_progress(student_id, db)
+
+
+@router.get("/{student_id}/{topic_id}", dependencies=[Depends(require_staff)])
+async def by_student_topic(student_id: int, topic_id: int, db: AsyncSession = Depends(get_db)):
+    return await _student_topic_progress(student_id, topic_id, db)

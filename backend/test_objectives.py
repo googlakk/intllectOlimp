@@ -590,16 +590,18 @@ class LessonPublishRouteTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HTTPException) as rejected:
             await publish(
                 lesson.id,
-                PublishInput(teacher_id=teacher.id, acknowledge_warnings=False),
+                PublishInput(acknowledge_warnings=False),
                 db,
+                teacher,
             )
         self.assertEqual(rejected.exception.status_code, 422)
         self.assertEqual(db.commits, 0)
 
         response = await publish(
             lesson.id,
-            PublishInput(teacher_id=teacher.id, acknowledge_warnings=True),
+            PublishInput(acknowledge_warnings=True),
             db,
+            teacher,
         )
         self.assertEqual(response["status"], "published")
         self.assertEqual(db.commits, 1)
@@ -677,8 +679,9 @@ class LessonPublishRouteTests(unittest.IsolatedAsyncioTestCase):
 
         response = await publish(
             lesson.id,
-            PublishInput(teacher_id=teacher.id, acknowledge_warnings=True),
+            PublishInput(acknowledge_warnings=True),
             db,
+            teacher,
         )
         canonical_id = response["lesson_metadata"]["objectives"][0]["id"]
         self.assertEqual(response["status"], "published")

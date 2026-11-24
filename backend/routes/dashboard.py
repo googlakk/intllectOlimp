@@ -4,8 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from models import GeneratedLesson, Progress, Student, Subject, Topic
+from deps import require_staff
 
-router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+router = APIRouter(prefix="/api/dashboard", tags=["dashboard"], dependencies=[Depends(require_staff)])
 
 
 @router.get("/overview")
