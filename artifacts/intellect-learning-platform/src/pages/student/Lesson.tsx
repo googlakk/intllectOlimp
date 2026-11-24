@@ -1,7 +1,7 @@
 import { useParams, Link } from 'wouter';
 import { ArrowLeft, BookOpen, Loader2, CheckCircle, ChevronDown, RefreshCw, BookMarked, Trophy } from 'lucide-react';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { useGetLesson, useSaveProgress, useGetLessonProgress, type LearningObjective, type ObjectiveEvidence, type ObjectiveMastery, type MasteryStatus } from '@/lib/api';
+import { useGetLesson, useSaveProgress, useMyLessonProgress, type LearningObjective, type ObjectiveEvidence, type ObjectiveMastery, type MasteryStatus } from '@/lib/api';
 import { componentMap, assessmentComponents } from '@/components/blocks/BlockRenderer';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
@@ -13,8 +13,8 @@ export default function Lesson() {
   const topicId = Number(params.topicId);
   const { user } = useAuth();
   
-  const { data: lesson, isLoading: isLoadingLesson } = useGetLesson(topicId, 'student');
-  const { data: progress, isLoading: isLoadingProgress } = useGetLessonProgress(user?.id || 0, topicId, !!user?.id);
+  const { data: lesson, isLoading: isLoadingLesson } = useGetLesson(topicId);
+  const { data: progress, isLoading: isLoadingProgress } = useMyLessonProgress(topicId, !!user);
   
   const saveProgressMutation = useSaveProgress();
   const saveError = saveProgressMutation.error as Error | null;
@@ -157,7 +157,6 @@ export default function Lesson() {
     lastSaved.current = { current_step: step, max_opened_step: maxStep, status };
 
     saveProgressMutation.mutate({
-      student_id: user.id,
       topic_id: topicId,
       status,
       current_step: step,
@@ -173,7 +172,7 @@ export default function Lesson() {
     }, {
       onSuccess: (data) => {
         // Optimistic query patch
-        queryClient.setQueryData(['progress', user.id, topicId], data);
+        queryClient.setQueryData(['progress', 'me', topicId], data);
         if (status === 'completed') {
            setObjectiveMastery(data.objective_mastery || {});
            setSavedObjectiveEvidence(data.objective_evidence || {});

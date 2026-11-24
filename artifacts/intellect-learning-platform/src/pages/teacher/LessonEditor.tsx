@@ -12,7 +12,7 @@ export default function LessonEditor() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: lesson, isLoading: isLoadingLesson } = useGetLesson(tId, 'teacher');
+  const { data: lesson, isLoading: isLoadingLesson } = useGetLesson(tId);
   const generateLessonMutation = useGenerateLesson();
   const publishLessonMutation = usePublishLesson();
   const unpublishLessonMutation = useUnpublishLesson();
@@ -73,7 +73,7 @@ export default function LessonEditor() {
 
   const handleGenerate = () => {
     if (!user) return;
-    generateLessonMutation.mutate({ topic_id: tId, teacher_id: user.id }, {
+    generateLessonMutation.mutate({ topic_id: tId }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['lesson', tId, 'teacher'] });
         queryClient.invalidateQueries({ queryKey: ['lesson-status', tId] });
@@ -93,7 +93,6 @@ export default function LessonEditor() {
     } else {
       publishLessonMutation.mutate({
         lesson_id: lesson.id,
-        teacher_id: user.id,
         acknowledge_warnings: warningsAcknowledged,
       }, {
         onSuccess: () => {

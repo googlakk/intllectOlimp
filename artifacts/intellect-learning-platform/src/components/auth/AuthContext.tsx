@@ -1,39 +1,39 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
-import type { User } from '@/lib/api';
+import { createContext, useContext, ReactNode } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchMe, logoutRequest, type User, type Role } from '@/lib/api';
 
 interface AuthContextType {
   user: User | null;
-  login: (user: User) => void;
-  logout: () => void;
+  isLoading: boolean;
+  /** Store the user returned by login / change-password. */
+  setUser: (user: User) => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+const ME_KEY = ['auth', 'me'];
+
+export function homePath(role: Role) {
+  if (role === 'student') return '/learn';
+  if (role === 'admin') return '/admin';
+  return '/dashboard';
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('intellect_user');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  });
+  const queryClient = useQueryClient();
+  // The session lives in an httpOnly cookie; the server is the source of truth.
+  const { data: user = null, isLoading } = useQuery({ queryKey: ME_KEY, queryFn: fetchMe, staleTime: 5 * 60_000 });
 
-  const login = (u: User) => {
-    setUser(u);
-    localStorage.setItem('intellect_user', JSON.stringify(u));
-  };
+  const setUser = (next: User) => queryClient.setQueryData(ME_KEY, next);
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('intellect_user');
+  const logout = async () => {
+    await logoutRequest().catch(() => undefined);
+    queryClient.clear();
+    queryClient.setQueryData(ME_KEY, null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, setUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,10 +1,10 @@
 import { Trophy, Target, BookOpen, Brain, Loader2 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthContext';
-import { useGetStudentProgress } from '@/lib/api';
+import { useMyProgress } from '@/lib/api';
 
 export default function Progress() {
   const { user } = useAuth();
-  const { data: progress = [], isLoading } = useGetStudentProgress(user?.id || 0, !!user?.id);
+  const { data: progress = [], isLoading } = useMyProgress(!!user);
   const completed = progress.filter((item) => item.status === 'completed').length;
   const mastered = progress.filter((item) => item.mastery_status === 'mastered').length;
   const objectiveResults = progress.flatMap((item) => Object.values(item.objective_mastery || {}));

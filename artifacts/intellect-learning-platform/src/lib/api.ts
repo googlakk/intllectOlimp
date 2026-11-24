@@ -1,7 +1,22 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 
-export type User = { id: number; name: string; role: 'student' | 'teacher'; grade: number | null };
-export type LoginUsers = { students: User[]; teachers: User[] };
+export type Role = 'admin' | 'teacher' | 'student';
+export type User = {
+  id: number;
+  login: string;
+  name: string;
+  role: Role;
+  grade: number | null;
+  must_change_password: boolean;
+  student_id: number | null;
+  teacher_id: number | null;
+};
+
+export class ApiError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
+}
 export type Subject = { id: number; name: string; grade: number; hours_per_week: number; hours_per_year: number; source_info: string | null; instruction_language?: 'ru' | 'ky'; progress?: number };
 export type Section = { id: number; subject_id: number; name: string; sort_order: number; total_hours: number };
 export type Topic = { id: number; section_id: number; ktp_number: string | null; name: string; hours: number; lesson_type: string; learning_objectives: string | null; skills: string[]; resources: string | null };
@@ -70,14 +85,26 @@ export type ComponentRegistryEntry = {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
+    credentials: 'same-origin',
     ...init,
     headers: { 'Content-Type': 'application/json', ...init?.headers },
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({ detail: 'Ошибка сервера' }));
-    throw new Error(formatApiDetail(body.detail ?? body));
+    throw new ApiError(formatApiDetail(body.detail ?? body), response.status);
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
+}
+
+/** Like request(), but a 404 becomes null instead of an error. */
+async function requestOrNull<T>(path: string): Promise<T | null> {
+  try {
+    return await request<T>(path);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
 }
 
 export function formatApiDetail(detail: unknown): string {
@@ -95,12 +122,18 @@ export function formatApiDetail(detail: unknown): string {
   return detail == null ? 'Ошибка сервера' : String(detail);
 }
 
-export const useLoginUsers = () =>
-  useQuery({ queryKey: ['login-users'], queryFn: () => request<LoginUsers>('/auth/users') });
+export const fetchMe = () => requestOrNull<User>('/auth/me').catch((error) => {
+  if (error instanceof ApiError && error.status === 401) return null;
+  throw error;
+});
 
-export const useLogin = () =>
-  useMutation({ mutationFn: (data: { role: 'student' | 'teacher'; name: string }) =>
-    request<User>('/auth/login', { method: 'POST', body: JSON.stringify(data) }) });
+export const loginRequest = (data: { login: string; password: string }) =>
+  request<User>('/auth/login', { method: 'POST', body: JSON.stringify(data) });
+
+export const logoutRequest = () => request<void>('/auth/logout', { method: 'POST' });
+
+export const changePasswordRequest = (data: { current_password: string; new_password: string }) =>
+  request<User>('/auth/change-password', { method: 'POST', body: JSON.stringify(data) });
 
 export const useSubjects = () =>
   useQuery({ queryKey: ['subjects'], queryFn: () => request<Subject[]>('/subjects') });
@@ -146,23 +179,14 @@ export type GeneratedLesson = {
   model_used: string | null;
 };
 
-export async function getLessonByTopic(
-  topicId: number,
-  role?: 'student' | 'teacher',
-): Promise<GeneratedLesson | null> {
-  const response = await fetch(`/api/lessons/${topicId}${role ? `?role=${role}` : ''}`);
-  if (response.status === 404) return null;
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({ detail: 'Ошибка сервера' }));
-    throw new Error(formatApiDetail(body.detail ?? body));
-  }
-  return response.json() as Promise<GeneratedLesson>;
-}
+// The server decides what the signed-in user may see (students: published only).
+export const getLessonByTopic = (topicId: number) =>
+  requestOrNull<GeneratedLesson>(`/lessons/${topicId}`);
 
-export const generateLesson = (topicId: number, teacherId: number) =>
+export const generateLesson = (topicId: number) =>
   request<GeneratedLesson>('/lessons/generate', {
     method: 'POST',
-    body: JSON.stringify({ topic_id: topicId, teacher_id: teacherId }),
+    body: JSON.stringify({ topic_id: topicId }),
   });
 
 export const updateLessonBlocks = (lessonId: number, blocks: Block[]) =>
@@ -171,10 +195,10 @@ export const updateLessonBlocks = (lessonId: number, blocks: Block[]) =>
     body: JSON.stringify({ blocks }),
   });
 
-export const publishLesson = (lessonId: number, teacherId: number, acknowledgeWarnings = false) =>
+export const publishLesson = (lessonId: number, acknowledgeWarnings = false) =>
   request<GeneratedLesson>(`/lessons/${lessonId}/publish`, {
     method: 'PUT',
-    body: JSON.stringify({ teacher_id: teacherId, acknowledge_warnings: acknowledgeWarnings }),
+    body: JSON.stringify({ acknowledge_warnings: acknowledgeWarnings }),
   });
 
 export const unpublishLesson = (lessonId: number) =>
@@ -186,17 +210,16 @@ export const uploadKtp = (data: unknown) =>
     body: JSON.stringify(data),
   });
 
-export const useGetLesson = (topicId: number, role?: 'student' | 'teacher', enabled = true) =>
+export const useGetLesson = (topicId: number, enabled = true) =>
   useQuery({
-    queryKey: ['lesson', topicId, role],
-    queryFn: () => getLessonByTopic(topicId, role),
+    queryKey: ['lesson', topicId],
+    queryFn: () => getLessonByTopic(topicId),
     enabled: enabled && topicId > 0,
   });
 
 export const useGenerateLesson = () =>
   useMutation({
-    mutationFn: (data: { topic_id: number; teacher_id: number }) =>
-      generateLesson(data.topic_id, data.teacher_id),
+    mutationFn: (data: { topic_id: number }) => generateLesson(data.topic_id),
   });
 
 export const useUpdateLessonBlocks = () =>
@@ -207,8 +230,8 @@ export const useUpdateLessonBlocks = () =>
 
 export const usePublishLesson = () =>
   useMutation({
-    mutationFn: (data: { lesson_id: number; teacher_id: number; acknowledge_warnings?: boolean }) =>
-      publishLesson(data.lesson_id, data.teacher_id, data.acknowledge_warnings),
+    mutationFn: (data: { lesson_id: number; acknowledge_warnings?: boolean }) =>
+      publishLesson(data.lesson_id, data.acknowledge_warnings),
   });
 
 export const useUnpublishLesson = () =>
@@ -218,7 +241,6 @@ export const useUnpublishLesson = () =>
 
 export const saveProgress = (
   data: {
-    student_id: number;
     topic_id: number;
     status: 'in_progress' | 'completed';
     score?: number | null;
@@ -239,32 +261,21 @@ export const saveProgress = (
     body: JSON.stringify(data),
   });
 
-export const getLessonProgress = async (studentId: number, topicId: number): Promise<ProgressRecord | null> => {
-  const response = await fetch(`/api/progress/${studentId}/${topicId}`);
-  if (response.status === 404) return null;
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({ detail: 'Ошибка сервера' }));
-    throw new Error(formatApiDetail(body.detail ?? body));
-  }
-  return response.json() as Promise<ProgressRecord>;
-};
+// Signed-in student's own progress.
+export const getMyLessonProgress = (topicId: number) =>
+  requestOrNull<ProgressRecord>(`/progress/me/${topicId}`);
 
-export const getStudentProgress = (studentId: number) =>
-  request<ProgressRecord[]>(`/progress/${studentId}`);
+export const getMyProgress = () => request<ProgressRecord[]>('/progress/me');
 
-export const useGetLessonProgress = (studentId: number, topicId: number, enabled = true) =>
+export const useMyLessonProgress = (topicId: number, enabled = true) =>
   useQuery({
-    queryKey: ['progress', studentId, topicId],
-    queryFn: () => getLessonProgress(studentId, topicId),
-    enabled: enabled && studentId > 0 && topicId > 0,
+    queryKey: ['progress', 'me', topicId],
+    queryFn: () => getMyLessonProgress(topicId),
+    enabled: enabled && topicId > 0,
   });
 
-export const useGetStudentProgress = (studentId: number, enabled = true) =>
-  useQuery({
-    queryKey: ['progress', studentId],
-    queryFn: () => getStudentProgress(studentId),
-    enabled: enabled && studentId > 0,
-  });
+export const useMyProgress = (enabled = true) =>
+  useQuery({ queryKey: ['progress', 'me'], queryFn: getMyProgress, enabled });
 
 export const useSaveProgress = () =>
   useMutation({
@@ -275,6 +286,6 @@ export const useSaveProgress = () =>
 export const useLessonStatus = (topicId: number, enabled = true) =>
   useQuery({
     queryKey: ['lesson-status', topicId],
-    queryFn: () => getLessonByTopic(topicId, 'teacher'),
+    queryFn: () => getLessonByTopic(topicId),
     enabled: enabled && topicId > 0,
   });
