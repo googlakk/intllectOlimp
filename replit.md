@@ -7,12 +7,12 @@ Russian-language learning and lesson-management platform for grade 7 olympiad st
 Local (macOS/Linux):
 - `docker compose up -d` — Postgres 16 + pgvector (db `intellect`, test db `intellect_test`)
 - `cp .env.example backend/.env` and fill keys
-- `cd backend && uv venv --python 3.12 .venv && uv pip install --python .venv -r requirements.txt && .venv/bin/uvicorn main:app --port 5000`
+- `cd backend && uv venv --python 3.12 .venv && uv pip install --python .venv -r requirements.txt && .venv/bin/python migrate.py && .venv/bin/uvicorn main:app --port 5000`
 - `cd artifacts/intellect-learning-platform && PORT=5173 BASE_PATH=/ pnpm exec vite`
 
 Replit:
 
-- `cd backend && pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 5000` — run the FastAPI server
+- `cd backend && pip install -r requirements.txt && python migrate.py && uvicorn main:app --host 0.0.0.0 --port 5000` — run the FastAPI server
 - `pnpm --filter @workspace/intellect-learning-platform run dev` — run the React frontend
 - `pnpm run typecheck` — full typecheck across all packages
 - Required env: `DATABASE_URL` — Postgres connection string
@@ -32,7 +32,7 @@ Replit:
 ## Architecture decisions
 
 - The backend is Python-only; do not introduce Express, Drizzle, or another JavaScript backend.
-- SQLAlchemy creates tables and runs idempotent student/teacher seeding during FastAPI startup.
+- Schema is managed by Alembic (`backend/migrations`); run `python migrate.py` before the API. Never use `create_all`. New change: edit models.py, then `alembic revision --autogenerate -m "..."` and review the file.
 - Curriculum data remains empty until KTP upload is implemented.
 
 ## Product
