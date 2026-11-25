@@ -8,6 +8,7 @@ import { Shell } from '@/components/layout/Shell';
 import Login from '@/pages/Login';
 import ChangePassword from '@/pages/ChangePassword';
 import AdminHome from '@/pages/admin/Home';
+import Classes from '@/pages/admin/Classes';
 import Learn from '@/pages/student/Learn';
 import SubjectView from '@/pages/student/Subject';
 import Lesson from '@/pages/student/Lesson';
@@ -60,6 +61,7 @@ function Router() {
       <Route path="/" component={Login} />
       <Route path="/change-password" component={ChangePassword} />
       <Route path="/admin" component={() => <Shell><ProtectedRoute component={AdminHome} allowedRoles={['admin']} /></Shell>} />
+      <Route path="/admin/classes" component={() => <Shell><ProtectedRoute component={Classes} allowedRoles={['admin']} /></Shell>} />
       
       <Route path="/learn" component={() => <Shell><ProtectedRoute component={Learn} allowedRoles={['student']} /></Shell>} />
       <Route path="/learn/:subjectId" component={() => <Shell><ProtectedRoute component={SubjectView} allowedRoles={['student']} /></Shell>} />

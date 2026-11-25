@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from curriculum import merge_key, quarter_for
 from models import Section, Subject, Topic
 from deps import require_staff
 
@@ -19,6 +20,7 @@ class TopicInput(BaseModel):
     learning_objectives: str = ""
     skills: list[str] = Field(default_factory=list)
     resources: str = ""
+    quarter: int | None = Field(default=None, ge=1, le=4)
 
 
 class SectionInput(BaseModel):
@@ -51,6 +53,9 @@ async def upload_ktp(payload: KtpUploadInput, db: AsyncSession = Depends(get_db)
         await db.flush()
 
         topic_count = 0
+        total_hours = sum(max(t.hours, 1) for sec in payload.sections for t in sec.topics)
+        position_hours = 0
+        first_by_key: dict[tuple[int, str], Topic] = {}
         for sort_order, section_input in enumerate(payload.sections, start=1):
             section = Section(
                 subject_id=subject.id,
@@ -62,19 +67,29 @@ async def upload_ktp(payload: KtpUploadInput, db: AsyncSession = Depends(get_db)
             await db.flush()
 
             for topic_input in section_input.topics:
-                db.add(
-                    Topic(
-                        section_id=section.id,
-                        ktp_number=topic_input.ktp_number,
-                        name=topic_input.name,
-                        hours=topic_input.hours,
-                        lesson_type=topic_input.lesson_type,
-                        learning_objectives=topic_input.learning_objectives,
-                        skills=topic_input.skills,
-                        resources=topic_input.resources,
-                    )
-                )
                 topic_count += 1
+                topic = Topic(
+                    section_id=section.id,
+                    ktp_number=topic_input.ktp_number,
+                    name=topic_input.name,
+                    hours=topic_input.hours,
+                    lesson_type=topic_input.lesson_type,
+                    learning_objectives=topic_input.learning_objectives,
+                    skills=topic_input.skills,
+                    resources=topic_input.resources,
+                    quarter=topic_input.quarter or quarter_for(position_hours, total_hours),
+                    sort_number=topic_count,
+                )
+                position_hours += max(topic_input.hours, 1)
+                db.add(topic)
+                key = merge_key(topic_input.name)
+                if key is not None:
+                    first = first_by_key.get((section.id, key))
+                    if first is None:
+                        first_by_key[(section.id, key)] = topic
+                    else:
+                        await db.flush()
+                        topic.lesson_topic_id = first.id
 
         await db.commit()
         await db.refresh(subject)

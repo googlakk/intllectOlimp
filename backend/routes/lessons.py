@@ -3,13 +3,14 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.generator import MODEL, classify_subject, generate_lesson, select_archetype
 from database import get_db
 from deps import current_teacher, current_user, require_staff
-from models import GeneratedLesson, Section, Subject, Teacher, Topic, User
+from curriculum import MAX_LESSON_PARTS, lesson_parts
+from models import GeneratedLesson, Section, Student, Subject, Teacher, Topic, TopicDelivery, User
 from objectives import quality_report
 
 router = APIRouter(prefix="/api/lessons", tags=["lessons"])
@@ -17,6 +18,8 @@ router = APIRouter(prefix="/api/lessons", tags=["lessons"])
 
 class GenerateInput(BaseModel):
     topic_id: int
+    # Batch «generate quarter» sets this so existing drafts/published lessons are never overwritten.
+    skip_existing: bool = False
 
 
 class BlocksInput(BaseModel):
@@ -25,6 +28,14 @@ class BlocksInput(BaseModel):
 
 class PublishInput(BaseModel):
     acknowledge_warnings: bool = False
+
+
+def block_part(block: dict[str, Any]) -> int:
+    content = block.get("content") if isinstance(block, dict) else None
+    try:
+        return max(1, int((content or {}).get("lesson_part") or 1))
+    except (TypeError, ValueError):
+        return 1
 
 
 def serialize_lesson(lesson: GeneratedLesson) -> dict:
@@ -39,6 +50,50 @@ def serialize_lesson(lesson: GeneratedLesson) -> dict:
         "published_by": lesson.published_by,
         "model_used": lesson.model_used,
     }
+
+
+async def lesson_topic(topic: Topic, db: AsyncSession) -> Topic:
+    """The row that owns the lesson for a (possibly repeated) KTP row."""
+    if topic.lesson_topic_id is None:
+        return topic
+    return await db.get(Topic, topic.lesson_topic_id) or topic
+
+
+async def group_rows(primary: Topic, db: AsyncSession) -> list[Topic]:
+    rows = await db.scalars(
+        select(Topic).where(or_(Topic.id == primary.id, Topic.lesson_topic_id == primary.id))
+    )
+    return list(rows)
+
+
+def previous_topics_query(primary: Topic, section: Section, limit: int = 3) -> Any:
+    return (
+        select(Topic.name, Topic.learning_objectives)
+        .join(Section, Topic.section_id == Section.id)
+        .where(
+            Section.subject_id == section.subject_id,
+            Topic.lesson_topic_id.is_(None),
+            Topic.sort_number < (primary.sort_number or 0),
+        )
+        .order_by(Topic.sort_number.desc())
+        .limit(limit)
+    )
+
+
+async def unlocked_parts_for(user: User, primary: Topic, total_parts: int, db: AsyncSession) -> int:
+    """Lesson parts open to a student: one per «Проведено» mark of the topic in the student's class."""
+    if user.role != "student":
+        return total_parts
+    student = await db.scalar(select(Student).where(Student.user_id == user.id))
+    if student is None or student.class_id is None:
+        return total_parts  # no class assigned yet: nothing to gate by
+    row_ids = [row.id for row in await group_rows(primary, db)]
+    delivered = await db.scalar(
+        select(func.count(TopicDelivery.id)).where(
+            TopicDelivery.class_id == student.class_id, TopicDelivery.topic_id.in_(row_ids)
+        )
+    )
+    return max(1, min(total_parts, delivered or 0))
 
 
 async def get_lesson_or_404(lesson_id: int, db: AsyncSession) -> GeneratedLesson:
@@ -65,7 +120,17 @@ async def generate(
     ).first()
     if row is None:
         raise HTTPException(status_code=404, detail="Тема не найдена")
-    topic, _section, subject = row
+    topic, section, subject = row
+    topic = await lesson_topic(topic, db)
+    existing = await db.scalar(select(GeneratedLesson).where(GeneratedLesson.topic_id == topic.id))
+    if existing is not None and payload.skip_existing:
+        raise HTTPException(status_code=409, detail="У темы уже есть урок — пропущено")
+    rows = await group_rows(topic, db)
+    total_hours = max(1, sum(max(row.hours or 1, 1) for row in rows))
+    previous = [
+        {"name": name, "learning_objectives": objectives}
+        for name, objectives in (await db.execute(previous_topics_query(topic, section))).all()
+    ]
 
     try:
         blocks = await generate_lesson(
@@ -77,14 +142,21 @@ async def generate(
             grade=subject.grade,
             lesson_type=topic.lesson_type,
             content_language=subject.instruction_language,
+            section_name=section.name,
+            quarter=topic.quarter,
+            sort_number=topic.sort_number,
+            total_hours=total_hours,
+            previous_topics=previous,
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Не удалось сгенерировать урок: {exc}") from exc
 
-    lesson = await db.scalar(select(GeneratedLesson).where(GeneratedLesson.topic_id == topic.id))
+    lesson = existing
     if lesson is None:
         lesson = GeneratedLesson(topic_id=topic.id)
         db.add(lesson)
+    # Parts must be contiguous so unlocking a part only appends blocks: saved progress is index-based.
+    blocks = sorted(blocks, key=block_part)
     quality = quality_report(blocks, topic.learning_objectives)
     lesson.blocks = quality["normalized_blocks"]
     profile = classify_subject(subject.name)
@@ -109,6 +181,13 @@ async def generate(
         "quality_report": quality["quality_report"],
         "skills": topic.skills or [],
         "teacher_id": teacher.id,
+        "section_name": section.name,
+        "quarter": topic.quarter,
+        "sort_number": topic.sort_number,
+        "total_hours": total_hours,
+        "ktp_rows": [row.id for row in rows],
+        "lesson_parts": lesson_parts(total_hours),
+        "previous_topics": [item["name"] for item in previous],
     }
     lesson.status = "draft"
     lesson.published_at = None
@@ -120,6 +199,29 @@ async def generate(
     return serialize_lesson(lesson)
 
 
+@router.get("/quarter-plan")
+async def quarter_plan(
+    subject_id: int,
+    quarter: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_staff),
+):
+    """Learning topics of one quarter in KTP order, with whether a lesson already exists."""
+    rows = (
+        await db.execute(
+            select(Topic.id, Topic.name, Topic.sort_number, GeneratedLesson.status)
+            .join(Section, Topic.section_id == Section.id)
+            .outerjoin(GeneratedLesson, GeneratedLesson.topic_id == Topic.id)
+            .where(Section.subject_id == subject_id, Topic.quarter == quarter, Topic.lesson_topic_id.is_(None))
+            .order_by(Topic.sort_number, Topic.id)
+        )
+    ).all()
+    return [
+        {"topic_id": r.id, "name": r.name, "sort_number": r.sort_number, "lesson_status": r.status}
+        for r in rows
+    ]
+
+
 @router.get("/{topic_id}")
 async def by_topic(
     topic_id: int,
@@ -127,7 +229,9 @@ async def by_topic(
     db: AsyncSession = Depends(get_db),
 ):
     role = user.role
-    statement = select(GeneratedLesson).where(GeneratedLesson.topic_id == topic_id)
+    requested = await db.get(Topic, topic_id)
+    primary = await lesson_topic(requested, db) if requested is not None else None
+    statement = select(GeneratedLesson).where(GeneratedLesson.topic_id == (primary.id if primary else topic_id))
     if role == "student":
         statement = statement.where(GeneratedLesson.status == "published")
     lesson = await db.scalar(statement)
@@ -144,7 +248,17 @@ async def by_topic(
         # the same canonical contract without rewriting historical rows.
         lesson.lesson_metadata = metadata
         lesson.blocks = report["normalized_blocks"]
-    return serialize_lesson(lesson)
+    data = serialize_lesson(lesson)
+    parts = sorted({block_part(block) for block in data["blocks"]})
+    total_parts = min(MAX_LESSON_PARTS, max(parts)) if parts else 1
+    data["total_parts"] = total_parts
+    data["unlocked_parts"] = await unlocked_parts_for(user, topic or primary, total_parts, db) if (topic or primary) else total_parts
+    if role == "student" and len(parts) > 1:
+        # Locked parts are not sent at all, so answers can't be read ahead.
+        data["blocks"] = [
+            block for block in data["blocks"] if block_part(block) <= data["unlocked_parts"]
+        ]
+    return data
 
 
 @router.put("/{lesson_id}/blocks")

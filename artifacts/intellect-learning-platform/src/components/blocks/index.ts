@@ -13,6 +13,7 @@ export { default as Illustration } from './Illustration';
 export { default as Presentation } from './Presentation';
 export { default as MasteryCheck } from './MasteryCheck';
 export { default as Reflection } from './Reflection';
+export { default as VideoLesson } from './VideoLesson';
 export { default as BlockRenderer } from './BlockRenderer';
 
 export * from './ShortExplanation';
@@ -30,4 +31,5 @@ export * from './Illustration';
 export * from './Presentation';
 export * from './MasteryCheck';
 export * from './Reflection';
+export * from './VideoLesson';
 export * from './BlockRenderer';

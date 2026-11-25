@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,6 +17,9 @@ class Subject(Base):
     hours_per_year: Mapped[int] = mapped_column(Integer)
     source_info: Mapped[str | None] = mapped_column(Text)
     instruction_language: Mapped[str] = mapped_column(String(10), default="ru")
+    program: Mapped[str | None] = mapped_column(String(20))  # cambridge | national
+    school_system: Mapped[int | None] = mapped_column(Integer)  # 11 | 12
+    teacher_name: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     sections: Mapped[list["Section"]] = relationship(cascade="all, delete-orphan")
 
@@ -42,6 +45,49 @@ class Topic(Base):
     learning_objectives: Mapped[str | None] = mapped_column(Text)
     skills: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     resources: Mapped[str | None] = mapped_column(Text)
+    quarter: Mapped[int | None] = mapped_column(Integer)  # 1..4
+    sort_number: Mapped[int | None] = mapped_column(Integer)
+    # Repeated KTP rows of one learning topic point to its first row; the lesson lives there.
+    lesson_topic_id: Mapped[int | None] = mapped_column(ForeignKey("topics.id", ondelete="SET NULL"))
+
+
+class SchoolClass(Base):
+    """A real class such as 7Б: system (11/12-year) + grade + letter + program."""
+    __tablename__ = "school_classes"
+    __table_args__ = (UniqueConstraint("grade", "letter"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    school_system: Mapped[int] = mapped_column(Integer)  # 11 | 12
+    grade: Mapped[int] = mapped_column(Integer)
+    letter: Mapped[str] = mapped_column(String(5))
+    program: Mapped[str] = mapped_column(String(20))  # cambridge | national
+
+
+class SubjectClass(Base):
+    """One KTP can be taught to several classes (e.g. 7Е, 7Ж, 7З)."""
+    __tablename__ = "subject_classes"
+    subject_id: Mapped[int] = mapped_column(ForeignKey("subjects.id", ondelete="CASCADE"), primary_key=True)
+    class_id: Mapped[int] = mapped_column(ForeignKey("school_classes.id", ondelete="CASCADE"), primary_key=True)
+
+
+class Quarter(Base):
+    __tablename__ = "quarters"
+    __table_args__ = (UniqueConstraint("academic_year", "number"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    academic_year: Mapped[str] = mapped_column(String(9))  # 2026-2027
+    number: Mapped[int] = mapped_column(Integer)
+    starts_on: Mapped[date] = mapped_column(Date)
+    ends_on: Mapped[date] = mapped_column(Date)
+
+
+class TopicDelivery(Base):
+    """A KTP row taught in class on a date (the «Проведено» mark). Opens lesson parts for that class."""
+    __tablename__ = "topic_deliveries"
+    __table_args__ = (UniqueConstraint("topic_id", "class_id", "conducted_on"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    topic_id: Mapped[int] = mapped_column(ForeignKey("topics.id", ondelete="CASCADE"))
+    class_id: Mapped[int] = mapped_column(ForeignKey("school_classes.id", ondelete="CASCADE"))
+    conducted_on: Mapped[date] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class User(Base):
@@ -71,6 +117,7 @@ class Student(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), unique=True)
     grade: Mapped[int] = mapped_column(Integer, default=7)
+    class_id: Mapped[int | None] = mapped_column(ForeignKey("school_classes.id", ondelete="SET NULL"))
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

@@ -14,6 +14,7 @@ import Illustration from './Illustration';
 import Presentation from './Presentation';
 import MasteryCheck from './MasteryCheck';
 import Reflection from './Reflection';
+import VideoLesson from './VideoLesson';
 
 export const componentMap: Record<string, React.ComponentType<any>> = {
   ShortExplanation,
@@ -30,7 +31,8 @@ export const componentMap: Record<string, React.ComponentType<any>> = {
   Illustration,
   Presentation,
   MasteryCheck,
-  Reflection
+  Reflection,
+  VideoLesson
 };
 
 export const assessmentComponents = [

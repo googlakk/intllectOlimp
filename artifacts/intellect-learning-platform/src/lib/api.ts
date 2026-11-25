@@ -19,7 +19,9 @@ export class ApiError extends Error {
 }
 export type Subject = { id: number; name: string; grade: number; hours_per_week: number; hours_per_year: number; source_info: string | null; instruction_language?: 'ru' | 'ky'; progress?: number };
 export type Section = { id: number; subject_id: number; name: string; sort_order: number; total_hours: number };
-export type Topic = { id: number; section_id: number; ktp_number: string | null; name: string; hours: number; lesson_type: string; learning_objectives: string | null; skills: string[]; resources: string | null };
+export type Topic = { id: number; section_id: number; ktp_number: string | null; name: string; hours: number; lesson_type: string; learning_objectives: string | null; skills: string[]; resources: string | null; quarter?: number | null; sort_number?: number | null; lesson_topic_id?: number | null };
+export type SubjectTopic = Topic & { section_name: string; section_sort_order: number };
+export type QuarterPlanItem = { topic_id: number; name: string; sort_number: number | null; lesson_status: 'draft' | 'published' | null };
 export type LearningObjective = {
   id: string;
   text: string;
@@ -177,16 +179,41 @@ export type GeneratedLesson = {
   published_at: string | null;
   published_by: number | null;
   model_used: string | null;
+  // Lesson parts (one per KTP hour). Students only receive the parts their class has had («Проведено»).
+  total_parts?: number;
+  unlocked_parts?: number;
 };
 
 // The server decides what the signed-in user may see (students: published only).
 export const getLessonByTopic = (topicId: number) =>
   requestOrNull<GeneratedLesson>(`/lessons/${topicId}`);
 
-export const generateLesson = (topicId: number) =>
+export const generateLesson = (topicId: number, skipExisting = false) =>
   request<GeneratedLesson>('/lessons/generate', {
     method: 'POST',
-    body: JSON.stringify({ topic_id: topicId }),
+    body: JSON.stringify({ topic_id: topicId, skip_existing: skipExisting }),
+  });
+
+export const getQuarterPlan = (subjectId: number, quarter: number) =>
+  request<QuarterPlanItem[]>(`/lessons/quarter-plan?subject_id=${subjectId}&quarter=${quarter}`);
+
+export type Quarter = { id: number; academic_year: string; number: number; starts_on: string; ends_on: string };
+export const useQuarters = () =>
+  useQuery({ queryKey: ['quarters'], queryFn: () => request<Quarter[]>('/quarters'), staleTime: Infinity });
+
+// Quarter that contains today, else the next one, else the last.
+export function currentQuarterNumber(quarters: Quarter[] | undefined, today = new Date().toISOString().slice(0, 10)): number {
+  if (!quarters?.length) return 1;
+  const current = quarters.find((q) => q.starts_on <= today && today <= q.ends_on)
+    ?? quarters.find((q) => today < q.starts_on);
+  return (current ?? quarters[quarters.length - 1]).number;
+}
+
+export const useSubjectTopics = (subjectId: number, enabled = true) =>
+  useQuery({
+    queryKey: ['subject-topics', subjectId],
+    queryFn: () => request<SubjectTopic[]>(`/subjects/${subjectId}/topics`),
+    enabled: enabled && subjectId > 0,
   });
 
 export const updateLessonBlocks = (lessonId: number, blocks: Block[]) =>
@@ -289,3 +316,29 @@ export const useLessonStatus = (topicId: number, enabled = true) =>
     queryFn: () => getLessonByTopic(topicId),
     enabled: enabled && topicId > 0,
   });
+
+
+// ---- Classes and «Проведено» marks -------------------------------------------
+export type SchoolClass = { id: number; school_system: 11 | 12; grade: number; letter: string; program: 'cambridge' | 'national'; name: string; student_count: number };
+export type StudentRow = { id: number; name: string; grade: number; class_id: number | null };
+export type Delivery = { id: number; topic_id: number; class_id: number; conducted_on: string };
+
+export const PROGRAM_LABEL: Record<SchoolClass['program'], string> = { cambridge: 'Cambridge', national: 'Национальная' };
+
+export const useClasses = () => useQuery({ queryKey: ['classes'], queryFn: () => request<SchoolClass[]>('/classes') });
+export const useStudents = () => useQuery({ queryKey: ['students'], queryFn: () => request<StudentRow[]>('/students') });
+export const useSubjectDeliveries = (subjectId: number) =>
+  useQuery({
+    queryKey: ['deliveries', subjectId],
+    queryFn: () => request<Delivery[]>(`/subjects/${subjectId}/deliveries`),
+    enabled: subjectId > 0,
+  });
+
+export const createClass = (data: { school_system: 11 | 12; grade: number; letter: string; program: SchoolClass['program'] }) =>
+  request<SchoolClass>('/classes', { method: 'POST', body: JSON.stringify(data) });
+export const deleteClass = (classId: number) => request<unknown>(`/classes/${classId}`, { method: 'DELETE' });
+export const setStudentClass = (studentId: number, classId: number | null) =>
+  request<unknown>(`/students/${studentId}/class`, { method: 'PUT', body: JSON.stringify({ class_id: classId }) });
+export const markDelivered = (topicId: number, classId: number, conductedOn: string) =>
+  request<Delivery>(`/topics/${topicId}/deliveries`, { method: 'POST', body: JSON.stringify({ class_id: classId, conducted_on: conductedOn }) });
+export const unmarkDelivered = (deliveryId: number) => request<unknown>(`/deliveries/${deliveryId}`, { method: 'DELETE' });

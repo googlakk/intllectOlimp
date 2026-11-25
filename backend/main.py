@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine
 from security import create_session_token
-from routes import auth, components, dashboard, ktp, lessons, progress, subjects
+from routes import auth, classes, components, dashboard, ktp, lessons, progress, subjects
 
 
 @asynccontextmanager
@@ -23,7 +23,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-for router in (auth.router, ktp.router, subjects.router, components.router, lessons.router, progress.router, dashboard.router):
+for router in (auth.router, ktp.router, subjects.router, classes.router, components.router, lessons.router, progress.router, dashboard.router):
     app.include_router(router)
 
 

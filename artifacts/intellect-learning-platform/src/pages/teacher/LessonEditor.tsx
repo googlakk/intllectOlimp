@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowLeft, Loader2, Sparkles, Globe, EyeOff, CheckCircle
 import { useMemo, useState } from 'react';
 import { useGetLesson, useGenerateLesson, usePublishLesson, useUnpublishLesson } from '@/lib/api';
 import BlockRenderer from '@/components/blocks/BlockRenderer';
+import VideoPanel from './VideoPanel';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -238,6 +239,12 @@ export default function LessonEditor() {
                  Перегенерировать AI
                </button>
             </div>
+            {lesson && <VideoPanel lesson={lesson} topicId={tId} />}
+            {lesson && (lesson.total_parts ?? 1) > 1 && (
+              <p className="mb-4 text-sm font-semibold text-muted-foreground">
+                Тема разбита на {lesson.total_parts} шага по ~10 минут. Ученик видит следующий шаг после отметки «Проведено» в своём классе.
+              </p>
+            )}
             <BlockRenderer blocks={blocks} />
           </div>
         ) : (

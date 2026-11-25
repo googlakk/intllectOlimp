@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
 import { homePath, useAuth } from '@/components/auth/AuthContext';
-import { LogOut, BookOpen, BarChart, LayoutDashboard, FileText, Blocks, KeyRound, Shield } from 'lucide-react';
+import { LogOut, BookOpen, BarChart, LayoutDashboard, FileText, Blocks, KeyRound, Shield, Users } from 'lucide-react';
 
 export function Shell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
@@ -27,7 +27,12 @@ export function Shell({ children }: { children: ReactNode }) {
           <NavLink href="/progress" icon={BarChart} label="Мой прогресс" />
         </>
       )}
-      {user.role === 'admin' && <NavLink href="/admin" icon={Shield} label="Школа" />}
+      {user.role === 'admin' && (
+        <>
+          <NavLink href="/admin" icon={Shield} label="Школа" />
+          <NavLink href="/admin/classes" icon={Users} label="Классы" />
+        </>
+      )}
       {user.role !== 'student' && (
         <>
           <NavLink href="/dashboard" icon={LayoutDashboard} label="Обзор" />

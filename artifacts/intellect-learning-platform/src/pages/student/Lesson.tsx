@@ -1,5 +1,5 @@
 import { useParams, Link } from 'wouter';
-import { ArrowLeft, BookOpen, Loader2, CheckCircle, ChevronDown, RefreshCw, BookMarked, Trophy } from 'lucide-react';
+import { ArrowLeft, BookOpen, Loader2, CheckCircle, ChevronDown, RefreshCw, BookMarked, Trophy, Lock } from 'lucide-react';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useGetLesson, useSaveProgress, useMyLessonProgress, type LearningObjective, type ObjectiveEvidence, type ObjectiveMastery, type MasteryStatus } from '@/lib/api';
 import { componentMap, assessmentComponents } from '@/components/blocks/BlockRenderer';
@@ -40,6 +40,10 @@ export default function Lesson() {
   const prefersReducedMotion = useReducedMotion();
 
   const blocks = lesson?.blocks || [];
+  // The server sends only parts already taught in the student's class («Проведено»).
+  const totalParts = lesson?.total_parts ?? 1;
+  const unlockedParts = lesson?.unlocked_parts ?? totalParts;
+  const partsLocked = unlockedParts < totalParts;
   const objectives = useMemo<LearningObjective[]>(() => {
     const configured = lesson?.lesson_metadata?.objectives;
     if (Array.isArray(configured)) return configured;
@@ -304,6 +308,13 @@ export default function Lesson() {
         completeDiagnostic();
         return;
       }
+      if (partsLocked) {
+        // Not the end of the topic yet: keep it in progress until the next part opens.
+        const last = activeBlocks.length - 1;
+        saveState(last, Math.max(maxOpenedStep, last), 'in_progress', answers, attemptsByStep);
+        setCurrentStep(activeBlocks.length);
+        return;
+      }
       if (!isCompleted) {
         completeLesson(answers, attemptsByStep);
       }
@@ -412,6 +423,14 @@ export default function Lesson() {
               <h3 className="text-2xl font-bold text-foreground mb-3">Урок готовится</h3>
               <p className="text-muted-foreground max-w-md mx-auto font-medium">
                 Преподаватель еще не опубликовал этот урок. Возвращайтесь позже!
+              </p>
+            </div>
+          ) : partsLocked && currentStep === activeBlocks.length ? (
+            <div className="text-center py-20 border-2 border-dashed border-primary/30 rounded-3xl bg-primary/5 px-4">
+              <Lock className="w-14 h-14 text-primary mx-auto mb-6" />
+              <h3 className="text-2xl font-bold text-foreground mb-3">Шаг {unlockedParts} из {totalParts} пройден</h3>
+              <p className="text-muted-foreground max-w-md mx-auto font-medium">
+                Следующий шаг темы откроется после урока в классе. Итоговая проверка — в последнем шаге.
               </p>
             </div>
           ) : isCompleted && result && currentStep === activeBlocks.length ? (

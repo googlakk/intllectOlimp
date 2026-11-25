@@ -71,6 +71,10 @@ async def save_progress(
     topic = await db.get(Topic, payload.topic_id)
     if topic is None:
         raise HTTPException(status_code=404, detail="Тема не найдена")
+    if topic.lesson_topic_id is not None:
+        # A repeated KTP row: progress belongs to the row that owns the lesson.
+        topic = await db.get(Topic, topic.lesson_topic_id) or topic
+        payload.topic_id = topic.id
     if payload.status == "in_progress" and payload.current_step > payload.max_opened_step:
         raise HTTPException(status_code=422, detail="Текущий шаг ещё не открыт")
 
@@ -194,6 +198,9 @@ async def _student_progress(student_id: int, db: AsyncSession) -> list[dict]:
 
 
 async def _student_topic_progress(student_id: int, topic_id: int, db: AsyncSession) -> dict:
+    topic = await db.get(Topic, topic_id)
+    if topic is not None and topic.lesson_topic_id is not None:
+        topic_id = topic.lesson_topic_id
     row = await db.scalar(
         select(Progress).where(Progress.student_id == student_id, Progress.topic_id == topic_id)
     )

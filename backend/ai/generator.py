@@ -4,6 +4,7 @@ import re
 from typing import Any
 
 from anthropic import AsyncAnthropic
+from curriculum import PART_GOALS, lesson_parts
 from objectives import decompose_objectives
 
 MODEL = "claude-sonnet-4-6"
@@ -145,9 +146,11 @@ correct_segments должны дословно совпадать с предл�
 {"title": string, "description": string, "svg_content": string, "caption"?: string}
 svg_content — безопасный автономный inline SVG без script, event-атрибутов и внешних ресурсов.
 
-В content любого блока допускаются служебные поля objective_ids (массив строк)
-и evidence_stage ("diagnostic", "explanation", "practice" или "assessment"). Они не отображаются
-ученику. Каждый блок, кроме Reflection, должен указывать objective_ids. В MasteryCheck
+В content любого блока допускаются служебные поля objective_ids (массив строк),
+evidence_stage ("diagnostic", "explanation", "practice", "assessment" или "review")
+и lesson_part (номер шага темы, целое число от 1). Они не отображаются ученику.
+evidence_stage "review" разрешён только для RetrievalCheck разминки по ПРОШЛЫМ темам;
+у такого блока objective_ids не указывается. Каждый блок, кроме Reflection, должен указывать objective_ids. В MasteryCheck
 каждый вопрос также должен иметь objective_ids (или dimension равный ID цели).
 
 14. MasteryCheck:
@@ -159,13 +162,22 @@ MasteryCheck должен содержать столько вопросов, ч
 {"prompt": string, "scale_question": string, "scale_labels": [string, string, string, string]}
 scale_labels всегда содержит ровно 4 подписи.
 
+УРОК КОРОТКИЙ. Каждый шаг темы (lesson_part) рассчитан на 10–12 минут работы ученика:
+1) вход: 1 RetrievalCheck "review" по прошлой теме (если она передана) и диагностика по целям шага;
+2) суть: одно понятие, не более 100 слов в text одного блока, без посторонних фактов;
+3) один разобранный пример (в WorkedExample последний шаг — вопрос «почему так?» в hint);
+4) 2–3 задачи с подсказкой и объяснением ошибки;
+5) в последнем шаге темы — MasteryCheck по всем целям темы (4–6 вопросов), в остальных шагах —
+   1 IndependentProblem в конце шага.
+Reflection не добавляй. Presentation, MindMap и Timeline используй только если без них тему
+не понять. Задачи в разных шагах не должны повторяться; сложность растёт от шага к шагу.
+
 Следуй переданному предметному маршруту, а не одной универсальной последовательности.
 Для математических задач используй разобранные примеры; для наук — прогноз, модель,
 данные и вывод; для языков — образец и создание речи/текста; для гуманитарных предметов —
 источник, свидетельства и аргументацию; для практических предметов — показ, критерии,
 выполнение и самооценку. Цифровой тест не должен подменять физическое или творческое
-выполнение. Заверши урок Reflection и MasteryCheck с вопросом по каждой цели. В уроке должно быть
-не менее пяти оцениваемых действий с учётом отдельных вопросов MasteryCheck.
+выполнение. MasteryCheck в последнем шаге должен иметь вопрос по каждой цели.
 
 Не добавляй поля вне описанных схем. Правильные ответы должны точно совпадать с одним из
 вариантов там, где варианты предусмотрены. Урок должен соответствовать теме, целям,
@@ -204,6 +216,11 @@ async def generate_lesson(
     grade: int | None = None,
     lesson_type: str | None = None,
     content_language: str = "ru",
+    section_name: str | None = None,
+    quarter: int | None = None,
+    sort_number: int | None = None,
+    total_hours: int = 1,
+    previous_topics: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
@@ -222,6 +239,12 @@ async def generate_lesson(
     route = SUBJECT_FAMILY_PROFILES[str(profile["family"])]["route"]
     objective_catalog = decompose_objectives(learning_objectives)
     language_label = "кыргызском" if content_language == "ky" else "русском"
+    parts = lesson_parts(total_hours)
+    parts_plan = "\n".join(f"  lesson_part {i}: {PART_GOALS[p]}" for i, p in enumerate(parts, start=1))
+    previous = previous_topics or []
+    previous_text = "\n".join(
+        f"  - {item['name']}: {item.get('learning_objectives') or 'цели не указаны'}" for item in previous
+    ) or "  нет (это первая тема) — блок review не нужен"
     user_prompt = f"""
 Создай полный урок.
 Семейство предмета: {profile["family_label"]} ({profile["family"]})
@@ -230,7 +253,13 @@ async def generate_lesson(
 Язык всего учебного содержания: на {language_label} языке.
 Проверка учителем: {"обязательна — предмет не распознан" if profile["teacher_review_required"] else "не требуется"}
 Предмет: {subject_name}
+Раздел (глава): {section_name or "не указан"}
+Четверть: {quarter or "не указана"}, номер темы в КТП: {sort_number or "не указан"}
 Тема: {topic_name}
+Часов на тему в КТП: {total_hours}. Раздели урок на {len(parts)} шаг(а) и проставь lesson_part в каждом блоке:
+{parts_plan}
+Прошлые темы для разминки (от ближайшей к дальней), вопросы review — только по ним:
+{previous_text}
 Класс: {grade if grade is not None else "не указан"}
 Тип урока: {lesson_type or "не указан"}
 Цели обучения (исходный текст): {learning_objectives or "не указаны"}
@@ -256,7 +285,7 @@ async def generate_lesson(
     for attempt in range(2):
         response = await client.messages.create(
             model=MODEL,
-            max_tokens=8192,
+            max_tokens=16000,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": retry_prompt}],
         )

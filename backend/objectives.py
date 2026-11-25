@@ -18,7 +18,11 @@ EXPLANATION_COMPONENTS = {
     "Illustration",
     "MindMap",
     "Timeline",
+    "VideoLesson",
 }
+# Warm-up questions about earlier topics: shown to the student, scored for review,
+# but never counted as evidence for the current topic's objectives.
+REVIEW_STAGE = "review"
 PRACTICE_COMPONENTS = {
     "GuidedPractice",
     "IndependentProblem",
@@ -45,6 +49,7 @@ ALLOWED_COMPONENTS = {
     "IndependentProblem", "RetrievalCheck", "MindMap", "Timeline",
     "TextEvidencePicker", "ArgumentBuilder", "InteractiveGraph",
     "Presentation", "Illustration", "MasteryCheck", "Reflection",
+    "VideoLesson",
 }
 
 
@@ -162,7 +167,7 @@ def normalize_lesson_blocks(
         content = block.get("content")
         if not isinstance(component, str) or not isinstance(content, dict):
             continue
-        if component == "Reflection":
+        if component == "Reflection" or content.get("evidence_stage") == REVIEW_STAGE:
             continue
 
         if content.get("evidence_stage") not in STAGE_COMPONENTS:
@@ -309,6 +314,13 @@ def validate_block_answers(block: dict[str, Any], index: int) -> list[dict[str, 
             correct = question.get("correct_answer") if isinstance(question, dict) else None
             if question.get("type") == "multiple_choice" and (not isinstance(options, list) or len(options) != 4 or correct not in options):
                 errors.append({"code": "invalid_mastery_options", "block": index, "question": question_index, "message": "Некорректные варианты или ответ"})
+    if block.get("component") == "VideoLesson":
+        from curriculum import drive_file_id
+        if not drive_file_id(content.get("drive_url")):
+            errors.append({"code": "invalid_video_link", "block": index, "message": "Нужна ссылка на файл Google Drive вида drive.google.com/file/d/…"})
+        start, end = content.get("start_sec"), content.get("end_sec")
+        if isinstance(start, (int, float)) and isinstance(end, (int, float)) and end <= start:
+            errors.append({"code": "invalid_video_range", "block": index, "message": "Конец фрагмента должен быть позже начала"})
     question = content.get("question")
     correct = content.get("correct_answer")
     if isinstance(question, str) and isinstance(correct, str) and block.get("component") in {"IndependentProblem", "GuidedPractice"}:
@@ -351,6 +363,11 @@ def build_coverage(
             continue
         content = block.get("content") if isinstance(block, dict) else None
         if not isinstance(content, dict):
+            errors.extend(validate_block_answers(block, index))
+            continue
+        if content.get("evidence_stage") == REVIEW_STAGE:
+            if component != "RetrievalCheck":
+                errors.append({"code": "review_component", "block": index, "message": "Разминкой может быть только RetrievalCheck"})
             errors.extend(validate_block_answers(block, index))
             continue
         block_ids = objective_ids_from_content(content)

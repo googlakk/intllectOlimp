@@ -367,5 +367,30 @@
       }
     },
     "rendering_notes": "Шкала и свободная рефлексия."
+  },
+  {
+    "id": "video-lesson",
+    "code": "C16",
+    "category": "explain",
+    "subjects": ["all"],
+    "purpose": "Видеоурок из Google Drive школы с конспектом и вопросами по ходу просмотра. Добавляет учитель, ИИ не генерирует.",
+    "is_assessment": false,
+    "content_schema": {
+      "type": "object",
+      "required": ["title", "drive_url"],
+      "properties": {
+        "title": { "type": "string" },
+        "drive_url": { "type": "string" },
+        "start_sec": { "type": "integer" },
+        "end_sec": { "type": "integer" },
+        "duration_min": { "type": "number" },
+        "summary": { "type": "array", "items": { "type": "string" } },
+        "questions": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "time_label": { "type": "string" }, "question": { "type": "string" } } }
+        }
+      }
+    },
+    "rendering_notes": "Встраивается как drive.google.com/file/d/<ID>/preview. Файл должен быть доступен «всем, у кого есть ссылка». Плеер Drive нельзя ставить на паузу из кода, поэтому вопросы показываются списком под видео."
   }
 ]
