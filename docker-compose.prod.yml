@@ -1,0 +1,34 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    env_file: .env.prod
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [internal]
+
+  app:
+    build: .
+    image: olimp-app:latest
+    env_file: .env.prod
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      internal: {}
+      bilimos:
+        aliases: [olimp-app]
+
+volumes:
+  pgdata:
+
+networks:
+  internal: {}
+  bilimos:
+    external: true
+    name: ${BILIMOS_NETWORK:-bilimos_default}

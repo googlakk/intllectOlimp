@@ -32,3 +32,22 @@ for router in (auth.router, ktp.router, subjects.router, classes.router, compone
 @app.get("/api/healthz")
 async def health():
     return {"status": "ok"}
+
+STATIC_DIR = os.getenv("STATIC_DIR")
+if STATIC_DIR and os.path.isdir(STATIC_DIR):
+    from pathlib import Path
+
+    from fastapi import HTTPException
+    from fastapi.responses import FileResponse
+
+    static_root = Path(STATIC_DIR).resolve()
+
+    # Registered last so every API route matches first.
+    @app.get("/{path:path}", include_in_schema=False)
+    async def spa(path: str):
+        if path == "api" or path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        file = (static_root / path).resolve()
+        if path and file.is_file() and file.is_relative_to(static_root):
+            return FileResponse(file)
+        return FileResponse(static_root / "index.html")
