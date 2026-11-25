@@ -39,6 +39,7 @@ def serialize_class(row: SchoolClass, student_count: int = 0) -> dict:
         "letter": row.letter,
         "program": row.program,
         "name": f"{row.grade}{row.letter}",
+        "source": "bilimos" if row.external_id else "local",
     }
 
 
@@ -61,6 +62,8 @@ async def delete_class(class_id: int, db: AsyncSession = Depends(get_db)):
     row = await db.get(SchoolClass, class_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Класс не найден")
+    if row.external_id:
+        raise HTTPException(status_code=409, detail="Класс из BilimOs меняется только в BilimOs")
     await db.delete(row)
     await db.commit()
     return {"deleted": class_id}
@@ -69,7 +72,11 @@ async def delete_class(class_id: int, db: AsyncSession = Depends(get_db)):
 @router.get("/students", dependencies=[Depends(require_staff)])
 async def list_students(db: AsyncSession = Depends(get_db)):
     rows = await db.scalars(select(Student).order_by(Student.grade, Student.name))
-    return [{"id": r.id, "name": r.name, "grade": r.grade, "class_id": r.class_id} for r in rows]
+    return [
+        {"id": r.id, "name": r.name, "grade": r.grade, "class_id": r.class_id,
+         "source": "bilimos" if r.external_id else "local"}
+        for r in rows
+    ]
 
 
 @router.post("/classes", dependencies=[Depends(require_role("admin"))])
@@ -90,6 +97,8 @@ async def set_student_class(student_id: int, payload: StudentClassInput, db: Asy
     student = await db.get(Student, student_id)
     if student is None:
         raise HTTPException(status_code=404, detail="Ученик не найден")
+    if student.external_id:
+        raise HTTPException(status_code=409, detail="Класс ученика из BilimOs меняется только в BilimOs")
     if payload.class_id is not None:
         school_class = await db.get(SchoolClass, payload.class_id)
         if school_class is None:

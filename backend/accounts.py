@@ -21,7 +21,11 @@ def base_login(full_name: str) -> str:
 
 
 def unique_login(full_name: str, taken: set[str]) -> str:
-    base = base_login(full_name)
+    return numbered_login(base_login(full_name), taken)
+
+
+def numbered_login(base: str, taken: set[str]) -> str:
+    """base, base2, base3... — first one not in `taken` (which is updated)."""
     login, counter = base, 2
     while login in taken:
         login, counter = f"{base}{counter}", counter + 1

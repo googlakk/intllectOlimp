@@ -62,16 +62,20 @@ async def login(payload: LoginInput, response: Response, db: AsyncSession = Depe
         raise HTTPException(status_code=401, detail="Неверный логин или пароль")
     user.last_login_at = datetime.now(timezone.utc)
     await db.commit()
+    set_session_cookie(response, user.id)
+    return await serialize_user(user, db)
+
+
+def set_session_cookie(response: Response, user_id: int) -> None:
     response.set_cookie(
         SESSION_COOKIE,
-        create_session_token(user.id),
+        create_session_token(user_id),
         max_age=int(SESSION_TTL.total_seconds()),
         httponly=True,
         secure=cookie_secure(),
         samesite="lax",
         path="/",
     )
-    return await serialize_user(user, db)
 
 
 @router.post("/logout", status_code=204)

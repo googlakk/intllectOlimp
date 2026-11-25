@@ -191,7 +191,7 @@ async def test_admin_manages_classes_and_students(client, db):
     # Deleting a class keeps the student, only unlinks them.
     assert (await client.delete(f"/api/classes/{class_id}")).status_code == 200
     students = (await client.get("/api/students")).json()
-    assert students == [{"id": student.id, "name": "Ученик Два", "grade": 8, "class_id": None}]
+    assert students == [{"id": student.id, "name": "Ученик Два", "grade": 8, "class_id": None, "source": "local"}]
 
 
 async def test_teacher_cannot_create_classes(client, db):

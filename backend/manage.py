@@ -3,12 +3,14 @@
   python manage.py create-admin <login> "<Full Name>"
   python manage.py set-password <login>          # prints a new temporary password
   python manage.py seed-demo                     # demo teachers/students with printed passwords
+  python manage.py sync-bilimos                  # pull classes/teachers/students from BilimOs now
 """
 import asyncio
 import sys
 
 from sqlalchemy import func, select
 
+import bilimos_sync
 from accounts import unique_login
 from database import AsyncSessionLocal, engine
 from models import Student, Teacher, User
@@ -75,6 +77,10 @@ async def main(argv: list[str]) -> None:
                 await set_password(login)
             case ["seed-demo"]:
                 await seed_demo()
+            case ["sync-bilimos"]:
+                if not bilimos_sync.configured():
+                    sys.exit("Задайте BILIMOS_URL и OLIMP_ROSTER_KEY")
+                print(await bilimos_sync.sync_now())
             case _:
                 sys.exit(__doc__)
     finally:
