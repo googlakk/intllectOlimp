@@ -319,8 +319,8 @@ export const useLessonStatus = (topicId: number, enabled = true) =>
 
 
 // ---- Classes and «Проведено» marks -------------------------------------------
-export type SchoolClass = { id: number; school_system: 11 | 12; grade: number; letter: string; program: 'cambridge' | 'national'; name: string; student_count: number };
-export type StudentRow = { id: number; name: string; grade: number; class_id: number | null };
+export type SchoolClass = { id: number; school_system: 11 | 12; grade: number; letter: string; program: 'cambridge' | 'national'; name: string; student_count: number; source: 'bilimos' | 'local' };
+export type StudentRow = { id: number; name: string; grade: number; class_id: number | null; source: 'bilimos' | 'local' };
 export type Delivery = { id: number; topic_id: number; class_id: number; conducted_on: string };
 
 export const PROGRAM_LABEL: Record<SchoolClass['program'], string> = { cambridge: 'Cambridge', national: 'Национальная' };
@@ -341,4 +341,5 @@ export const setStudentClass = (studentId: number, classId: number | null) =>
   request<unknown>(`/students/${studentId}/class`, { method: 'PUT', body: JSON.stringify({ class_id: classId }) });
 export const markDelivered = (topicId: number, classId: number, conductedOn: string) =>
   request<Delivery>(`/topics/${topicId}/deliveries`, { method: 'POST', body: JSON.stringify({ class_id: classId, conducted_on: conductedOn }) });
+export const syncBilimos = () => request<unknown>('/integrations/bilimos/sync-now', { method: 'POST' });
 export const unmarkDelivered = (deliveryId: number) => request<unknown>(`/deliveries/${deliveryId}`, { method: 'DELETE' });

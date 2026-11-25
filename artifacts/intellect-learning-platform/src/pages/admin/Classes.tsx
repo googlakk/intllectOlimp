@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Loader2, Plus, Trash2, Users } from 'lucide-react';
+import { Loader2, Plus, RefreshCw, Trash2, Users } from 'lucide-react';
 import {
-  PROGRAM_LABEL, createClass, deleteClass, setStudentClass, useClasses, useStudents,
+  PROGRAM_LABEL, createClass, deleteClass, setStudentClass, syncBilimos, useClasses, useStudents,
   type SchoolClass,
 } from '@/lib/api';
 
@@ -74,6 +74,20 @@ export default function Classes() {
   const [filter, setFilter] = useState<'all' | 'none' | number>('none');
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState<number | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  const refreshFromBilimos = async () => {
+    setSyncing(true);
+    try {
+      await syncBilimos();
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['students'] });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Не удалось обновить из BilimOs');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const classById = useMemo(() => new Map((classes ?? []).map((c) => [c.id, c])), [classes]);
   const shown = (students ?? []).filter((s) =>
@@ -105,7 +119,12 @@ export default function Classes() {
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Классы</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Классы</h1>
+          <button onClick={refreshFromBilimos} disabled={syncing} className="px-4 py-2 border border-border bg-card font-bold rounded-xl text-sm flex items-center gap-2 disabled:opacity-60">
+            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} /> Обновить из BilimOs
+          </button>
+        </div>
         <p className="text-muted-foreground mt-2 font-medium">
           Класс = система + параллель + буква + программа. По классу ученик получает свои КТП, а шаги тем открываются по отметке «Проведено».
         </p>
@@ -123,9 +142,13 @@ export default function Classes() {
             >
               <div className="flex items-start justify-between">
                 <span className="text-2xl font-extrabold text-foreground">{c.name}</span>
-                <button onClick={(e) => { e.stopPropagation(); remove(c); }} className="text-muted-foreground hover:text-destructive" title="Удалить класс">
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {c.source === 'bilimos' ? (
+                  <span className="text-[10px] font-bold uppercase text-muted-foreground" title="Меняется только в BilimOs">BilimOs</span>
+                ) : (
+                  <button onClick={(e) => { e.stopPropagation(); remove(c); }} className="text-muted-foreground hover:text-destructive" title="Удалить класс">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
               <div className="text-xs font-semibold text-muted-foreground mt-1">{c.school_system}-летка · {PROGRAM_LABEL[c.program]}</div>
               <div className="text-sm font-bold text-foreground mt-2 flex items-center gap-1.5"><Users className="w-4 h-4" /> {c.student_count}</div>
@@ -170,7 +193,8 @@ export default function Classes() {
                     <select
                       className={input}
                       value={s.class_id ?? ''}
-                      disabled={busy === s.id}
+                      disabled={busy === s.id || s.source === 'bilimos'}
+                      title={s.source === 'bilimos' ? 'Класс ученика задаётся в BilimOs' : undefined}
                       onChange={(e) => assign(s.id, e.target.value ? Number(e.target.value) : null)}
                     >
                       <option value="">— без класса —</option>
