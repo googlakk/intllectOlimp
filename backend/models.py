@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -54,12 +54,20 @@ class Topic(Base):
 class SchoolClass(Base):
     """A real class such as 7Б: system (11/12-year) + grade + letter + program."""
     __tablename__ = "school_classes"
-    __table_args__ = (UniqueConstraint("grade", "letter"),)
+    # Local classes are unique by grade+letter; BilimOs classes are unique by external_id
+    # (BilimOs branches may each have a 7А).
+    __table_args__ = (
+        Index(
+            "school_classes_grade_letter_local_key", "grade", "letter",
+            unique=True, postgresql_where=text("external_id IS NULL"),
+        ),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
     school_system: Mapped[int] = mapped_column(Integer)  # 11 | 12
     grade: Mapped[int] = mapped_column(Integer)
-    letter: Mapped[str] = mapped_column(String(5))
+    letter: Mapped[str] = mapped_column(String(40))
     program: Mapped[str] = mapped_column(String(20))  # cambridge | national
+    external_id: Mapped[str | None] = mapped_column(String(64), unique=True)  # BilimOs id; NULL = local
 
 
 class SubjectClass(Base):
@@ -101,25 +109,35 @@ class User(Base):
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    external_id: Mapped[str | None] = mapped_column(String(64), unique=True)  # BilimOs User.id
 
 
 class Teacher(Base):
     __tablename__ = "teachers"
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(255), unique=True)
+    name: Mapped[str] = mapped_column(String(255))
     subject_id: Mapped[int | None] = mapped_column(ForeignKey("subjects.id"), nullable=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    external_id: Mapped[str | None] = mapped_column(String(64), unique=True)  # BilimOs id
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Student(Base):
     __tablename__ = "students"
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(255), unique=True)
+    name: Mapped[str] = mapped_column(String(255))
     grade: Mapped[int] = mapped_column(Integer, default=7)
     class_id: Mapped[int | None] = mapped_column(ForeignKey("school_classes.id", ondelete="SET NULL"))
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    external_id: Mapped[str | None] = mapped_column(String(64), unique=True)  # BilimOs id
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class UsedJti(Base):
+    """One-time BilimOs SSO token ids; rows past expires_at are purged."""
+    __tablename__ = "used_jti"
+    jti: Mapped[str] = mapped_column(String(64), primary_key=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class GeneratedLesson(Base):

@@ -7,4 +7,5 @@ anthropic
 pydantic
 alembic
 pwdlib[argon2]
-pyjwt
+pyjwt[crypto]
+httpx
